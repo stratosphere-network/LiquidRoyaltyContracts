@@ -33,18 +33,31 @@ abstract contract BaseVault is ERC4626Upgradeable, IVault, AdminControlled, UUPS
     /// @dev Senior vault address (for circular dependency fix)
     address internal _seniorVault;
     
+    /// @dev Whitelisted depositors
+    mapping(address => bool) internal _whitelistedDepositors;
+    
     /// @dev Constants
     int256 internal constant MIN_PROFIT_BPS = -5000;  // -50% minimum
     int256 internal constant MAX_PROFIT_BPS = 10000;  // +100% maximum
+    
+    /// @dev Events
+    event DepositorWhitelisted(address indexed depositor);
+    event DepositorRemoved(address indexed depositor);
     
     /// @dev Errors (ZeroAddress inherited from AdminControlled)
     error InvalidProfitRange();
     error SeniorVaultAlreadySet();
     error OnlySeniorVault();
+    error OnlyWhitelistedDepositor();
     
     /// @dev Modifiers
     modifier onlySeniorVault() {
         if (msg.sender != _seniorVault) revert OnlySeniorVault();
+        _;
+    }
+    
+    modifier onlyWhitelisted() {
+        if (!_whitelistedDepositors[msg.sender]) revert OnlyWhitelistedDepositor();
         _;
     }
     
@@ -87,6 +100,36 @@ abstract contract BaseVault is ERC4626Upgradeable, IVault, AdminControlled, UUPS
         if (seniorVault_ == address(0)) revert AdminControlled.ZeroAddress();
         
         _seniorVault = seniorVault_;
+    }
+    
+    /**
+     * @notice Add address to whitelist for deposits
+     * @dev Only admin can whitelist depositors
+     * @param depositor Address to whitelist
+     */
+    function addWhitelistedDepositor(address depositor) external onlyAdmin {
+        if (depositor == address(0)) revert AdminControlled.ZeroAddress();
+        _whitelistedDepositors[depositor] = true;
+        emit DepositorWhitelisted(depositor);
+    }
+    
+    /**
+     * @notice Remove address from whitelist
+     * @dev Only admin can remove depositors
+     * @param depositor Address to remove
+     */
+    function removeWhitelistedDepositor(address depositor) external onlyAdmin {
+        _whitelistedDepositors[depositor] = false;
+        emit DepositorRemoved(depositor);
+    }
+    
+    /**
+     * @notice Check if address is whitelisted
+     * @param depositor Address to check
+     * @return isWhitelisted True if address can deposit
+     */
+    function isWhitelistedDepositor(address depositor) external view returns (bool) {
+        return _whitelistedDepositors[depositor];
     }
     
     // ============================================
@@ -142,6 +185,40 @@ abstract contract BaseVault is ERC4626Upgradeable, IVault, AdminControlled, UUPS
      */
     function totalAssets() public view virtual override(ERC4626Upgradeable) returns (uint256) {
         return _lpToken.balanceOf(address(this));
+    }
+    
+    /**
+     * @notice Deposit LP tokens and mint shares
+     * @dev Override ERC4626 deposit to add whitelist check
+     * @param assets Amount of LP tokens to deposit
+     * @param receiver Address to receive shares
+     * @return shares Amount of shares minted
+     */
+    function deposit(uint256 assets, address receiver) 
+        public 
+        virtual 
+        override(ERC4626Upgradeable) 
+        onlyWhitelisted 
+        returns (uint256 shares) 
+    {
+        return super.deposit(assets, receiver);
+    }
+    
+    /**
+     * @notice Mint shares by depositing LP tokens
+     * @dev Override ERC4626 mint to add whitelist check
+     * @param shares Amount of shares to mint
+     * @param receiver Address to receive shares
+     * @return assets Amount of LP tokens deposited
+     */
+    function mint(uint256 shares, address receiver) 
+        public 
+        virtual 
+        override(ERC4626Upgradeable) 
+        onlyWhitelisted 
+        returns (uint256 assets) 
+    {
+        return super.mint(shares, receiver);
     }
     
     // ============================================

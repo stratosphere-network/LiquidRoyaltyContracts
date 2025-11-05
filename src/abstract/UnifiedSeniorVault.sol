@@ -73,29 +73,41 @@ abstract contract UnifiedSeniorVault is ISeniorVault, IERC20, AdminControlled, P
     
     /// @dev Reference: State Variables (T_r - last rebase timestamp)
     uint256 internal _lastRebaseTime;
-    uint256 internal constant MIN_REBASE_INTERVAL = 30 days;
+    uint256 internal _minRebaseInterval; // Settable by admin, default 30 seconds
     
     /// @dev Reference: Parameters (τ - cooldown period = 7 days)
     mapping(address => uint256) internal _cooldownStart; // t_c^(i) - user cooldown time
     
+    /// @dev Whitelisted depositors
+    mapping(address => bool) internal _whitelistedDepositors;
+    
     /// @dev Profit/loss tracking
     int256 internal constant MIN_PROFIT_BPS = -5000;
     int256 internal constant MAX_PROFIT_BPS = 10000;
+    
+    /// @dev Events (ERC20 Transfer and Approval inherited from IERC20)
+    event Rebase(uint256 indexed epoch, uint256 oldIndex, uint256 newIndex, uint256 newTotalSupply);
+    event EmergencyWithdraw(address indexed to, uint256 amount);
+    event DepositorWhitelisted(address indexed depositor);
+    event DepositorRemoved(address indexed depositor);
+    event MinRebaseIntervalUpdated(uint256 oldInterval, uint256 newInterval);
     
     /// @dev Errors (ZeroAddress inherited from AdminControlled)
     error InvalidProfitRange();
     error InvalidRecipient();
     error InsufficientAllowance();
     error JuniorReserveAlreadySet();
+    error OnlyWhitelistedDepositor();
     // InsufficientBalance inherited from IVault
-    
-    /// @dev Events (ERC20 Transfer and Approval inherited from IERC20)
-    event Rebase(uint256 indexed epoch, uint256 oldIndex, uint256 newIndex, uint256 newTotalSupply);
-    event EmergencyWithdraw(address indexed to, uint256 amount);
     
     /// @dev Modifiers
     modifier whenNotPausedOrAdmin() {
         if (paused() && msg.sender != admin()) revert EnforcedPause();
+        _;
+    }
+    
+    modifier onlyWhitelisted() {
+        if (!_whitelistedDepositors[msg.sender]) revert OnlyWhitelistedDepositor();
         _;
     }
     
@@ -133,6 +145,7 @@ abstract contract UnifiedSeniorVault is ISeniorVault, IERC20, AdminControlled, P
         _vaultValue = initialValue_;
         _lastUpdateTime = block.timestamp;
         _lastRebaseTime = block.timestamp;
+        _minRebaseInterval = 30; // Default: 30 seconds (settable by admin)
         
         // Initialize rebase index to 1.0
         _rebaseIndex = MathLib.PRECISION;
@@ -154,6 +167,47 @@ abstract contract UnifiedSeniorVault is ISeniorVault, IERC20, AdminControlled, P
         
         _juniorVault = IJuniorVault(juniorVault_);
         _reserveVault = IReserveVault(reserveVault_);
+    }
+    
+    /**
+     * @notice Add address to whitelist for deposits
+     * @dev Only admin can whitelist depositors
+     * @param depositor Address to whitelist
+     */
+    function addWhitelistedDepositor(address depositor) external onlyAdmin {
+        if (depositor == address(0)) revert AdminControlled.ZeroAddress();
+        _whitelistedDepositors[depositor] = true;
+        emit DepositorWhitelisted(depositor);
+    }
+    
+    /**
+     * @notice Remove address from whitelist
+     * @dev Only admin can remove depositors
+     * @param depositor Address to remove
+     */
+    function removeWhitelistedDepositor(address depositor) external onlyAdmin {
+        _whitelistedDepositors[depositor] = false;
+        emit DepositorRemoved(depositor);
+    }
+    
+    /**
+     * @notice Check if address is whitelisted
+     * @param depositor Address to check
+     * @return isWhitelisted True if address can deposit
+     */
+    function isWhitelistedDepositor(address depositor) external view returns (bool) {
+        return _whitelistedDepositors[depositor];
+    }
+    
+    /**
+     * @notice Update the minimum rebase interval
+     * @dev Only admin can update this value
+     * @param newInterval New minimum time between rebases (in seconds)
+     */
+    function setMinRebaseInterval(uint256 newInterval) external onlyAdmin {
+        uint256 oldInterval = _minRebaseInterval;
+        _minRebaseInterval = newInterval;
+        emit MinRebaseIntervalUpdated(oldInterval, newInterval);
     }
     
     // ============================================
@@ -383,7 +437,7 @@ abstract contract UnifiedSeniorVault is ISeniorVault, IERC20, AdminControlled, P
      * @param receiver Address to receive snrUSD
      * @return shares Amount of snrUSD minted (approximately equals assets at index ~1.0)
      */
-    function deposit(uint256 assets, address receiver) public virtual whenNotPaused returns (uint256 shares) {
+    function deposit(uint256 assets, address receiver) public virtual whenNotPaused onlyWhitelisted returns (uint256 shares) {
         if (assets == 0) revert InvalidAmount();
         if (receiver == address(0)) revert AdminControlled.ZeroAddress();
         
@@ -477,7 +531,7 @@ abstract contract UnifiedSeniorVault is ISeniorVault, IERC20, AdminControlled, P
     }
     
     function minRebaseInterval() public view virtual returns (uint256) {
-        return MIN_REBASE_INTERVAL;
+        return _minRebaseInterval;
     }
     
     /**
@@ -572,7 +626,7 @@ abstract contract UnifiedSeniorVault is ISeniorVault, IERC20, AdminControlled, P
      * @dev Reference: Rebase Algorithm (all steps) - MATH SPEC PRESERVED
      */
     function rebase() public virtual onlyAdmin {
-        if (block.timestamp < _lastRebaseTime + MIN_REBASE_INTERVAL) {
+        if (block.timestamp < _lastRebaseTime + _minRebaseInterval) {
             revert RebaseTooSoon();
         }
         
