@@ -34,7 +34,7 @@ contract UnifiedSeniorVaultTest is Test {
         user2 = makeAddr("user2");
         user3 = makeAddr("user3");
         
-        // Deploy LP token
+        // Deploy stablecoin
         lpToken = new MockERC20("USDe-SAIL", "USDe-SAIL", 18);
         
         // Compute the address where Senior vault proxy will be deployed
@@ -83,7 +83,7 @@ contract UnifiedSeniorVaultTest is Test {
         // Verify the prediction was correct
         assertEq(address(vault), predictedSeniorAddress, "Senior vault address mismatch");
         
-        // Mint LP tokens
+        // Mint stablecoins
         lpToken.mint(user1, 100000e18);
         lpToken.mint(user2, 100000e18);
         lpToken.mint(user3, 100000e18);
@@ -110,7 +110,6 @@ contract UnifiedSeniorVaultTest is Test {
     }
     
     function testVaultProperties() public view {
-        assertEq(address(vault.lpToken()), address(lpToken));
         assertEq(vault.juniorVault(), address(juniorVault));
         assertEq(vault.reserveVault(), address(reserveVault));
         assertEq(vault.treasury(), treasury);

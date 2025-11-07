@@ -5,6 +5,7 @@ import {BaseVault} from "./BaseVault.sol";
 import {IVault} from "../interfaces/IVault.sol";
 import {IJuniorVault} from "../interfaces/IJuniorVault.sol";
 import {MathLib} from "../libraries/MathLib.sol";
+import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 
 /**
  * @title JuniorVault
@@ -12,7 +13,7 @@ import {MathLib} from "../libraries/MathLib.sol";
  * @dev Receives profit spillover (80%), provides secondary backstop (no cap!)
  * @dev Upgradeable using UUPS proxy pattern
  * 
- * Users deposit LP tokens, receive standard ERC4626 shares (NOT rebasing)
+ * Users deposit Stablecoins, receive standard ERC4626 shares (NOT rebasing)
  * 
  * References from Mathematical Specification:
  * - Section: Three-Zone Spillover System (Junior APY Impact)
@@ -30,20 +31,20 @@ abstract contract JuniorVault is BaseVault, IJuniorVault {
     
     /**
      * @notice Initialize Junior vault (replaces constructor for upgradeable)
-     * @param lpToken_ LP token address
+     * @param stablecoin_ Stablecoin address
      * @param vaultName_ ERC20 name for shares (e.g., "Junior Tranche Shares")
      * @param vaultSymbol_ ERC20 symbol for shares (e.g., "jTRN")
      * @param seniorVault_ Senior vault address (can be placeholder)
      * @param initialValue_ Initial vault value
      */
     function __JuniorVault_init(
-        address lpToken_,
+        address stablecoin_,
         string memory vaultName_,
         string memory vaultSymbol_,
         address seniorVault_,
         uint256 initialValue_
     ) internal onlyInitializing {
-        __BaseVault_init(lpToken_, vaultName_, vaultSymbol_, seniorVault_, initialValue_);
+        __BaseVault_init(stablecoin_, vaultName_, vaultSymbol_, seniorVault_, initialValue_);
         _lastMonthValue = initialValue_;
     }
     
@@ -123,23 +124,41 @@ abstract contract JuniorVault is BaseVault, IJuniorVault {
     }
     
     /**
-     * @notice Provide backstop to Senior (secondary, after Reserve)
+     * @notice Provide backstop to Senior via LP tokens (secondary, after Reserve)
      * @dev Reference: Three-Zone System - Zone 3
      * Formula: X_j = min(V_j, D')
-     * @param amount Amount requested
-     * @return actualAmount Actual amount provided (may be entire vault!)
+     * @param amountUSD Amount requested (in USD)
+     * @param lpPrice Current LP token price in USD (18 decimals)
+     * @return actualAmount Actual USD amount provided (may be entire vault!)
      */
-    function provideBackstop(uint256 amount) public virtual onlySeniorVault returns (uint256 actualAmount) {
-        if (amount == 0) return 0;
+    function provideBackstop(uint256 amountUSD, uint256 lpPrice) public virtual onlySeniorVault returns (uint256 actualAmount) {
+        if (amountUSD == 0) return 0;
+        if (lpPrice == 0) return 0;
         
-        // Provide up to full vault value (no cap!)
-        actualAmount = MathLib.min(_vaultValue, amount);
+        // Get whitelisted LP tokens (should be only one)
+        if (_whitelistedLPTokens.length == 0) revert InsufficientBackstopFunds();
+        address lpToken = _whitelistedLPTokens[0];
         
-        if (actualAmount == 0) revert InsufficientBackstopFunds();
+        // Calculate LP amount needed
+        uint256 lpAmountNeeded = (amountUSD * 1e18) / lpPrice;
+        
+        // Check actual LP token balance
+        uint256 lpBalance = IERC20(lpToken).balanceOf(address(this));
+        
+        // Provide up to available LP tokens
+        uint256 actualLPAmount = lpAmountNeeded > lpBalance ? lpBalance : lpAmountNeeded;
+        
+        if (actualLPAmount == 0) revert InsufficientBackstopFunds();
+        
+        // Calculate actual USD amount based on LP tokens available
+        actualAmount = (actualLPAmount * lpPrice) / 1e18;
         
         // Decrease vault value
         _vaultValue -= actualAmount;
         _totalBackstopProvided += actualAmount;
+        
+        // Transfer LP tokens to Senior vault
+        IERC20(lpToken).transfer(_seniorVault, actualLPAmount);
         
         emit BackstopProvided(actualAmount, msg.sender);
         

@@ -35,6 +35,7 @@ export interface VaultsData {
   juniorVault: VaultData;
   reserveVault: VaultData;
   total: {
+    formatted?: string;
     totalAssets?: string;
     valueUSD?: string;
     vaultValue?: string;
@@ -46,11 +47,29 @@ export interface BackingRatioData {
     address: string;
     totalSupply: string;
     totalAssets: string;
-    valueUSD: string;
+    onChainValue: string;
+    calculatedValueUSD: string;
     backingRatio: string;
   };
   lpTokenPrice: string;
   backingRatioRaw: string;
+}
+
+export interface ProjectedBackingRatioData {
+  seniorVault: {
+    address: string;
+    totalSupply: string;
+    onChainValue: string;
+    calculatedValueUSD: string;
+    valueDelta: string;
+    currentBackingRatio: string;
+    projectedBackingRatio: string;
+    backingRatioDelta: string;
+  };
+  lpTokenPrice: string;
+  currentBackingRatioRaw: string;
+  projectedBackingRatioRaw: string;
+  suggestion: string;
 }
 
 export interface JuniorTokenPriceData {
@@ -61,6 +80,19 @@ export interface JuniorTokenPriceData {
     valueUSD: string;
     tokenPrice: string;
   };
+  price: number;
+  lpTokenPrice: string;
+}
+
+export interface ReserveTokenPriceData {
+  reserveVault: {
+    address: string;
+    totalSupply: string;
+    totalAssets: string;
+    valueUSD: string;
+    tokenPrice: string;
+  };
+  price: number;
   lpTokenPrice: string;
 }
 
@@ -117,5 +149,127 @@ export interface Transaction {
   details: string;
   txHash?: string;
   status: 'pending' | 'success' | 'failed';
+}
+
+export interface VaultUpdateBPSData {
+  lpTokenPrice: string;
+  seniorVault: {
+    address: string;
+    currentValueUSD: string;
+    onChainValue: string;
+    profitPercent: string;
+    bps: number;
+    bpsRaw: number;
+    capped: boolean;
+    warning: string | null;
+    callData: string;
+  };
+  juniorVault: {
+    address: string;
+    currentValueUSD: string;
+    onChainValue: string;
+    profitPercent: string;
+    bps: number;
+    bpsRaw: number;
+    capped: boolean;
+    warning: string | null;
+    callData: string;
+  };
+  reserveVault: {
+    address: string;
+    currentValueUSD: string;
+    onChainValue: string;
+    profitPercent: string;
+    bps: number;
+    bpsRaw: number;
+    capped: boolean;
+    warning: string | null;
+    callData: string;
+  };
+  instructions: {
+    message: string;
+    example: string;
+    limits: {
+      min: string;
+      max: string;
+    };
+  };
+}
+
+
+  };
+  totalTUSDUsed?: string;
+  finalTransactionHash?: string;
+  error?: string;
+}
+
+export type BotType = 'whale' | 'farmer';
+export type BotStrategy = 'conservative' | 'risky';
+export type VaultType = 'junior' | 'senior' | 'reserve';
+
+export interface Bot {
+  id: string;
+  name: string;
+  type: BotType;
+  strategy: BotStrategy;
+  privateKey: string;
+  address: string;
+  isActive: boolean;
+}
+
+export interface Transaction {
+  id: string;
+  timestamp: number;
+  botId: string;
+  botName: string;
+  action: 'swap' | 'add_liquidity' | 'zap_stake' | 'withdraw';
+  details: string;
+  txHash?: string;
+  status: 'pending' | 'success' | 'failed';
+}
+
+export interface VaultUpdateBPSData {
+  lpTokenPrice: string;
+  seniorVault: {
+    address: string;
+    currentValueUSD: string;
+    onChainValue: string;
+    profitPercent: string;
+    bps: number;
+    bpsRaw: number;
+    capped: boolean;
+    warning: string | null;
+    callData: string;
+  };
+  juniorVault: {
+    address: string;
+    currentValueUSD: string;
+    onChainValue: string;
+    profitPercent: string;
+    bps: number;
+    bpsRaw: number;
+    capped: boolean;
+    warning: string | null;
+    callData: string;
+  };
+  reserveVault: {
+    address: string;
+    currentValueUSD: string;
+    onChainValue: string;
+    profitPercent: string;
+    bps: number;
+    bpsRaw: number;
+    capped: boolean;
+    warning: string | null;
+    callData: string;
+  };
+  instructions: {
+    message: string;
+    example: string;
+    limits: {
+      min: string;
+      max: string;
+    };
+  };
 }
 

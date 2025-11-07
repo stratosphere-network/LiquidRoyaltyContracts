@@ -17,17 +17,17 @@ contract ConcreteReserveVault is ReserveVault {
     
     /**
      * @notice Initialize Reserve vault (for proxy deployment)
-     * @param lpToken_ LP token address (e.g., USDe-SAIL)
+     * @param stablecoin_ Stablecoin address (e.g., USDe-SAIL)
      * @param seniorVault_ Senior vault address
      * @param initialValue_ Initial vault value in USD
      */
     function initialize(
-        address lpToken_,
+        address stablecoin_,
         address seniorVault_,
         uint256 initialValue_
     ) external initializer {
         __ReserveVault_init(
-            lpToken_,
+            stablecoin_,
             "Reserve Tranche Shares",
             "rTRN",
             seniorVault_,

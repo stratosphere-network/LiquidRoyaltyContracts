@@ -42,7 +42,7 @@ contract FullRebaseCycleE2E is Test {
         user2 = makeAddr("user2");
         user3 = makeAddr("user3");
         
-        // Deploy LP token
+        // Deploy stablecoin
         lpToken = new MockERC20("USDe-SAIL", "USDe-SAIL", 18);
         
         // Compute the address where Senior vault proxy will be deployed
@@ -68,7 +68,7 @@ contract FullRebaseCycleE2E is Test {
         
         require(address(senior) == predictedSeniorAddress, "Senior address mismatch");
         
-        // Mint LP tokens
+        // Mint stablecoins
         lpToken.mint(address(senior), INITIAL_VALUE * 5);
         lpToken.mint(address(junior), INITIAL_VALUE);
         lpToken.mint(address(reserve), INITIAL_VALUE);

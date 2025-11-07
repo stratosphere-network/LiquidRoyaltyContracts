@@ -38,6 +38,12 @@ abstract contract UnifiedSeniorVault is ISeniorVault, IERC20, AdminControlled, P
     using RebaseLib for uint256;
     using SpilloverLib for uint256;
     
+    /// @dev Struct for LP holdings data
+    struct LPHolding {
+        address lpToken;
+        uint256 amount;
+    }
+    
     // ============================================
     // ERC20 Token State (snrUSD)
     // ============================================
@@ -66,7 +72,7 @@ abstract contract UnifiedSeniorVault is ISeniorVault, IERC20, AdminControlled, P
     uint256 internal _vaultValue;                // Current USD value (V_s)
     uint256 internal _lastUpdateTime;            // Last value update timestamp
     
-    IERC20 internal _lpToken;                    // LP token (USDe-SAIL)
+    IERC20 internal _stablecoin;                    // Stablecoin (USDe-SAIL)
     IJuniorVault internal _juniorVault;          // Junior vault (V_j)
     IReserveVault internal _reserveVault;        // Reserve vault (V_r)
     address internal _treasury;                   // Protocol treasury
@@ -81,6 +87,12 @@ abstract contract UnifiedSeniorVault is ISeniorVault, IERC20, AdminControlled, P
     /// @dev Whitelisted depositors
     mapping(address => bool) internal _whitelistedDepositors;
     
+    /// @dev Whitelisted LPs (Liquidity Providers/Protocols)
+    address[] internal _whitelistedLPs;
+    address[] internal _whitelistedLPTokens;
+    mapping(address => bool) internal _isWhitelistedLP;
+    mapping(address => bool) internal _isWhitelistedLPToken;
+    
     /// @dev Profit/loss tracking
     int256 internal constant MIN_PROFIT_BPS = -5000;
     int256 internal constant MAX_PROFIT_BPS = 10000;
@@ -91,14 +103,21 @@ abstract contract UnifiedSeniorVault is ISeniorVault, IERC20, AdminControlled, P
     event DepositorWhitelisted(address indexed depositor);
     event DepositorRemoved(address indexed depositor);
     event MinRebaseIntervalUpdated(uint256 oldInterval, uint256 newInterval);
+    event LPInvestment(address indexed lp, uint256 amount);
+    event LPTokensWithdrawn(address indexed lpToken, address indexed lp, uint256 amount);
+    event WhitelistedLPAdded(address indexed lp);
+    event WhitelistedLPRemoved(address indexed lp);
+    event WhitelistedLPTokenAdded(address indexed lpToken);
+    event WhitelistedLPTokenRemoved(address indexed lpToken);
     
-    /// @dev Errors (ZeroAddress inherited from AdminControlled)
+    /// @dev Errors (ZeroAddress inherited from AdminControlled, InsufficientBalance from IVault)
     error InvalidProfitRange();
     error InvalidRecipient();
     error InsufficientAllowance();
     error JuniorReserveAlreadySet();
     error OnlyWhitelistedDepositor();
-    // InsufficientBalance inherited from IVault
+    error WhitelistedLPNotFound();
+    error LPAlreadyWhitelisted();
     
     /// @dev Modifiers
     modifier whenNotPausedOrAdmin() {
@@ -113,7 +132,7 @@ abstract contract UnifiedSeniorVault is ISeniorVault, IERC20, AdminControlled, P
     
     /**
      * @notice Initialize unified Senior vault (IS snrUSD token)
-     * @param lpToken_ LP token address
+     * @param stablecoin_ Stablecoin address
      * @param tokenName_ Token name (e.g., "Senior USD")
      * @param tokenSymbol_ Token symbol (e.g., "snrUSD")
      * @param juniorVault_ Junior vault address
@@ -122,7 +141,7 @@ abstract contract UnifiedSeniorVault is ISeniorVault, IERC20, AdminControlled, P
      * @param initialValue_ Initial vault value
      */
     function __UnifiedSeniorVault_init(
-        address lpToken_,
+        address stablecoin_,
         string memory tokenName_,
         string memory tokenSymbol_,
         address juniorVault_,
@@ -130,7 +149,7 @@ abstract contract UnifiedSeniorVault is ISeniorVault, IERC20, AdminControlled, P
         address treasury_,
         uint256 initialValue_
     ) internal onlyInitializing {
-        if (lpToken_ == address(0)) revert AdminControlled.ZeroAddress();
+        if (stablecoin_ == address(0)) revert AdminControlled.ZeroAddress();
         if (treasury_ == address(0)) revert AdminControlled.ZeroAddress();
         
         __AdminControlled_init();
@@ -138,7 +157,7 @@ abstract contract UnifiedSeniorVault is ISeniorVault, IERC20, AdminControlled, P
         
         _name = tokenName_;
         _symbol = tokenSymbol_;
-        _lpToken = IERC20(lpToken_);
+        _stablecoin = IERC20(stablecoin_);
         _juniorVault = IJuniorVault(juniorVault_);   // Can be placeholder initially
         _reserveVault = IReserveVault(reserveVault_);  // Can be placeholder initially
         _treasury = treasury_;
@@ -170,6 +189,20 @@ abstract contract UnifiedSeniorVault is ISeniorVault, IERC20, AdminControlled, P
     }
     
     /**
+     * @notice Update Junior and Reserve vault addresses (admin only)
+     * @dev Allows admin to update vault addresses after initial setup
+     * @param juniorVault_ Address of Junior vault
+     * @param reserveVault_ Address of Reserve vault
+     */
+    function updateJuniorReserve(address juniorVault_, address reserveVault_) external onlyAdmin {
+        if (juniorVault_ == address(0)) revert AdminControlled.ZeroAddress();
+        if (reserveVault_ == address(0)) revert AdminControlled.ZeroAddress();
+        
+        _juniorVault = IJuniorVault(juniorVault_);
+        _reserveVault = IReserveVault(reserveVault_);
+    }
+    
+    /**
      * @notice Add address to whitelist for deposits
      * @dev Only admin can whitelist depositors
      * @param depositor Address to whitelist
@@ -188,6 +221,239 @@ abstract contract UnifiedSeniorVault is ISeniorVault, IERC20, AdminControlled, P
     function removeWhitelistedDepositor(address depositor) external onlyAdmin {
         _whitelistedDepositors[depositor] = false;
         emit DepositorRemoved(depositor);
+    }
+
+
+
+
+    /**
+     * @notice Add LP to whitelist
+     * @dev Only admin can whitelist LPs
+     * @param lp Address to whitelist
+     */
+    function addWhitelistedLP(address lp) external onlyAdmin {
+        if (lp == address(0)) revert AdminControlled.ZeroAddress();
+        if (_isWhitelistedLP[lp]) revert LPAlreadyWhitelisted();
+        
+        _whitelistedLPs.push(lp);
+        _isWhitelistedLP[lp] = true;
+        
+        emit WhitelistedLPAdded(lp);
+    }
+
+    /**
+     * @notice Remove LP from whitelist
+     * @dev Only admin can remove LPs
+     * @param lp Address to remove
+     */
+    function removeWhitelistedLP(address lp) external onlyAdmin {
+        if (lp == address(0)) revert AdminControlled.ZeroAddress();
+        if (!_isWhitelistedLP[lp]) revert WhitelistedLPNotFound();
+        
+        // Find and remove from array using swap-and-pop
+        for (uint256 i = 0; i < _whitelistedLPs.length; i++) {
+            if (_whitelistedLPs[i] == lp) {
+                _whitelistedLPs[i] = _whitelistedLPs[_whitelistedLPs.length - 1];
+                _whitelistedLPs.pop();
+                break;
+            }
+        }
+        
+        // Remove from mapping
+        _isWhitelistedLP[lp] = false;
+        
+        emit WhitelistedLPRemoved(lp);
+    }
+    
+    /**
+     * @notice Check if LP is whitelisted
+     * @param lp Address to check
+     * @return isWhitelisted True if LP is whitelisted
+     */
+    function isWhitelistedLP(address lp) external view returns (bool) {
+        return _isWhitelistedLP[lp];
+    }
+    
+    /**
+     * @notice Get all whitelisted LPs
+     * @return lps Array of whitelisted LP addresses
+     */
+    function getWhitelistedLPs() external view returns (address[] memory) {
+        return _whitelistedLPs;
+    }
+    
+    /**
+     * @notice Get vault's LP holdings for all whitelisted LPs
+     * @dev Returns array of LP tokens and their balances held by this vault
+     * @return holdings Array of LPHolding structs containing LP address and amount
+     */
+    function getLPHoldings() external view returns (LPHolding[] memory holdings) {
+        uint256 lpCount = _whitelistedLPs.length;
+        holdings = new LPHolding[](lpCount);
+        
+        for (uint256 i = 0; i < lpCount; i++) {
+            address lpToken = _whitelistedLPs[i];
+            uint256 balance = IERC20(lpToken).balanceOf(address(this));
+            
+            holdings[i] = LPHolding({
+                lpToken: lpToken,
+                amount: balance
+            });
+        }
+        
+        return holdings;
+    }
+    
+    /**
+     * @notice Get vault's balance of a specific LP token
+     * @dev Gas-efficient way to check single LP balance
+     * @param lpToken Address of the LP token to check
+     * @return balance Amount of LP tokens held by this vault
+     */
+    function getLPBalance(address lpToken) external view returns (uint256) {
+        return IERC20(lpToken).balanceOf(address(this));
+    }
+
+    // ============================================
+    // LP Token Management
+    // ============================================
+
+    /**
+     * @notice Add LP token to whitelist
+     * @dev Only admin can whitelist LP tokens
+     * @param lpToken Address of LP token to whitelist
+     */
+    function addWhitelistedLPToken(address lpToken) external onlyAdmin {
+        if (lpToken == address(0)) revert AdminControlled.ZeroAddress();
+        if (_isWhitelistedLPToken[lpToken]) revert LPAlreadyWhitelisted();
+        
+        _whitelistedLPTokens.push(lpToken);
+        _isWhitelistedLPToken[lpToken] = true;
+        
+        emit WhitelistedLPTokenAdded(lpToken);
+    }
+
+    /**
+     * @notice Remove LP token from whitelist
+     * @dev Only admin can remove LP tokens
+     * @param lpToken Address of LP token to remove
+     */
+    function removeWhitelistedLPToken(address lpToken) external onlyAdmin {
+        if (lpToken == address(0)) revert AdminControlled.ZeroAddress();
+        if (!_isWhitelistedLPToken[lpToken]) revert WhitelistedLPNotFound();
+        
+        // Find and remove from array using swap-and-pop
+        for (uint256 i = 0; i < _whitelistedLPTokens.length; i++) {
+            if (_whitelistedLPTokens[i] == lpToken) {
+                _whitelistedLPTokens[i] = _whitelistedLPTokens[_whitelistedLPTokens.length - 1];
+                _whitelistedLPTokens.pop();
+                break;
+            }
+        }
+        
+        // Remove from mapping
+        _isWhitelistedLPToken[lpToken] = false;
+        
+        emit WhitelistedLPTokenRemoved(lpToken);
+    }
+    
+    /**
+     * @notice Check if LP token is whitelisted
+     * @param lpToken Address to check
+     * @return isWhitelisted True if LP token is whitelisted
+     */
+    function isWhitelistedLPToken(address lpToken) external view returns (bool) {
+        return _isWhitelistedLPToken[lpToken];
+    }
+    
+    /**
+     * @notice Get all whitelisted LP tokens
+     * @return lpTokens Array of whitelisted LP token addresses
+     */
+    function getWhitelistedLPTokens() external view returns (address[] memory) {
+        return _whitelistedLPTokens;
+    }
+    
+    /**
+     * @notice Get vault's LP token holdings for all whitelisted LP tokens
+     * @dev Returns array of LP tokens and their balances held by this vault
+     * @return holdings Array of LPHolding structs containing LP token address and amount
+     */
+    function getLPTokenHoldings() external view returns (LPHolding[] memory holdings) {
+        uint256 lpTokenCount = _whitelistedLPTokens.length;
+        holdings = new LPHolding[](lpTokenCount);
+        
+        for (uint256 i = 0; i < lpTokenCount; i++) {
+            address lpToken = _whitelistedLPTokens[i];
+            uint256 balance = IERC20(lpToken).balanceOf(address(this));
+            
+            holdings[i] = LPHolding({
+                lpToken: lpToken,
+                amount: balance
+            });
+        }
+        
+        return holdings;
+    }
+    
+    /**
+     * @notice Get vault's balance of a specific LP token
+     * @dev Gas-efficient way to check single LP token balance
+     * @param lpToken Address of the LP token to check
+     * @return balance Amount of LP tokens held by this vault
+     */
+    function getLPTokenBalance(address lpToken) external view returns (uint256) {
+        return IERC20(lpToken).balanceOf(address(this));
+    }
+
+    /**
+     * @notice Transfer stablecoins from vault to whitelisted LP
+     * @dev Only admin can invest, LP must be whitelisted
+     * @param lp Address of the whitelisted LP to transfer to
+     * @param amount Amount of stablecoins to transfer
+     */
+    function investInLP(address lp, uint256 amount) external onlyAdmin {
+        if (lp == address(0)) revert AdminControlled.ZeroAddress();
+        if (amount == 0) revert InvalidAmount();
+        if (!_isWhitelistedLP[lp]) revert WhitelistedLPNotFound();
+        
+        // Check vault has sufficient stablecoin balance
+        uint256 vaultBalance = _stablecoin.balanceOf(address(this));
+        if (vaultBalance < amount) revert InsufficientBalance();
+        
+        // Transfer stablecoins from vault to LP
+        _stablecoin.transfer(lp, amount);
+        
+        emit LPInvestment(lp, amount);
+    }
+
+    /**
+     * @notice Withdraw LP tokens from vault for liquidation
+     * @dev Only admin can withdraw, must be sent to whitelisted LP address
+     * @param lpToken Address of the LP token to withdraw
+     * @param lp Address of whitelisted LP to send tokens to
+     * @param amount Amount of LP tokens to withdraw (0 = withdraw all)
+     */
+    function withdrawLPTokens(address lpToken, address lp, uint256 amount) external onlyAdmin {
+        if (lpToken == address(0)) revert AdminControlled.ZeroAddress();
+        if (lp == address(0)) revert AdminControlled.ZeroAddress();
+        if (!_isWhitelistedLP[lp]) revert WhitelistedLPNotFound();
+        if (!_isWhitelistedLPToken[lpToken]) revert WhitelistedLPNotFound();
+        
+        // Get LP token balance
+        IERC20 lpTokenContract = IERC20(lpToken);
+        uint256 balance = lpTokenContract.balanceOf(address(this));
+        
+        // If amount is 0, withdraw all
+        uint256 withdrawAmount = amount == 0 ? balance : amount;
+        
+        if (withdrawAmount == 0) revert InvalidAmount();
+        if (balance < withdrawAmount) revert InsufficientBalance();
+        
+        // Transfer LP tokens to whitelisted LP address for liquidation
+        lpTokenContract.transfer(lp, withdrawAmount);
+        
+        emit LPTokensWithdrawn(lpToken, lp, withdrawAmount);
     }
     
     /**
@@ -395,12 +661,12 @@ abstract contract UnifiedSeniorVault is ISeniorVault, IERC20, AdminControlled, P
         return _vaultValue;
     }
     
-    function lpToken() public view virtual returns (IERC20) {
-        return _lpToken;
+    function stablecoin() public view virtual returns (IERC20) {
+        return _stablecoin;
     }
     
     function depositToken() public view virtual returns (IERC20) {
-        return _lpToken;
+        return _stablecoin;
     }
     
     function lastUpdateTime() public view virtual returns (uint256) {
@@ -430,22 +696,43 @@ abstract contract UnifiedSeniorVault is ISeniorVault, IERC20, AdminControlled, P
         
         emit VaultValueUpdated(oldValue, _vaultValue, profitBps);
     }
+
+    /**
+     * @notice Directly set vault value (no BPS calculation)
+     * @dev Simple admin function to set exact vault value
+     * @param newValue New vault value in wei
+     */
+    function setVaultValue(uint256 newValue) public virtual onlyAdmin {
+        // Allow 0 to enable truly empty vault state for first deposit
+        
+        uint256 oldValue = _vaultValue;
+        _vaultValue = newValue;
+        _lastUpdateTime = block.timestamp;
+        
+        // Calculate BPS for event logging
+        int256 bps = 0;
+        if (oldValue > 0) {
+            bps = int256((newValue * 10000 / oldValue)) - 10000;
+        }
+        
+        emit VaultValueUpdated(oldValue, _vaultValue, bps);
+    }
     
     /**
-     * @notice Deposit LP tokens, receive snrUSD (1:1)
-     * @param assets Amount of LP tokens to deposit
+     * @notice Deposit stablecoin, receive snrUSD (1:1)
+     * @param assets Amount of stablecoin tokens to deposit
      * @param receiver Address to receive snrUSD
      * @return shares Amount of snrUSD minted (approximately equals assets at index ~1.0)
      */
-    function deposit(uint256 assets, address receiver) public virtual whenNotPaused onlyWhitelisted returns (uint256 shares) {
+    function deposit(uint256 assets, address receiver) public virtual whenNotPaused returns (uint256 shares) {
         if (assets == 0) revert InvalidAmount();
         if (receiver == address(0)) revert AdminControlled.ZeroAddress();
         
         // Check deposit cap
         if (isDepositCapReached()) revert DepositCapExceeded();
         
-        // Transfer LP tokens from user
-        _lpToken.transferFrom(msg.sender, address(this), assets);
+        // Transfer stablecoin from user
+        _stablecoin.transferFrom(msg.sender, address(this), assets);
         
         // Mint snrUSD to receiver (1:1 at current index)
         _mint(receiver, assets);
@@ -460,11 +747,11 @@ abstract contract UnifiedSeniorVault is ISeniorVault, IERC20, AdminControlled, P
     }
     
     /**
-     * @notice Withdraw LP tokens by burning snrUSD
+     * @notice Withdraw stablecoin by burning snrUSD
      * @param amount Amount of snrUSD to burn
-     * @param receiver Address to receive LP tokens
+     * @param receiver Address to receive stablecoin tokens
      * @param owner Owner of snrUSD
-     * @return assets Amount of LP tokens withdrawn (after penalty if applicable)
+     * @return assets Amount of stablecoin tokens withdrawn (after penalty if applicable)
      */
     function withdraw(uint256 amount, address receiver, address owner) public virtual whenNotPausedOrAdmin returns (uint256 assets) {
         if (amount == 0) revert InvalidAmount();
@@ -485,8 +772,8 @@ abstract contract UnifiedSeniorVault is ISeniorVault, IERC20, AdminControlled, P
         // Burn snrUSD
         _burn(owner, amount);
         
-        // Transfer LP tokens to receiver (net of penalty)
-        _lpToken.transfer(receiver, netAssets);
+        // Transfer stablecoin to receiver (net of penalty)
+        _stablecoin.transfer(receiver, netAssets);
         
         // Note: _vaultValue is NOT auto-updated here
         // Vault value (USD) is updated by keeper via updateVaultValue()
@@ -625,10 +912,16 @@ abstract contract UnifiedSeniorVault is ISeniorVault, IERC20, AdminControlled, P
      * @notice Execute monthly rebase
      * @dev Reference: Rebase Algorithm (all steps) - MATH SPEC PRESERVED
      */
-    function rebase() public virtual onlyAdmin {
+    /**
+     * @notice Execute rebase with LP price for spillover/backstop transfers
+     * @param lpPrice Current LP token price in USD (18 decimals)
+     */
+    function rebase(uint256 lpPrice) public virtual onlyAdmin {
         if (block.timestamp < _lastRebaseTime + _minRebaseInterval) {
             revert RebaseTooSoon();
         }
+        
+        if (lpPrice == 0) revert InvalidAmount();
         
         uint256 currentSupply = totalSupply();
         if (currentSupply == 0) revert InvalidAmount();
@@ -642,14 +935,14 @@ abstract contract UnifiedSeniorVault is ISeniorVault, IERC20, AdminControlled, P
             netValue
         );
         
-        // Step 4: Determine zone and execute spillover/backstop
+        // Step 4: Determine zone and execute spillover/backstop (with LP price)
         uint256 finalBackingRatio = MathLib.calculateBackingRatio(netValue, selection.newSupply);
         SpilloverLib.Zone zone = SpilloverLib.determineZone(finalBackingRatio);
         
         if (zone == SpilloverLib.Zone.SPILLOVER) {
-            _executeProfitSpillover(netValue, selection.newSupply);
+            _executeProfitSpillover(netValue, selection.newSupply, lpPrice);
         } else if (zone == SpilloverLib.Zone.BACKSTOP || selection.backstopNeeded) {
-            _executeBackstop(netValue, selection.newSupply);
+            _executeBackstop(netValue, selection.newSupply, lpPrice);
         }
         
         // Step 5: Update rebase index
@@ -725,15 +1018,15 @@ abstract contract UnifiedSeniorVault is ISeniorVault, IERC20, AdminControlled, P
     }
     
     /**
-     * @notice Emergency withdraw LP tokens to treasury
+     * @notice Emergency withdraw stablecoin tokens to treasury
      * @dev Can only be called by admin when paused, for emergency situations
-     * @param amount Amount of LP tokens to withdraw
+     * @param amount Amount of stablecoin tokens to withdraw
      */
     function emergencyWithdraw(uint256 amount) external onlyAdmin {
         if (!paused()) revert("Must be paused");
         if (amount == 0) revert InvalidAmount();
         
-        _lpToken.transfer(_treasury, amount);
+        _stablecoin.transfer(_treasury, amount);
         emit EmergencyWithdraw(_treasury, amount);
     }
     
@@ -744,8 +1037,9 @@ abstract contract UnifiedSeniorVault is ISeniorVault, IERC20, AdminControlled, P
     /**
      * @notice Execute profit spillover (Zone 1)
      * @dev Reference: Three-Zone System - Profit Spillover
+     * @param lpPrice Current LP token price in USD (18 decimals)
      */
-    function _executeProfitSpillover(uint256 netValue, uint256 newSupply) internal virtual {
+    function _executeProfitSpillover(uint256 netValue, uint256 newSupply, uint256 lpPrice) internal virtual {
         SpilloverLib.ProfitSpillover memory spillover = 
             SpilloverLib.calculateProfitSpillover(netValue, newSupply);
         
@@ -754,9 +1048,9 @@ abstract contract UnifiedSeniorVault is ISeniorVault, IERC20, AdminControlled, P
         // Update Senior value to exactly 110%
         _vaultValue = spillover.seniorFinalValue;
         
-        // Transfer to Junior and Reserve
-        _transferToJunior(spillover.toJunior);
-        _transferToReserve(spillover.toReserve);
+        // Transfer LP tokens to Junior and Reserve (calculated from USD amounts)
+        _transferToJunior(spillover.toJunior, lpPrice);
+        _transferToReserve(spillover.toReserve, lpPrice);
         
         emit ProfitSpillover(spillover.excessAmount, spillover.toJunior, spillover.toReserve);
     }
@@ -764,8 +1058,9 @@ abstract contract UnifiedSeniorVault is ISeniorVault, IERC20, AdminControlled, P
     /**
      * @notice Execute backstop (Zone 3)
      * @dev Reference: Three-Zone System - Backstop
+     * @param lpPrice Current LP token price in USD (18 decimals)
      */
-    function _executeBackstop(uint256 netValue, uint256 newSupply) internal virtual {
+    function _executeBackstop(uint256 netValue, uint256 newSupply, uint256 lpPrice) internal virtual {
         uint256 reserveValue = _reserveVault.vaultValue();
         uint256 juniorValue = _juniorVault.vaultValue();
         
@@ -774,14 +1069,14 @@ abstract contract UnifiedSeniorVault is ISeniorVault, IERC20, AdminControlled, P
         
         if (backstop.deficitAmount == 0) return;
         
-        // Pull from Reserve first
+        // Pull LP tokens from Reserve first (calculated from USD amount)
         if (backstop.fromReserve > 0) {
-            _pullFromReserve(backstop.fromReserve);
+            _pullFromReserve(backstop.fromReserve, lpPrice);
         }
         
-        // Then Junior if needed
+        // Then Junior if needed (calculated from USD amount)
         if (backstop.fromJunior > 0) {
-            _pullFromJunior(backstop.fromJunior);
+            _pullFromJunior(backstop.fromJunior, lpPrice);
         }
         
         // Update Senior value
@@ -800,27 +1095,35 @@ abstract contract UnifiedSeniorVault is ISeniorVault, IERC20, AdminControlled, P
     // ============================================
     
     /**
-     * @notice Transfer assets to Junior vault
-     * @dev Must be implemented to handle actual asset transfers
+     * @notice Transfer LP tokens to Junior vault
+     * @dev Must be implemented to handle actual LP token transfers
+     * @param amountUSD Amount in USD to transfer
+     * @param lpPrice Current LP token price in USD (18 decimals)
      */
-    function _transferToJunior(uint256 amount) internal virtual;
+    function _transferToJunior(uint256 amountUSD, uint256 lpPrice) internal virtual;
     
     /**
-     * @notice Transfer assets to Reserve vault
-     * @dev Must be implemented to handle actual asset transfers
+     * @notice Transfer LP tokens to Reserve vault
+     * @dev Must be implemented to handle actual LP token transfers
+     * @param amountUSD Amount in USD to transfer
+     * @param lpPrice Current LP token price in USD (18 decimals)
      */
-    function _transferToReserve(uint256 amount) internal virtual;
+    function _transferToReserve(uint256 amountUSD, uint256 lpPrice) internal virtual;
     
     /**
-     * @notice Pull assets from Reserve vault
-     * @dev Must be implemented to handle actual asset transfers
+     * @notice Pull LP tokens from Reserve vault
+     * @dev Must be implemented to handle actual LP token transfers
+     * @param amountUSD Amount in USD to receive
+     * @param lpPrice Current LP token price in USD (18 decimals)
      */
-    function _pullFromReserve(uint256 amount) internal virtual;
+    function _pullFromReserve(uint256 amountUSD, uint256 lpPrice) internal virtual;
     
     /**
-     * @notice Pull assets from Junior vault
-     * @dev Must be implemented to handle actual asset transfers
+     * @notice Pull LP tokens from Junior vault
+     * @dev Must be implemented to handle actual LP token transfers
+     * @param amountUSD Amount in USD to receive
+     * @param lpPrice Current LP token price in USD (18 decimals)
      */
-    function _pullFromJunior(uint256 amount) internal virtual;
+    function _pullFromJunior(uint256 amountUSD, uint256 lpPrice) internal virtual;
 }
 

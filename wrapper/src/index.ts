@@ -1,7 +1,7 @@
 import express, { Request, Response } from 'express';
 import cors from 'cors';
 import dotenv from 'dotenv';
-import { getUniswapPair, getReserves, getLPTokenPrice, getVaultsTotalSupply, getVaultsValueInUSD, getSeniorBackingRatio, getVaultsOnChainValue, getVaultsProfits, getJuniorTokenPrice, swapTokens, addLiquidity, zapAndStake, getRebaseConfig, setRebaseInterval, updateVaultValue, executeSeniorRebase, whitelistAddress } from './utils';
+import { getUniswapPair, getReserves, getLPTokenPrice, getVaultsTotalSupply, getVaultsValueInUSD, getSeniorBackingRatio, getProjectedSeniorBackingRatio, getVaultsOnChainValue, getVaultsProfits, getVaultsLPHoldings, getVaultsUpdateBPS, getJuniorTokenPrice, getReserveTokenPrice, swapTokens, addLiquidity, depositToVault, investVaultInLP, stakeAndInvestComplete, getRebaseConfig, setRebaseInterval, updateVaultValue, executeSeniorRebase, updateAllVaultsAndRebase, whitelistAddress } from './utils';
 
 // Load environment variables
 dotenv.config();
@@ -52,7 +52,7 @@ app.get('/reserves', async (req: Request, res: Response) => {
   }
 })
 
-// Get LP token price
+// Get stablecoin price
 app.get('/lp-price', async (req: Request, res: Response) => {
   try {
     const priceData = await getLPTokenPrice()
@@ -116,6 +116,22 @@ app.get('/senior/backing-ratio', async (req: Request, res: Response) => {
   }
 })
 
+// Get projected senior backing ratio
+app.get('/senior/projected-backing-ratio', async (req: Request, res: Response) => {
+  try {
+    const projectedData = await getProjectedSeniorBackingRatio()
+    res.status(200).json({
+      success: true,
+      data: projectedData
+    })
+  } catch (error) {
+    res.status(500).json({
+      success: false,
+      error: error instanceof Error ? error.message : 'Unknown error'
+    })
+  }
+})
+
 // Get vaults on-chain reported value
 app.get('/vaults/onchain-value', async (req: Request, res: Response) => {
   try {
@@ -148,6 +164,22 @@ app.get('/junior/token-price', async (req: Request, res: Response) => {
   }
 })
 
+// Get reserve vault token price
+app.get('/reserve/token-price', async (req: Request, res: Response) => {
+  try {
+    const priceData = await getReserveTokenPrice()
+    res.status(200).json({
+      success: true,
+      data: priceData
+    })
+  } catch (error) {
+    res.status(500).json({
+      success: false,
+      error: error instanceof Error ? error.message : 'Unknown error'
+    })
+  }
+})
+
 // Get vaults profits
 app.get('/vaults/profits', async (req: Request, res: Response) => {
   try {
@@ -155,6 +187,36 @@ app.get('/vaults/profits', async (req: Request, res: Response) => {
     res.status(200).json({
       success: true,
       data: profitsData
+    })
+  } catch (error) {
+    res.status(500).json({
+      success: false,
+      error: error instanceof Error ? error.message : 'Unknown error'
+    })
+  }
+})
+
+app.get('/vaults/lp-holdings', async (req: Request, res: Response) => {
+  try {
+    const lpHoldingsData = await getVaultsLPHoldings()
+    res.status(200).json({
+      success: true,
+      data: lpHoldingsData
+    })
+  } catch (error) {
+    res.status(500).json({
+      success: false,
+      error: error instanceof Error ? error.message : 'Unknown error'
+    })
+  }
+})
+
+app.get('/vaults/update-bps', async (req: Request, res: Response) => {
+  try {
+    const bpsData = await getVaultsUpdateBPS()
+    res.status(200).json({
+      success: true,
+      data: bpsData
     })
   } catch (error) {
     res.status(500).json({
@@ -215,15 +277,15 @@ app.post('/add-liquidity', async (req: Request, res: Response) => {
   }
 })
 
-// Zap and stake - user sends TUSD to admin, admin zaps and stakes, vault shares go to user
-app.post('/zap-and-stake', async (req: Request, res: Response) => {
+// Deposit LP tokens to vault - user deposits directly
+app.post('/deposit-to-vault', async (req: Request, res: Response) => {
   try {
-    const { privateKey, amountTUSD, vaultType, slippageTolerance } = req.body
+    const { privateKey, amountLPTokens, vaultType } = req.body
     
-    if (!privateKey || !amountTUSD || !vaultType) {
+    if (!privateKey || !amountLPTokens || !vaultType) {
       return res.status(400).json({
         success: false,
-        error: 'Missing required parameters: privateKey, amountTUSD, vaultType (junior/senior/reserve)'
+        error: 'Missing required parameters: privateKey, amountLPTokens, vaultType (junior/senior/reserve)'
       })
     }
     
@@ -234,7 +296,71 @@ app.post('/zap-and-stake', async (req: Request, res: Response) => {
       })
     }
     
-    const result = await zapAndStake(privateKey, amountTUSD, vaultType, slippageTolerance)
+    const result = await depositToVault(privateKey, amountLPTokens, vaultType)
+    res.status(200).json(result)
+  } catch (error) {
+    res.status(500).json({
+      success: false,
+      error: error instanceof Error ? error.message : 'Unknown error'
+    })
+  }
+})
+
+// Invest vault funds in LP protocol - admin only
+app.post('/invest-vault-in-lp', async (req: Request, res: Response) => {
+  try {
+    const { privateKey, vaultType, lpProtocolAddress, amount } = req.body
+    
+    if (!privateKey || !vaultType || !lpProtocolAddress || !amount) {
+      return res.status(400).json({
+        success: false,
+        error: 'Missing required parameters: privateKey, vaultType, lpProtocolAddress, amount'
+      })
+    }
+    
+    if (vaultType !== 'junior' && vaultType !== 'senior' && vaultType !== 'reserve') {
+      return res.status(400).json({
+        success: false,
+        error: 'vaultType must be either "junior", "senior", or "reserve"'
+      })
+    }
+    
+    const result = await investVaultInLP(privateKey, vaultType, lpProtocolAddress, amount)
+    res.status(200).json(result)
+  } catch (error) {
+    res.status(500).json({
+      success: false,
+      error: error instanceof Error ? error.message : 'Unknown error'
+    })
+  }
+})
+
+// MASTER FUNCTION: Complete stake and invest flow
+app.post('/stake-and-invest-complete', async (req: Request, res: Response) => {
+  try {
+    const { userPrivateKey, adminPrivateKey, vaultType, amountTSTUSDE, slippageTolerance } = req.body
+    
+    if (!userPrivateKey || !adminPrivateKey || !vaultType || !amountTSTUSDE) {
+      return res.status(400).json({
+        success: false,
+        error: 'Missing required parameters: userPrivateKey, adminPrivateKey, vaultType, amountTSTUSDE'
+      })
+    }
+    
+    if (vaultType !== 'junior' && vaultType !== 'senior' && vaultType !== 'reserve') {
+      return res.status(400).json({
+        success: false,
+        error: 'vaultType must be either "junior", "senior", or "reserve"'
+      })
+    }
+    
+    const result = await stakeAndInvestComplete(
+      userPrivateKey,
+      adminPrivateKey,
+      vaultType,
+      amountTSTUSDE,
+      slippageTolerance || 0.5
+    )
     res.status(200).json(result)
   } catch (error) {
     res.status(500).json({
@@ -292,7 +418,7 @@ app.post('/rebase/set-interval', async (req: Request, res: Response) => {
 // Update vault value (admin only)
 app.post('/vault/update-value', async (req: Request, res: Response) => {
   try {
-    const { privateKey, profitBps } = req.body
+    const { privateKey, profitBps, vaultType } = req.body
     
     if (!privateKey) {
       return res.status(400).json({
@@ -308,7 +434,17 @@ app.post('/vault/update-value', async (req: Request, res: Response) => {
       })
     }
     
-    const result = await updateVaultValue(privateKey, profitBps)
+    // Validate vaultType
+    const validVaultTypes = ['senior', 'junior', 'reserve']
+    const vault = vaultType || 'senior'
+    if (!validVaultTypes.includes(vault)) {
+      return res.status(400).json({
+        success: false,
+        error: `vaultType must be one of: ${validVaultTypes.join(', ')}`
+      })
+    }
+    
+    const result = await updateVaultValue(privateKey, profitBps, vault)
     res.json(result)
   } catch (error) {
     res.status(500).json({
@@ -331,6 +467,28 @@ app.post('/vault/rebase', async (req: Request, res: Response) => {
     }
     
     const result = await executeSeniorRebase(privateKey)
+    res.json(result)
+  } catch (error) {
+    res.status(500).json({
+      success: false,
+      error: error instanceof Error ? error.message : 'Unknown error'
+    })
+  }
+})
+
+// Update all vaults and execute rebase (admin only)
+app.post('/vault/update-and-rebase', async (req: Request, res: Response) => {
+  try {
+    const { privateKey } = req.body
+    
+    if (!privateKey) {
+      return res.status(400).json({
+        success: false,
+        error: 'privateKey is required'
+      })
+    }
+    
+    const result = await updateAllVaultsAndRebase(privateKey)
     res.json(result)
   } catch (error) {
     res.status(500).json({
@@ -373,16 +531,21 @@ app.listen(PORT, () => {
   console.log(`🚀 Server is running on http://localhost:${PORT}`);
   console.log(`📍 Health check available at http://localhost:${PORT}/health`);
   console.log(`📊 Pool reserves at http://localhost:${PORT}/reserves`);
-  console.log(`💰 LP token price at http://localhost:${PORT}/lp-price`);
+  console.log(`💰 stablecoin price at http://localhost:${PORT}/lp-price`);
   console.log(`🏦 Vaults total supply at http://localhost:${PORT}/vaults/total-supply`);
   console.log(`💵 Vaults USD value at http://localhost:${PORT}/vaults/value`);
   console.log(`📈 Senior backing ratio at http://localhost:${PORT}/senior/backing-ratio`);
   console.log(`⛓️  Vaults on-chain value at http://localhost:${PORT}/vaults/onchain-value`);
   console.log(`💎 Junior token price at http://localhost:${PORT}/junior/token-price`);
   console.log(`📊 Vaults profits at http://localhost:${PORT}/vaults/profits`);
+  console.log(`💎 Vaults LP holdings at http://localhost:${PORT}/vaults/lp-holdings`);
+  console.log(`📐 Vaults update BPS at GET http://localhost:${PORT}/vaults/update-bps`);
   console.log(`🔄 Swap tokens at POST http://localhost:${PORT}/swap`);
   console.log(`💧 Add liquidity at POST http://localhost:${PORT}/add-liquidity`);
-  console.log(`⚡ Zap and stake at POST http://localhost:${PORT}/zap-and-stake`);
+  console.log(`💼 Deposit to vault at POST http://localhost:${PORT}/deposit-to-vault`);
+  console.log(`🏦 Invest vault in LP at POST http://localhost:${PORT}/invest-vault-in-lp`);
+  console.log(`🚀 Complete stake & invest at POST http://localhost:${PORT}/stake-and-invest-complete`);
+  console.log(`📊 Projected backing ratio at GET http://localhost:${PORT}/senior/projected-backing-ratio`);
   console.log(`⏱️  Rebase config at GET http://localhost:${PORT}/rebase/config`);
   console.log(`⚙️  Set rebase interval at POST http://localhost:${PORT}/rebase/set-interval`);
   console.log(`💰 Update vault value at POST http://localhost:${PORT}/vault/update-value`);

@@ -10,7 +10,7 @@ import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
  * 
  * References from Mathematical Specification:
  * - Section: Notation & Definitions (State Variables)
- * - Instructions: Vault Architecture (LP Token Holdings)
+ * - Instructions: Vault Architecture (stablecoin Holdings)
  */
 interface IVault {
     /// @dev Events
@@ -28,18 +28,18 @@ interface IVault {
     /**
      * @notice Get current vault value in USD
      * @dev Reference: State Variables (V_s, V_j, V_r)
-     * Updated monthly by keeper based on LP token prices
+     * Updated monthly by keeper based on stablecoin prices
      * @return value Current USD value of vault assets
      */
     function vaultValue() external view returns (uint256 value);
     
     /**
-     * @notice Get LP token held by vault
+     * @notice Get stablecoin held by vault
      * @dev Reference: Instructions - Vault Architecture
-     * Vaults hold LP tokens (e.g., USDe-SAIL), not pure stablecoins
-     * @return lpToken Address of LP token
+     * Vaults hold stablecoins (e.g., USDe-SAIL), not pure stablecoins
+     * @return stablecoin Address of stablecoin
      */
-    function lpToken() external view returns (IERC20 lpToken);
+    function stablecoin() external view returns (IERC20 stablecoin);
     
     /**
      * @notice Get deposit token (typically USDE)
@@ -50,7 +50,7 @@ interface IVault {
     /**
      * @notice Update vault value based on off-chain profit calculation
      * @dev Reference: Instructions - Monthly Rebase Flow (Step 1-3)
-     * Called by admin with LP token profit/loss percentage
+     * Called by admin with stablecoin profit/loss percentage
      * @param profitBps Profit/loss in basis points (250 = 2.5%, -1000 = -10%)
      */
     function updateVaultValue(int256 profitBps) external;

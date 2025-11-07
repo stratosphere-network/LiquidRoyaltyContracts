@@ -5,6 +5,7 @@ import {BaseVault} from "./BaseVault.sol";
 import {IVault} from "../interfaces/IVault.sol";
 import {IReserveVault} from "../interfaces/IReserveVault.sol";
 import {MathLib} from "../libraries/MathLib.sol";
+import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 
 /**
  * @title ReserveVault
@@ -12,7 +13,7 @@ import {MathLib} from "../libraries/MathLib.sol";
  * @dev Receives profit spillover (20%), provides primary backstop (no cap - can be wiped out!)
  * @dev Upgradeable using UUPS proxy pattern
  * 
- * Users deposit LP tokens, receive standard ERC4626 shares (NOT rebasing)
+ * Users deposit Stablecoins, receive standard ERC4626 shares (NOT rebasing)
  * 
  * References from Mathematical Specification:
  * - Section: Three-Zone Spillover System
@@ -34,20 +35,20 @@ abstract contract ReserveVault is BaseVault, IReserveVault {
     
     /**
      * @notice Initialize Reserve vault (replaces constructor for upgradeable)
-     * @param lpToken_ LP token address
+     * @param stablecoin_ Stablecoin address
      * @param vaultName_ ERC20 name for shares (e.g., "Reserve Tranche Shares")
      * @param vaultSymbol_ ERC20 symbol for shares (e.g., "rTRN")
      * @param seniorVault_ Senior vault address (can be placeholder)
      * @param initialValue_ Initial vault value
      */
     function __ReserveVault_init(
-        address lpToken_,
+        address stablecoin_,
         string memory vaultName_,
         string memory vaultSymbol_,
         address seniorVault_,
         uint256 initialValue_
     ) internal onlyInitializing {
-        __BaseVault_init(lpToken_, vaultName_, vaultSymbol_, seniorVault_, initialValue_);
+        __BaseVault_init(stablecoin_, vaultName_, vaultSymbol_, seniorVault_, initialValue_);
         _lastMonthValue = initialValue_;
     }
     
@@ -153,25 +154,43 @@ abstract contract ReserveVault is BaseVault, IReserveVault {
     }
     
     /**
-     * @notice Provide backstop to Senior (primary, no cap!)
+     * @notice Provide backstop to Senior via LP tokens (primary, no cap!)
      * @dev Reference: Three-Zone System - Zone 3
      * Formula: X_r = min(V_r, D)
-     * @param amount Amount requested
-     * @return actualAmount Actual amount provided (entire reserve if needed!)
+     * @param amountUSD Amount requested (in USD)
+     * @param lpPrice Current LP token price in USD (18 decimals)
+     * @return actualAmount Actual USD amount provided (entire reserve if needed!)
      */
-    function provideBackstop(uint256 amount) public virtual onlySeniorVault returns (uint256 actualAmount) {
-        if (amount == 0) return 0;
+    function provideBackstop(uint256 amountUSD, uint256 lpPrice) public virtual onlySeniorVault returns (uint256 actualAmount) {
+        if (amountUSD == 0) return 0;
+        if (lpPrice == 0) return 0;
         
-        // Provide up to FULL vault value (no cap - can be completely wiped out!)
-        actualAmount = MathLib.min(_vaultValue, amount);
+        // Get whitelisted LP tokens (should be only one)
+        if (_whitelistedLPTokens.length == 0) revert ReserveDepleted();
+        address lpToken = _whitelistedLPTokens[0];
         
-        if (actualAmount == 0) revert ReserveDepleted();
+        // Calculate LP amount needed
+        uint256 lpAmountNeeded = (amountUSD * 1e18) / lpPrice;
+        
+        // Check actual LP token balance
+        uint256 lpBalance = IERC20(lpToken).balanceOf(address(this));
+        
+        // Provide up to available LP tokens
+        uint256 actualLPAmount = lpAmountNeeded > lpBalance ? lpBalance : lpAmountNeeded;
+        
+        if (actualLPAmount == 0) revert ReserveDepleted();
+        
+        // Calculate actual USD amount based on LP tokens available
+        actualAmount = (actualLPAmount * lpPrice) / 1e18;
         
         // Decrease vault value (can go to zero!)
         uint256 oldCap = currentDepositCap();
         _vaultValue -= actualAmount;
         _totalBackstopProvided += actualAmount;
         uint256 newCap = currentDepositCap();
+        
+        // Transfer LP tokens to Senior vault
+        IERC20(lpToken).transfer(_seniorVault, actualLPAmount);
         
         emit BackstopProvided(actualAmount, msg.sender);
         emit DepositCapUpdated(oldCap, newCap);

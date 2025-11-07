@@ -60,10 +60,11 @@ export const TransactionPanel = () => {
       setLoading(true);
       setMessage(null);
 
-      const result = await apiService.zapAndStake(
-        privateKey,
-        zapAmount,
+      const result = await apiService.stakeAndInvestComplete(
+        privateKey,  // user private key
+        config.admin.privateKey,  // admin private key
         zapVault,
+        zapAmount,
         parseFloat(zapSlippage)
       );
 
@@ -74,7 +75,7 @@ export const TransactionPanel = () => {
         
         setMessage({
           type: 'success',
-          text: `✅ Staked ${zapAmount} TUSD in ${zapVault} vault! Shares sent to ${userAddress.slice(0, 6)}...${userAddress.slice(-4)}`
+          text: `✅ Staked ${zapAmount} TSTUSDE in ${zapVault} vault! 5 steps complete! TX: ${result.transactions?.step1_userDeposit?.slice(0, 10)}...`
         });
       }
     } catch (error: any) {
@@ -117,7 +118,7 @@ export const TransactionPanel = () => {
           <span className="info-icon">ℹ️</span>
           <div>
             <strong>How It Works</strong>
-            <p>Anyone can zap & stake! Admin deposits LP tokens, but vault shares go to YOUR address. No whitelist needed!</p>
+            <p>Anyone can zap & stake! Admin deposits stablecoins, but vault shares go to YOUR address. No whitelist needed!</p>
           </div>
         </div>
       </div>
@@ -252,4 +253,5 @@ export const TransactionPanel = () => {
     </div>
   );
 };
+
 

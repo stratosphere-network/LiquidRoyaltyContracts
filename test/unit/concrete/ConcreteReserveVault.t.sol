@@ -37,7 +37,7 @@ contract ConcreteReserveVaultTest is Test {
         ERC1967Proxy proxy = new ERC1967Proxy(address(implementation), initData);
         vault = ConcreteReserveVault(address(proxy));
         
-        // Mint LP tokens
+        // Mint stablecoins
         lpToken.mint(user1, 10000e18);
         lpToken.mint(user2, 10000e18);
         // Don't pre-mint to vault - ERC4626 handles first deposit correctly
@@ -53,7 +53,6 @@ contract ConcreteReserveVaultTest is Test {
     function testDeployment() public view {
         assertEq(vault.name(), "Reserve Tranche Shares");
         assertEq(vault.symbol(), "rTRN");
-        assertEq(address(vault.lpToken()), address(lpToken));
         assertEq(vault.seniorVault(), seniorVault);
         assertEq(vault.vaultValue(), INITIAL_VALUE);
         assertEq(vault.totalSpilloverReceived(), 0);

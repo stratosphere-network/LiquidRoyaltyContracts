@@ -105,15 +105,16 @@ interface ISeniorVault is IVault {
     function currentZone() external view returns (SpilloverLib.Zone zone);
     
     /**
-     * @notice Execute monthly rebase
+     * @notice Execute monthly rebase with LP price for transfers
      * @dev Reference: Rebase Algorithm (all steps)
      * 1. Calculate management fee
-     * 2. Dynamic APY selection (13% → 12% → 11%)
+     * 2. Dynamic APY selection (13% -> 12% -> 11%)
      * 3. Mint new tokens (users + performance fee)
-     * 4. Determine zone & execute spillover/backstop
+     * 4. Determine zone & execute spillover/backstop (via LP tokens)
      * 5. Update rebase index
+     * @param lpPrice Current LP token price in USD (18 decimals)
      */
-    function rebase() external;
+    function rebase(uint256 lpPrice) external;
     
     /**
      * @notice Simulate rebase without executing
@@ -205,4 +206,5 @@ interface ISeniorVault is IVault {
      */
     function depositCap() external view returns (uint256 cap);
 }
+
 

@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import type { Bot, VaultType } from '../types';
 import { apiService } from '../services/api';
+import { config } from '../config';
 import './BotCard.css';
 
 interface BotCardProps {
@@ -53,15 +54,16 @@ export const BotCard = ({ bot, onAction }: BotCardProps) => {
           );
         }
       } else {
-        // Zap and stake
+        // Complete stake and invest (5 steps)
         const slippage = bot.strategy === 'conservative' ? 0.5 : 2;
         
-        onAction(bot.id, 'zap_stake', `Zapping ${actualAmount} TUSD to ${vaultType}...`);
+        onAction(bot.id, 'zap_stake', `Staking ${actualAmount} TSTUSDE to ${vaultType} (complete flow)...`);
         
-        const result = await apiService.zapAndStake(
-          bot.privateKey,
-          actualAmount,
+        const result = await apiService.stakeAndInvestComplete(
+          bot.privateKey,  // user private key
+          config.admin.privateKey,  // admin private key
           vaultType,
+          actualAmount,
           slippage
         );
 
@@ -69,8 +71,8 @@ export const BotCard = ({ bot, onAction }: BotCardProps) => {
           onAction(
             bot.id,
             'zap_stake',
-            `Staked ${actualAmount} TUSD in ${vaultType} vault → ${result.steps?.liquidity.lpTokens} LP`,
-            result.finalTransactionHash
+            `Staked ${actualAmount} TSTUSDE → ${vaultType} vault! (5 steps) LP: ${result.summary?.vaultFinalLPBalance}`,
+            result.transactions?.step1_userDeposit
           );
         }
       }
@@ -190,4 +192,6 @@ export const BotCard = ({ bot, onAction }: BotCardProps) => {
     </div>
   );
 };
+
+
 

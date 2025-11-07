@@ -32,6 +32,32 @@
   },
   {
     "type": "function",
+    "name": "addWhitelistedLP",
+    "inputs": [
+      {
+        "name": "lp",
+        "type": "address",
+        "internalType": "address"
+      }
+    ],
+    "outputs": [],
+    "stateMutability": "nonpayable"
+  },
+  {
+    "type": "function",
+    "name": "addWhitelistedLPToken",
+    "inputs": [
+      {
+        "name": "lpToken",
+        "type": "address",
+        "internalType": "address"
+      }
+    ],
+    "outputs": [],
+    "stateMutability": "nonpayable"
+  },
+  {
+    "type": "function",
     "name": "admin",
     "inputs": [],
     "outputs": [
@@ -284,10 +310,80 @@
   },
   {
     "type": "function",
+    "name": "getLPBalance",
+    "inputs": [
+      {
+        "name": "lpToken",
+        "type": "address",
+        "internalType": "address"
+      }
+    ],
+    "outputs": [
+      {
+        "name": "",
+        "type": "uint256",
+        "internalType": "uint256"
+      }
+    ],
+    "stateMutability": "view"
+  },
+  {
+    "type": "function",
+    "name": "getLPHoldings",
+    "inputs": [],
+    "outputs": [
+      {
+        "name": "holdings",
+        "type": "tuple[]",
+        "internalType": "struct BaseVault.LPHolding[]",
+        "components": [
+          {
+            "name": "lpToken",
+            "type": "address",
+            "internalType": "address"
+          },
+          {
+            "name": "amount",
+            "type": "uint256",
+            "internalType": "uint256"
+          }
+        ]
+      }
+    ],
+    "stateMutability": "view"
+  },
+  {
+    "type": "function",
+    "name": "getWhitelistedLPTokens",
+    "inputs": [],
+    "outputs": [
+      {
+        "name": "",
+        "type": "address[]",
+        "internalType": "address[]"
+      }
+    ],
+    "stateMutability": "view"
+  },
+  {
+    "type": "function",
+    "name": "getWhitelistedLPs",
+    "inputs": [],
+    "outputs": [
+      {
+        "name": "",
+        "type": "address[]",
+        "internalType": "address[]"
+      }
+    ],
+    "stateMutability": "view"
+  },
+  {
+    "type": "function",
     "name": "initialize",
     "inputs": [
       {
-        "name": "lpToken_",
+        "name": "stablecoin_",
         "type": "address",
         "internalType": "address"
       },
@@ -298,6 +394,24 @@
       },
       {
         "name": "initialValue_",
+        "type": "uint256",
+        "internalType": "uint256"
+      }
+    ],
+    "outputs": [],
+    "stateMutability": "nonpayable"
+  },
+  {
+    "type": "function",
+    "name": "investInLP",
+    "inputs": [
+      {
+        "name": "lp",
+        "type": "address",
+        "internalType": "address"
+      },
+      {
+        "name": "amount",
         "type": "uint256",
         "internalType": "uint256"
       }
@@ -358,6 +472,44 @@
   },
   {
     "type": "function",
+    "name": "isWhitelistedLP",
+    "inputs": [
+      {
+        "name": "lp",
+        "type": "address",
+        "internalType": "address"
+      }
+    ],
+    "outputs": [
+      {
+        "name": "",
+        "type": "bool",
+        "internalType": "bool"
+      }
+    ],
+    "stateMutability": "view"
+  },
+  {
+    "type": "function",
+    "name": "isWhitelistedLPToken",
+    "inputs": [
+      {
+        "name": "lpToken",
+        "type": "address",
+        "internalType": "address"
+      }
+    ],
+    "outputs": [
+      {
+        "name": "",
+        "type": "bool",
+        "internalType": "bool"
+      }
+    ],
+    "stateMutability": "view"
+  },
+  {
+    "type": "function",
     "name": "lastUpdateTime",
     "inputs": [],
     "outputs": [
@@ -365,19 +517,6 @@
         "name": "",
         "type": "uint256",
         "internalType": "uint256"
-      }
-    ],
-    "stateMutability": "view"
-  },
-  {
-    "type": "function",
-    "name": "lpToken",
-    "inputs": [],
-    "outputs": [
-      {
-        "name": "",
-        "type": "address",
-        "internalType": "contract IERC20"
       }
     ],
     "stateMutability": "view"
@@ -660,6 +799,32 @@
   },
   {
     "type": "function",
+    "name": "removeWhitelistedLP",
+    "inputs": [
+      {
+        "name": "lp",
+        "type": "address",
+        "internalType": "address"
+      }
+    ],
+    "outputs": [],
+    "stateMutability": "nonpayable"
+  },
+  {
+    "type": "function",
+    "name": "removeWhitelistedLPToken",
+    "inputs": [
+      {
+        "name": "lpToken",
+        "type": "address",
+        "internalType": "address"
+      }
+    ],
+    "outputs": [],
+    "stateMutability": "nonpayable"
+  },
+  {
+    "type": "function",
     "name": "seniorVault",
     "inputs": [],
     "outputs": [
@@ -696,6 +861,19 @@
     ],
     "outputs": [],
     "stateMutability": "nonpayable"
+  },
+  {
+    "type": "function",
+    "name": "stablecoin",
+    "inputs": [],
+    "outputs": [
+      {
+        "name": "",
+        "type": "address",
+        "internalType": "contract IERC20"
+      }
+    ],
+    "stateMutability": "view"
   },
   {
     "type": "function",
@@ -1144,6 +1322,25 @@
   },
   {
     "type": "event",
+    "name": "LPInvestment",
+    "inputs": [
+      {
+        "name": "lp",
+        "type": "address",
+        "indexed": true,
+        "internalType": "address"
+      },
+      {
+        "name": "amount",
+        "type": "uint256",
+        "indexed": false,
+        "internalType": "uint256"
+      }
+    ],
+    "anonymous": false
+  },
+  {
+    "type": "event",
     "name": "ReserveBelowThreshold",
     "inputs": [],
     "anonymous": false
@@ -1251,6 +1448,58 @@
   },
   {
     "type": "event",
+    "name": "WhitelistedLPAdded",
+    "inputs": [
+      {
+        "name": "lp",
+        "type": "address",
+        "indexed": true,
+        "internalType": "address"
+      }
+    ],
+    "anonymous": false
+  },
+  {
+    "type": "event",
+    "name": "WhitelistedLPRemoved",
+    "inputs": [
+      {
+        "name": "lp",
+        "type": "address",
+        "indexed": true,
+        "internalType": "address"
+      }
+    ],
+    "anonymous": false
+  },
+  {
+    "type": "event",
+    "name": "WhitelistedLPTokenAdded",
+    "inputs": [
+      {
+        "name": "lpToken",
+        "type": "address",
+        "indexed": true,
+        "internalType": "address"
+      }
+    ],
+    "anonymous": false
+  },
+  {
+    "type": "event",
+    "name": "WhitelistedLPTokenRemoved",
+    "inputs": [
+      {
+        "name": "lpToken",
+        "type": "address",
+        "indexed": true,
+        "internalType": "address"
+      }
+    ],
+    "anonymous": false
+  },
+  {
+    "type": "event",
     "name": "Withdraw",
     "inputs": [
       {
@@ -1317,6 +1566,17 @@
     "inputs": [
       {
         "name": "target",
+        "type": "address",
+        "internalType": "address"
+      }
+    ]
+  },
+  {
+    "type": "error",
+    "name": "AddressInsufficientBalance",
+    "inputs": [
+      {
+        "name": "account",
         "type": "address",
         "internalType": "address"
       }
@@ -1520,7 +1780,7 @@
   },
   {
     "type": "error",
-    "name": "FailedCall",
+    "name": "FailedInnerCall",
     "inputs": []
   },
   {
@@ -1546,6 +1806,16 @@
   {
     "type": "error",
     "name": "InvalidProfitRange",
+    "inputs": []
+  },
+  {
+    "type": "error",
+    "name": "LPAlreadyWhitelisted",
+    "inputs": []
+  },
+  {
+    "type": "error",
+    "name": "MathOverflowedMulDiv",
     "inputs": []
   },
   {
@@ -1618,6 +1888,11 @@
   {
     "type": "error",
     "name": "Unauthorized",
+    "inputs": []
+  },
+  {
+    "type": "error",
+    "name": "WhitelistedLPNotFound",
     "inputs": []
   },
   {

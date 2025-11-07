@@ -34,13 +34,14 @@ interface IReserveVault is IVault {
     function receiveSpillover(uint256 amount) external;
     
     /**
-     * @notice Provide backstop to Senior (primary, no cap!)
+     * @notice Provide backstop to Senior via LP tokens (primary, no cap!)
      * @dev Reference: Three-Zone System - Zone 3 (Backstop)
      * Formula: X_r = min(V_r, D) - Takes ALL reserve if needed!
-     * @param amount Amount of USD needed
-     * @return actualAmount Actual amount provided (entire reserve if needed)
+     * @param amountUSD Amount of USD needed
+     * @param lpPrice Current LP token price in USD (18 decimals)
+     * @return actualAmount Actual USD amount provided (entire reserve if needed)
      */
-    function provideBackstop(uint256 amount) external returns (uint256 actualAmount);
+    function provideBackstop(uint256 amountUSD, uint256 lpPrice) external returns (uint256 actualAmount);
     
     /**
      * @notice Get total spillover received (lifetime)
@@ -96,4 +97,5 @@ interface IReserveVault is IVault {
      */
     function utilizationRate() external view returns (uint256 utilization);
 }
+
 

@@ -36,7 +36,7 @@ contract SpilloverE2E is Test {
         juniorUser = makeAddr("juniorUser");
         reserveUser = makeAddr("reserveUser");
         
-        // Deploy LP token
+        // Deploy stablecoin
         lpToken = new MockERC20("USDe-SAIL", "USDe-SAIL", 18);
         
         // Compute the address where Senior vault proxy will be deployed
@@ -62,7 +62,7 @@ contract SpilloverE2E is Test {
         
         require(address(senior) == predictedSeniorAddress, "Senior address mismatch");
         
-        // Mint LP tokens to vaults and users
+        // Mint stablecoins to vaults and users
         lpToken.mint(address(senior), INITIAL_VALUE);
         lpToken.mint(address(junior), INITIAL_VALUE);
         lpToken.mint(address(reserve), INITIAL_VALUE);

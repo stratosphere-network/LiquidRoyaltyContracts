@@ -108,7 +108,7 @@ The API runs on `http://localhost:3000`
 - Slippage: 0.5% (conservative) or 2% (risky)
 
 ### Zap & Stake
-- Converts TUSD to LP tokens
+- Converts TUSD to stablecoins
 - Stakes in selected vault (Junior/Senior/Reserve)
 - All-in-one transaction
 - Slippage: 0.5% (conservative) or 2% (risky)

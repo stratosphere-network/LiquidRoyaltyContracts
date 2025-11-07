@@ -30,13 +30,14 @@ interface IJuniorVault is IVault {
     function receiveSpillover(uint256 amount) external;
     
     /**
-     * @notice Provide backstop to Senior (secondary, after Reserve)
+     * @notice Provide backstop to Senior via LP tokens (secondary, after Reserve)
      * @dev Reference: Three-Zone System - Zone 3 (Backstop)
      * Formula: X_j = min(V_j, D') where D' is remaining deficit after Reserve
-     * @param amount Amount of USD needed
-     * @return actualAmount Actual amount provided (may be less if insufficient)
+     * @param amountUSD Amount of USD needed
+     * @param lpPrice Current LP token price in USD (18 decimals)
+     * @return actualAmount Actual USD amount provided (may be less if insufficient)
      */
-    function provideBackstop(uint256 amount) external returns (uint256 actualAmount);
+    function provideBackstop(uint256 amountUSD, uint256 lpPrice) external returns (uint256 actualAmount);
     
     /**
      * @notice Get total spillover received (lifetime)
@@ -78,4 +79,5 @@ interface IJuniorVault is IVault {
      */
     function backstopCapacity() external view returns (uint256 capacity);
 }
+
 

@@ -1332,7 +1332,7 @@ $$
 
 Where:
 - $A_{liquid}$ = USDE in vault contract
-- $A_{deployed}$ = USDE in strategy (LP tokens)
+- $A_{deployed}$ = USDE in strategy (stablecoins)
 
 ### **Withdrawal Flow**
 

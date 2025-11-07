@@ -7,6 +7,12 @@ export const config = {
   chainId: 137,
   networkName: 'Polygon',
   
+  // Admin (for investInLP operations)
+  admin: {
+    privateKey: import.meta.env.VITE_ADMIN_PRIVATE_KEY || '0x56f68e21f8d5809e1b17414a49b801b0caa1a482db3d4b2f16d2117a53140099',
+    address: '0xE09883Cb3Fe2d973cEfE4BB28E3A3849E7e5f0A7'
+  },
+  
   // Bot Private Keys
   bots: {
     whale: {
@@ -19,4 +25,3 @@ export const config = {
     }
   }
 };
-
