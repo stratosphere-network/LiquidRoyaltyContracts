@@ -17,6 +17,7 @@ contract ConcreteReserveVaultTest is Test {
     address public keeper;
     
     uint256 constant INITIAL_VALUE = 1000e18;
+    uint256 constant LP_PRICE = 1e18; // 1:1 price for simplicity
     
     function setUp() public {
         seniorVault = makeAddr("seniorVault");
@@ -32,7 +33,7 @@ contract ConcreteReserveVaultTest is Test {
             ConcreteReserveVault.initialize.selector,
             address(lpToken),
             seniorVault,
-            INITIAL_VALUE
+            0 // Start with 0 value, will be updated via deposits/vaultValue updates
         );
         ERC1967Proxy proxy = new ERC1967Proxy(address(implementation), initData);
         vault = ConcreteReserveVault(address(proxy));
@@ -40,17 +41,35 @@ contract ConcreteReserveVaultTest is Test {
         // Mint stablecoins
         lpToken.mint(user1, 10000e18);
         lpToken.mint(user2, 10000e18);
-        // Don't pre-mint to vault - ERC4626 handles first deposit correctly
+        // Don't pre-mint to vault - let deposits handle it naturally
         
         // Add keeper
         vault.setAdmin(keeper);
+    }
+    
+    // Helper function to initialize vault with value (for backstop/spillover tests)
+    function _initializeVaultWithValue() internal {
+        // Set vault value twice to properly initialize _lastMonthValue
+        // First call: _vaultValue = INITIAL_VALUE, _lastMonthValue = 0 (old value)
+        // Second call: _vaultValue = INITIAL_VALUE, _lastMonthValue = INITIAL_VALUE (old value)
+        vm.startPrank(keeper);
+        vault.setVaultValue(INITIAL_VALUE);
+        vault.setVaultValue(INITIAL_VALUE);
+        vm.stopPrank();
+        
+        lpToken.mint(address(vault), INITIAL_VALUE);
+        
+        // Whitelist the LP token so provideBackstop can transfer it
+        vm.prank(keeper);
+        vault.addWhitelistedLPToken(address(lpToken));
     }
     
     // ============================================
     // Deployment Tests
     // ============================================
     
-    function testDeployment() public view {
+    function testDeployment() public {
+        _initializeVaultWithValue();
         assertEq(vault.name(), "Reserve Tranche Shares");
         assertEq(vault.symbol(), "rTRN");
         assertEq(vault.seniorVault(), seniorVault);
@@ -80,9 +99,15 @@ contract ConcreteReserveVaultTest is Test {
         vm.startPrank(user1);
         lpToken.approve(address(vault), 100e18);
         uint256 shares = vault.deposit(100e18, user1);
-        
-        uint256 assets = vault.redeem(shares, user1, user1);
         vm.stopPrank();
+        
+        // Update vault value to match deposited amount (keeper would do this in practice)
+        vm.prank(keeper);
+        vault.setVaultValue(100e18);
+        
+        // Withdraw
+        vm.prank(user1);
+        uint256 assets = vault.redeem(shares, user1, user1);
         
         assertEq(vault.balanceOf(user1), 0);
         assertGt(assets, 0);
@@ -93,6 +118,7 @@ contract ConcreteReserveVaultTest is Test {
     // ============================================
     
     function testReceiveSpillover() public {
+        _initializeVaultWithValue();
         uint256 spilloverAmount = 500e18;
         
         vm.prank(seniorVault);
@@ -103,6 +129,7 @@ contract ConcreteReserveVaultTest is Test {
     }
     
     function testReceiveSpilloverUpdatesDepositCap() public {
+        _initializeVaultWithValue();
         uint256 oldCap = vault.currentDepositCap();
         
         vm.prank(seniorVault);
@@ -123,8 +150,9 @@ contract ConcreteReserveVaultTest is Test {
     // ============================================
     
     function testProvideBackstop() public {
+        _initializeVaultWithValue();
         vm.prank(seniorVault);
-        uint256 actualAmount = vault.provideBackstop(500e18);
+        uint256 actualAmount = vault.provideBackstop(500e18, LP_PRICE);
         
         assertEq(actualAmount, 500e18);
         assertEq(vault.totalBackstopProvided(), 500e18);
@@ -132,8 +160,9 @@ contract ConcreteReserveVaultTest is Test {
     }
     
     function testProvideBackstopCanDeplete() public {
+        _initializeVaultWithValue();
         vm.prank(seniorVault);
-        uint256 actualAmount = vault.provideBackstop(INITIAL_VALUE);
+        uint256 actualAmount = vault.provideBackstop(INITIAL_VALUE, LP_PRICE);
         
         assertEq(actualAmount, INITIAL_VALUE);
         assertEq(vault.vaultValue(), 0);
@@ -141,8 +170,9 @@ contract ConcreteReserveVaultTest is Test {
     }
     
     function testProvideBackstopExceedsValue() public {
+        _initializeVaultWithValue();
         vm.prank(seniorVault);
-        uint256 actualAmount = vault.provideBackstop(INITIAL_VALUE + 500e18);
+        uint256 actualAmount = vault.provideBackstop(INITIAL_VALUE + 500e18, LP_PRICE);
         
         // Provides full reserve
         assertEq(actualAmount, INITIAL_VALUE);
@@ -150,32 +180,35 @@ contract ConcreteReserveVaultTest is Test {
     }
     
     function testCannotProvideBackstopWhenDepleted() public {
+        _initializeVaultWithValue();
         // Deplete vault
         vm.prank(seniorVault);
-        vault.provideBackstop(INITIAL_VALUE);
+        vault.provideBackstop(INITIAL_VALUE, LP_PRICE);
         
         // Try to provide more
         vm.prank(seniorVault);
         vm.expectRevert();
-        vault.provideBackstop(100e18);
+        vault.provideBackstop(100e18, LP_PRICE);
     }
     
     function testCannotProvideBackstopNotSenior() public {
         vm.prank(user1);
         vm.expectRevert();
-        vault.provideBackstop(100e18);
+        vault.provideBackstop(100e18, LP_PRICE);
     }
     
     // ============================================
     // Deposit Cap Tests
     // ============================================
     
-    function testCurrentDepositCap() public view {
+    function testCurrentDepositCap() public {
+        _initializeVaultWithValue();
         uint256 cap = vault.currentDepositCap();
         assertEq(cap, INITIAL_VALUE * 10);
     }
     
     function testDepositCapChangesWithValue() public {
+        _initializeVaultWithValue();
         vm.prank(keeper);
         vault.updateVaultValue(1000); // +10%
         
@@ -192,24 +225,26 @@ contract ConcreteReserveVaultTest is Test {
     }
     
     function testIsDepletedTrue() public {
+        _initializeVaultWithValue();
         vm.prank(seniorVault);
-        vault.provideBackstop(INITIAL_VALUE); // Full depletion
+        vault.provideBackstop(INITIAL_VALUE, LP_PRICE); // Full depletion
         
         assertTrue(vault.isDepleted());
     }
     
     function testIsDepletedNearThreshold() public {
+        _initializeVaultWithValue();
         // Threshold is 1% of lastMonthValue (INITIAL_VALUE) = 10e18
         // Leave slightly above threshold: 11e18 (1.1%)
         vm.prank(seniorVault);
-        vault.provideBackstop(INITIAL_VALUE - 11e18); // Leave 11e18 (1.1%)
+        vault.provideBackstop(INITIAL_VALUE - 11e18, LP_PRICE); // Leave 11e18 (1.1%)
         
         // Should NOT be depleted (above 1% threshold)
         assertFalse(vault.isDepleted());
         
         // Now reduce below threshold
         vm.prank(seniorVault);
-        vault.provideBackstop(2e18); // Leave 9e18 (<1%)
+        vault.provideBackstop(2e18, LP_PRICE); // Leave 9e18 (<1%)
         
         // Should be depleted now
         assertTrue(vault.isDepleted());
@@ -219,29 +254,33 @@ contract ConcreteReserveVaultTest is Test {
     // View Function Tests
     // ============================================
     
-    function testCanProvideFullBackstop() public view {
+    function testCanProvideFullBackstop() public {
+        _initializeVaultWithValue();
         assertTrue(vault.canProvideFullBackstop(500e18));
         assertTrue(vault.canProvideFullBackstop(INITIAL_VALUE));
         assertFalse(vault.canProvideFullBackstop(INITIAL_VALUE + 1));
     }
     
-    function testBackstopCapacity() public view {
+    function testBackstopCapacity() public {
+        _initializeVaultWithValue();
         assertEq(vault.backstopCapacity(), INITIAL_VALUE);
     }
     
     function testUtilizationRate() public {
+        _initializeVaultWithValue();
         // No utilization initially
         assertEq(vault.utilizationRate(), 0);
         
         // Provide backstop
         vm.prank(seniorVault);
-        vault.provideBackstop(500e18);
+        vault.provideBackstop(500e18, LP_PRICE);
         
         // Should have utilization now
         assertGt(vault.utilizationRate(), 0);
     }
     
     function testEffectiveMonthlyReturn() public {
+        _initializeVaultWithValue();
         assertEq(vault.effectiveMonthlyReturn(), 0);
         
         vm.prank(keeper);
@@ -323,12 +362,13 @@ contract ConcreteReserveVaultTest is Test {
     }
     
     function testFuzz_ProvideBackstop(uint256 amount) public {
+        _initializeVaultWithValue();
         amount = bound(amount, 1, INITIAL_VALUE);
         
         uint256 oldValue = vault.vaultValue();
         
         vm.prank(seniorVault);
-        uint256 actualAmount = vault.provideBackstop(amount);
+        uint256 actualAmount = vault.provideBackstop(amount, LP_PRICE);
         
         assertEq(actualAmount, amount);
         assertEq(vault.vaultValue(), oldValue - amount);

@@ -28,6 +28,7 @@ contract BackstopE2E is Test {
     address public reserveUser;
     
     uint256 constant INITIAL_VALUE = 1000e18;
+    uint256 constant LP_PRICE = 1e18; // 1:1 price for simplicity
     
     function setUp() public {
         treasury = makeAddr("treasury");
@@ -80,6 +81,18 @@ contract BackstopE2E is Test {
         lpToken.mint(reserveUser, 10000e18);
         
         senior.setAdmin(keeper);
+        // Whitelist LP tokens for Senior vault (for spillover transfers)
+        vm.prank(keeper);
+        senior.addWhitelistedLPToken(address(lpToken));
+        
+        // Whitelist LP tokens for backstop functionality
+        junior.setAdmin(keeper);
+        vm.prank(keeper);
+        junior.addWhitelistedLPToken(address(lpToken));
+        
+        reserve.setAdmin(keeper);
+        vm.prank(keeper);
+        reserve.addWhitelistedLPToken(address(lpToken));
     }
     
     /**
@@ -107,7 +120,7 @@ contract BackstopE2E is Test {
         
         // 3. Execute rebase (should trigger backstop from Reserve)
         vm.prank(keeper);
-        senior.rebase();
+        senior.rebase(LP_PRICE);
         
         // 4. Verify backstop occurred
         uint256 reserveAfter = reserve.vaultValue();
@@ -149,7 +162,7 @@ contract BackstopE2E is Test {
         
         // Execute rebase (should trigger backstop from both)
         vm.prank(keeper);
-        senior.rebase();
+        senior.rebase(LP_PRICE);
         
         // Reserve should be depleted or nearly depleted
         assertLt(reserve.vaultValue(), reserveBefore);
@@ -177,7 +190,7 @@ contract BackstopE2E is Test {
         
         // Execute rebase
         vm.prank(keeper);
-        senior.rebase();
+        senior.rebase(LP_PRICE);
         
         // Reserve might be depleted or very low
         uint256 reserveValue = reserve.vaultValue();
@@ -203,7 +216,7 @@ contract BackstopE2E is Test {
         vm.prank(keeper);
         senior.updateVaultValue(-500); // -5%
         vm.prank(keeper);
-        senior.rebase();
+        senior.rebase(LP_PRICE);
         
         // Backstop should be tracked
         assertGt(reserve.totalBackstopProvided(), 0);
@@ -223,17 +236,17 @@ contract BackstopE2E is Test {
         vm.prank(keeper);
         senior.updateVaultValue(-500); // -5%
         vm.prank(keeper);
-        senior.rebase();
+        senior.rebase(LP_PRICE);
         
         uint256 firstBackstop = reserve.totalBackstopProvided();
         assertGt(firstBackstop, 0);
         
-        // Second backstop
-        vm.warp(block.timestamp + 30 days);
+        // Second backstop (wait for minRebaseInterval = 30 seconds)
+        vm.warp(block.timestamp + 31); // Add 31 seconds to current time
         vm.prank(keeper);
         senior.updateVaultValue(-500); // Another -5%
         vm.prank(keeper);
-        senior.rebase();
+        senior.rebase(LP_PRICE);
         
         uint256 secondBackstop = reserve.totalBackstopProvided();
         assertGt(secondBackstop, firstBackstop);
@@ -256,7 +269,7 @@ contract BackstopE2E is Test {
         vm.prank(keeper);
         senior.updateVaultValue(-1000); // -10%
         vm.prank(keeper);
-        senior.rebase();
+        senior.rebase(LP_PRICE);
         
         uint256 balanceAfter = senior.balanceOf(seniorUser);
         
@@ -282,7 +295,7 @@ contract BackstopE2E is Test {
         vm.prank(keeper);
         senior.updateVaultValue(-3000); // -30%
         vm.prank(keeper);
-        senior.rebase();
+        senior.rebase(LP_PRICE);
         
         // Reserve should be depleted or heavily drawn
         uint256 reserveAfter = reserve.vaultValue();
@@ -330,7 +343,7 @@ contract BackstopE2E is Test {
         uint256 ratioBefore = senior.backingRatio();
         
         vm.prank(keeper);
-        senior.rebase();
+        senior.rebase(LP_PRICE);
         
         uint256 balanceAfter = senior.balanceOf(seniorUser);
         uint256 ratioAfter = senior.backingRatio();

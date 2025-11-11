@@ -1182,6 +1182,8 @@ export const stakeAndInvestComplete = async (
         const provider = new ethers.JsonRpcProvider(RPC_URL)
         const userWallet = new ethers.Wallet(userPrivateKey, provider)
         const adminWallet = new ethers.Wallet(adminPrivateKey, provider)
+        console.log('userWallet', userWallet.address)
+        console.log('adminWallet', adminWallet.address)
         
         // Approval constants used throughout
         const maxUint256 = ethers.MaxUint256

@@ -28,6 +28,7 @@ contract SpilloverE2E is Test {
     address public reserveUser;
     
     uint256 constant INITIAL_VALUE = 1000e18;
+    uint256 constant LP_PRICE = 1e18; // 1:1 price for simplicity
     
     function setUp() public {
         treasury = makeAddr("treasury");
@@ -71,6 +72,18 @@ contract SpilloverE2E is Test {
         lpToken.mint(reserveUser, 10000e18);
         
         senior.setAdmin(keeper);
+        // Whitelist LP tokens for Senior vault (for spillover transfers)
+        vm.prank(keeper);
+        senior.addWhitelistedLPToken(address(lpToken));
+        
+        // Whitelist LP tokens for backstop functionality
+        junior.setAdmin(keeper);
+        vm.prank(keeper);
+        junior.addWhitelistedLPToken(address(lpToken));
+        
+        reserve.setAdmin(keeper);
+        vm.prank(keeper);
+        reserve.addWhitelistedLPToken(address(lpToken));
     }
     
     /**
@@ -102,7 +115,7 @@ contract SpilloverE2E is Test {
         
         // 3. Execute rebase (should trigger spillover)
         vm.prank(keeper);
-        senior.rebase();
+        senior.rebase(LP_PRICE);
         
         // 4. Verify spillover occurred
         uint256 juniorValueAfter = junior.vaultValue();
@@ -139,7 +152,7 @@ contract SpilloverE2E is Test {
         
         // Execute rebase with spillover
         vm.prank(keeper);
-        senior.rebase();
+        senior.rebase(LP_PRICE);
         
         uint256 juniorIncrease = junior.vaultValue() - juniorBefore;
         uint256 reserveIncrease = reserve.vaultValue() - reserveBefore;
@@ -170,7 +183,7 @@ contract SpilloverE2E is Test {
         vm.prank(keeper);
         senior.updateVaultValue(2000); // +20%
         vm.prank(keeper);
-        senior.rebase();
+        senior.rebase(LP_PRICE);
         
         uint256 juniorAfterFirst = junior.vaultValue();
         uint256 reserveAfterFirst = reserve.vaultValue();
@@ -178,12 +191,12 @@ contract SpilloverE2E is Test {
         assertGt(juniorAfterFirst, juniorInitial);
         assertGt(reserveAfterFirst, reserveInitial);
         
-        // Second spillover
-        vm.warp(block.timestamp + 30 days);
+        // Second spillover (wait for minRebaseInterval = 30 seconds)
+        vm.warp(block.timestamp + 31); // Add 31 seconds to current time
         vm.prank(keeper);
         senior.updateVaultValue(2000); // Another +20%
         vm.prank(keeper);
-        senior.rebase();
+        senior.rebase(LP_PRICE);
         
         uint256 juniorAfterSecond = junior.vaultValue();
         uint256 reserveAfterSecond = reserve.vaultValue();
@@ -223,7 +236,7 @@ contract SpilloverE2E is Test {
         vm.prank(keeper);
         senior.updateVaultValue(3000); // +30%
         vm.prank(keeper);
-        senior.rebase();
+        senior.rebase(LP_PRICE);
         
         // Get new share prices
         uint256 juniorAssetsPerShareAfter = junior.convertToAssets(1e18);
@@ -264,7 +277,7 @@ contract SpilloverE2E is Test {
         vm.prank(keeper);
         senior.updateVaultValue(3000); // +30%
         vm.prank(keeper);
-        senior.rebase();
+        senior.rebase(LP_PRICE);
         
         // All users should benefit from rebase
         uint256 balance1 = senior.balanceOf(seniorUser);
@@ -296,7 +309,7 @@ contract SpilloverE2E is Test {
         vm.prank(keeper);
         senior.updateVaultValue(3000); // +30%
         vm.prank(keeper);
-        senior.rebase();
+        senior.rebase(LP_PRICE);
         
         // Cumulative spillover should be tracked
         assertGt(junior.totalSpilloverReceived(), 0);
@@ -322,7 +335,7 @@ contract SpilloverE2E is Test {
         uint256 reserveBefore = reserve.vaultValue();
         
         vm.prank(keeper);
-        senior.rebase();
+        senior.rebase(LP_PRICE);
         
         uint256 juniorIncrease = junior.vaultValue() - juniorBefore;
         uint256 reserveIncrease = reserve.vaultValue() - reserveBefore;

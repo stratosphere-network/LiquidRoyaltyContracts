@@ -23,6 +23,7 @@ contract UnifiedSeniorVaultTest is Test {
     address public user3;
     
     uint256 constant INITIAL_VALUE = 1000e18;
+    uint256 constant LP_PRICE = 1e18; // 1:1 price for simplicity
     
     event Transfer(address indexed from, address indexed to, uint256 value);
     event Rebase(uint256 indexed epoch, uint256 oldIndex, uint256 newIndex, uint256 newTotalSupply);
@@ -114,7 +115,7 @@ contract UnifiedSeniorVaultTest is Test {
         assertEq(vault.reserveVault(), address(reserveVault));
         assertEq(vault.treasury(), treasury);
         assertEq(vault.vaultValue(), INITIAL_VALUE);
-        assertEq(vault.minRebaseInterval(), 30 days);
+        assertEq(vault.minRebaseInterval(), 30); // 30 seconds default
     }
     
     // ============================================
@@ -457,7 +458,7 @@ contract UnifiedSeniorVaultTest is Test {
         
         // Execute rebase
         vm.prank(keeper);
-        vault.rebase();
+        vault.rebase(LP_PRICE);
         
         uint256 balanceAfter = vault.balanceOf(user1);
         uint256 sharesAfter = vault.sharesOf(user1);
@@ -479,7 +480,7 @@ contract UnifiedSeniorVaultTest is Test {
     function testCannotRebaseTooSoon() public {
         vm.prank(keeper);
         vm.expectRevert();
-        vault.rebase();
+        vault.rebase(LP_PRICE);
     }
     
     function testCannotRebaseNotKeeper() public {
@@ -487,7 +488,7 @@ contract UnifiedSeniorVaultTest is Test {
         
         vm.prank(user1);
         vm.expectRevert();
-        vault.rebase();
+        vault.rebase(LP_PRICE);
     }
     
     function testMultipleRebases() public {
@@ -504,17 +505,17 @@ contract UnifiedSeniorVaultTest is Test {
         vm.prank(keeper);
         vault.updateVaultValue(1000);
         vm.prank(keeper);
-        vault.rebase();
+        vault.rebase(LP_PRICE);
         
         uint256 balanceAfterFirst = vault.balanceOf(user1);
         assertGt(balanceAfterFirst, initialBalance);
         
-        // Second rebase
-        vm.warp(block.timestamp + 30 days);
+        // Second rebase (wait for minRebaseInterval = 30 seconds)
+        vm.warp(block.timestamp + 31); // Add 31 seconds to current time
         vm.prank(keeper);
         vault.updateVaultValue(1000);
         vm.prank(keeper);
-        vault.rebase();
+        vault.rebase(LP_PRICE);
         
         uint256 balanceAfterSecond = vault.balanceOf(user1);
         assertGt(balanceAfterSecond, balanceAfterFirst);
@@ -538,7 +539,7 @@ contract UnifiedSeniorVaultTest is Test {
         vm.prank(keeper);
         vault.updateVaultValue(1000);
         vm.prank(keeper);
-        vault.rebase();
+        vault.rebase(LP_PRICE);
         
         uint256 sharesAfter = vault.sharesOf(user1);
         

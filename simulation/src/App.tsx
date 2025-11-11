@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { Dashboard } from './components/Dashboard';
 import { BotCard } from './components/BotCard';
 import { TransactionFeed } from './components/TransactionFeed';
+import { HistoricalCharts } from './components/HistoricalCharts';
 import type { Bot, Transaction } from './types';
 import './App.css';
 
@@ -69,6 +70,9 @@ function App() {
 
       {/* Dashboard */}
       <Dashboard />
+
+      {/* Historical Charts */}
+      <HistoricalCharts />
 
       {/* Bot Simulation Section */}
       <div className="simulation-section">

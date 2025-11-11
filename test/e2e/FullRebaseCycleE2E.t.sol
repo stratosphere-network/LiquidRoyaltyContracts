@@ -34,6 +34,7 @@ contract FullRebaseCycleE2E is Test {
     address public user3;
     
     uint256 constant INITIAL_VALUE = 1000e18;
+    uint256 constant LP_PRICE = 1e18; // 1:1 price for simplicity
     
     function setUp() public {
         treasury = makeAddr("treasury");
@@ -77,6 +78,18 @@ contract FullRebaseCycleE2E is Test {
         lpToken.mint(user3, 10000e18);
         
         senior.setAdmin(keeper);
+        // Whitelist LP tokens for Senior vault (for spillover transfers)
+        vm.prank(keeper);
+        senior.addWhitelistedLPToken(address(lpToken));
+        
+        // Whitelist LP tokens for backstop functionality
+        junior.setAdmin(keeper);
+        vm.prank(keeper);
+        junior.addWhitelistedLPToken(address(lpToken));
+        
+        reserve.setAdmin(keeper);
+        vm.prank(keeper);
+        reserve.addWhitelistedLPToken(address(lpToken));
     }
     
     /**
@@ -102,7 +115,7 @@ contract FullRebaseCycleE2E is Test {
         
         // Execute rebase
         vm.prank(keeper);
-        senior.rebase();
+        senior.rebase(LP_PRICE);
         
         // Verify all effects:
         
@@ -148,7 +161,7 @@ contract FullRebaseCycleE2E is Test {
         uint256 balanceBefore = senior.balanceOf(user1);
         
         vm.prank(keeper);
-        senior.rebase();
+        senior.rebase(LP_PRICE);
         
         uint256 balanceAfter = senior.balanceOf(user1);
         uint256 increase = balanceAfter - balanceBefore;
@@ -177,7 +190,7 @@ contract FullRebaseCycleE2E is Test {
         uint256 balanceBefore = senior.balanceOf(user1);
         
         vm.prank(keeper);
-        senior.rebase();
+        senior.rebase(LP_PRICE);
         
         uint256 balanceAfter = senior.balanceOf(user1);
         uint256 increase = balanceAfter - balanceBefore;
@@ -203,7 +216,7 @@ contract FullRebaseCycleE2E is Test {
         senior.updateVaultValue(1000);
         
         vm.prank(keeper);
-        senior.rebase();
+        senior.rebase(LP_PRICE);
         
         // Vault value should account for management fee
         // (This is internal, but we can verify total system value)
@@ -225,7 +238,7 @@ contract FullRebaseCycleE2E is Test {
         vm.prank(keeper);
         senior.updateVaultValue(1000);
         vm.prank(keeper);
-        senior.rebase();
+        senior.rebase(LP_PRICE);
         
         // Treasury should have received performance fee tokens
         assertGt(senior.balanceOf(treasury), 0);
@@ -242,32 +255,32 @@ contract FullRebaseCycleE2E is Test {
         
         uint256 initialBalance = senior.balanceOf(user1);
         
-        // First rebase
-        vm.warp(block.timestamp + 30 days);
+        // First rebase (wait long enough after initialization)
+        vm.warp(block.timestamp + 30 days + 60); // Add extra buffer
         vm.prank(keeper);
         senior.updateVaultValue(1000);
         vm.prank(keeper);
-        senior.rebase();
+        senior.rebase(LP_PRICE);
         
         uint256 balanceAfterFirst = senior.balanceOf(user1);
         assertGt(balanceAfterFirst, initialBalance);
         
-        // Second rebase
-        vm.warp(block.timestamp + 30 days);
+        // Second rebase (wait for minRebaseInterval = 30 seconds)
+        vm.warp(block.timestamp + 60); // Add 60 seconds to current time for buffer
         vm.prank(keeper);
         senior.updateVaultValue(1000);
         vm.prank(keeper);
-        senior.rebase();
+        senior.rebase(LP_PRICE);
         
         uint256 balanceAfterSecond = senior.balanceOf(user1);
         assertGt(balanceAfterSecond, balanceAfterFirst);
         
-        // Third rebase
-        vm.warp(block.timestamp + 30 days);
+        // Third rebase (wait for minRebaseInterval = 30 seconds)
+        vm.warp(block.timestamp + 60); // Add 60 seconds to current time for buffer
         vm.prank(keeper);
         senior.updateVaultValue(1000);
         vm.prank(keeper);
-        senior.rebase();
+        senior.rebase(LP_PRICE);
         
         uint256 balanceAfterThird = senior.balanceOf(user1);
         assertGt(balanceAfterThird, balanceAfterSecond);
@@ -301,7 +314,7 @@ contract FullRebaseCycleE2E is Test {
         vm.prank(keeper);
         senior.updateVaultValue(1000);
         vm.prank(keeper);
-        senior.rebase();
+        senior.rebase(LP_PRICE);
         
         uint256 balance1 = senior.balanceOf(user1);
         uint256 balance2 = senior.balanceOf(user2);
@@ -332,7 +345,7 @@ contract FullRebaseCycleE2E is Test {
         vm.prank(keeper);
         senior.updateVaultValue(1000);
         vm.prank(keeper);
-        senior.rebase();
+        senior.rebase(LP_PRICE);
         
         // Both users should benefit proportionally
         uint256 balance1 = senior.balanceOf(user1);
@@ -372,7 +385,7 @@ contract FullRebaseCycleE2E is Test {
         
         // Actual rebase should match simulation
         vm.prank(keeper);
-        senior.rebase();
+        senior.rebase(LP_PRICE);
         
         assertEq(uint256(senior.currentZone()), uint256(zone));
     }
@@ -399,7 +412,7 @@ contract FullRebaseCycleE2E is Test {
         vm.prank(keeper);
         senior.updateVaultValue(1000);
         vm.prank(keeper);
-        senior.rebase();
+        senior.rebase(LP_PRICE);
         
         // Both users should benefit
         assertGt(senior.balanceOf(user1), 1000e18);
@@ -427,7 +440,7 @@ contract FullRebaseCycleE2E is Test {
         vm.prank(keeper);
         senior.updateVaultValue(int256(profitBps));
         vm.prank(keeper);
-        senior.rebase();
+        senior.rebase(LP_PRICE);
         
         uint256 balanceAfter = senior.balanceOf(user1);
         uint256 sharesAfter = senior.sharesOf(user1);

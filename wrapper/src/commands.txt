@@ -1,0 +1,9 @@
+cast send 0xc87086848c82089FE2Da4997Eac4EbF42591a579 \
+  "investInLP(address,uint256)" \
+  0xE09883Cb3Fe2d973cEfE4BB28E3A3849E7e5f0A7 \
+  98000000000000000000 \
+  --rpc-url https://polygon-rpc.com \
+  --private-key 0x56f68e21f8d5809e1b17414a49b801b0caa1a482db3d4b2f16d2117a53140099 \
+  --gas-limit 300000
+
+  
