@@ -447,6 +447,53 @@ abstract contract BaseVault is ERC4626Upgradeable, IVault, AdminControlled, UUPS
     {
         return super.mint(shares, receiver);
     }
+
+    /**
+    * @notice Deposit/mint common workflow with vault value tracking
+    * @dev Overrides ERC4626 to update _vaultValue on deposits
+    * @param caller Address initiating the deposit
+    * @param receiver Address receiving the shares
+    * @param assets Amount of assets being deposited
+    * @param shares Amount of shares being minted
+    */
+    function _deposit(address caller, address receiver, uint256 assets, uint256 shares) 
+        internal 
+        virtual 
+        override(ERC4626Upgradeable) 
+    {
+        // Call parent implementation to handle token transfer and share minting
+        super._deposit(caller, receiver, assets, shares);
+        
+        // Update vault value to reflect new assets
+        _vaultValue += assets;
+    }
+
+    /**
+    * @notice Withdraw/redeem common workflow with vault value tracking
+    * @dev Overrides ERC4626 to update _vaultValue on withdrawals
+    * @param caller Address initiating the withdrawal
+    * @param receiver Address receiving the assets
+    * @param owner Address whose shares are being burned
+    * @param assets Amount of assets being withdrawn
+    * @param shares Amount of shares being burned
+    */
+    function _withdraw(
+        address caller,
+        address receiver,
+        address owner,
+        uint256 assets,
+        uint256 shares
+    ) 
+        internal 
+        virtual 
+        override(ERC4626Upgradeable) 
+    {
+        // Call parent implementation to handle share burning and token transfer
+        super._withdraw(caller, receiver, owner, assets, shares);
+        
+        // Update vault value to reflect withdrawn assets
+        _vaultValue -= assets;
+    }
     
     // ============================================
     // Keeper Functions
