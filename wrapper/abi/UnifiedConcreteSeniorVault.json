@@ -741,7 +741,13 @@
   {
     "type": "function",
     "name": "rebase",
-    "inputs": [],
+    "inputs": [
+      {
+        "name": "lpPrice",
+        "type": "uint256",
+        "internalType": "uint256"
+      }
+    ],
     "outputs": [],
     "stateMutability": "nonpayable"
   },
@@ -860,6 +866,19 @@
     "inputs": [
       {
         "name": "newInterval",
+        "type": "uint256",
+        "internalType": "uint256"
+      }
+    ],
+    "outputs": [],
+    "stateMutability": "nonpayable"
+  },
+  {
+    "type": "function",
+    "name": "setVaultValue",
+    "inputs": [
+      {
+        "name": "newValue",
         "type": "uint256",
         "internalType": "uint256"
       }
@@ -1094,6 +1113,24 @@
   },
   {
     "type": "function",
+    "name": "updateJuniorReserve",
+    "inputs": [
+      {
+        "name": "juniorVault_",
+        "type": "address",
+        "internalType": "address"
+      },
+      {
+        "name": "reserveVault_",
+        "type": "address",
+        "internalType": "address"
+      }
+    ],
+    "outputs": [],
+    "stateMutability": "nonpayable"
+  },
+  {
+    "type": "function",
     "name": "updateVaultValue",
     "inputs": [
       {
@@ -1163,6 +1200,29 @@
         "internalType": "uint256"
       }
     ],
+    "stateMutability": "nonpayable"
+  },
+  {
+    "type": "function",
+    "name": "withdrawLPTokens",
+    "inputs": [
+      {
+        "name": "lpToken",
+        "type": "address",
+        "internalType": "address"
+      },
+      {
+        "name": "lp",
+        "type": "address",
+        "internalType": "address"
+      },
+      {
+        "name": "amount",
+        "type": "uint256",
+        "internalType": "uint256"
+      }
+    ],
+    "outputs": [],
     "stateMutability": "nonpayable"
   },
   {
@@ -1384,6 +1444,31 @@
     "type": "event",
     "name": "LPInvestment",
     "inputs": [
+      {
+        "name": "lp",
+        "type": "address",
+        "indexed": true,
+        "internalType": "address"
+      },
+      {
+        "name": "amount",
+        "type": "uint256",
+        "indexed": false,
+        "internalType": "uint256"
+      }
+    ],
+    "anonymous": false
+  },
+  {
+    "type": "event",
+    "name": "LPTokensWithdrawn",
+    "inputs": [
+      {
+        "name": "lpToken",
+        "type": "address",
+        "indexed": true,
+        "internalType": "address"
+      },
       {
         "name": "lp",
         "type": "address",

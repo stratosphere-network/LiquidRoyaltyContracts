@@ -360,6 +360,102 @@ POST /deposit-to-vault
 }
 ```
 
+### 1.5. Vault Value Synchronization ⚠️
+
+**CRITICAL**: Vault values must be up-to-date before user deposits/withdrawals.
+
+#### Why This Matters
+
+The ERC4626 standard calculates shares based on the vault's reported `totalAssets()`:
+
+```solidity
+// Share calculation in ERC4626
+shares = depositAmount × totalSupply / totalAssets()
+
+// In our implementation
+function totalAssets() public view returns (uint256) {
+    return _vaultValue;  // Uses internal accounting, NOT actual token balance
+}
+```
+
+#### The Problem
+
+If `_vaultValue` is **out of sync** with actual holdings:
+
+| Scenario | Impact | Example |
+|----------|--------|---------|
+| `_vaultValue` too low | Users get MORE shares than deserved | Vault has $1M actual, but `_vaultValue = $500K` → User deposits $100 and gets 2x the shares |
+| `_vaultValue` too high | Users get FEWER shares (or **zero shares!**) | Vault has $0 actual, but `_vaultValue = $1M` → User deposits $100 and gets 0 shares |
+
+**Real Bug We Fixed**:
+```solidity
+// Initial test setup had this problem:
+_vaultValue = 1000e18  // Set via initialize
+actual LP tokens = 0    // No tokens yet!
+
+// When user deposits 100 tokens:
+shares = 100 × 0 / 1000 = 0 shares  ❌ USER GETS NOTHING!
+```
+
+#### The Solution
+
+**Keeper bot updates vault values regularly**:
+
+```typescript
+// Keeper bot runs every hour
+async function keeperBot() {
+    // 1. Calculate current USD value of all LP positions
+    const seniorLPBalance = await lpToken.balanceOf(seniorVault);
+    const lpPrice = await getLPTokenPrice(); // From Uniswap
+    const seniorValueUSD = seniorLPBalance × lpPrice;
+    
+    // 2. Update on-chain vault value
+    await seniorVault.setVaultValue(seniorValueUSD);
+    
+    // 3. Repeat for Junior and Reserve vaults
+}
+```
+
+**When to Update**:
+- ✅ Every 1-4 hours (regular sync)
+- ✅ Before monthly rebase (critical!)
+- ✅ After large LP position changes
+- ✅ When backing ratio deviates > 1%
+
+**Test Strategy** (See `test/unit/concrete/ConcreteJuniorVault.t.sol`):
+```solidity
+// Helper function for tests that need backstop/spillover
+function _initializeVaultWithValue() internal {
+    vm.prank(keeper);
+    vault.setVaultValue(INITIAL_VALUE);  // Sync vault value
+    lpToken.mint(address(vault), INITIAL_VALUE);  // Actual tokens
+    vault.addWhitelistedLPToken(address(lpToken));  // Enable transfers
+}
+
+// Tests start with _vaultValue = 0 to mimic fresh vault
+// Then explicitly set value before operations that need it
+```
+
+**Production Best Practice**:
+```solidity
+// Add staleness protection
+modifier notStale() {
+    require(
+        block.timestamp - lastVaultValueUpdate < 24 hours,
+        "Vault value stale - deposits/withdrawals paused"
+    );
+    _;
+}
+
+function deposit(uint256 assets) public notStale returns (uint256) {
+    // ... deposit logic
+}
+```
+
+**See Also**:
+- Section 3: "Rebase Flow" (lines 392-491) - Updates all vault values before rebase
+- Section 6: "Real-World Solutions" - Keeper bot architecture
+
 ### 2. Vault Investment Flow (Admin Only)
 
 **Vault invests in LP → Earns yield**
