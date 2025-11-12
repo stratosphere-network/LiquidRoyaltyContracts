@@ -5,10 +5,13 @@ import {ERC4626Upgradeable} from "@openzeppelin/contracts-upgradeable/token/ERC2
 import {ERC20Upgradeable} from "@openzeppelin/contracts-upgradeable/token/ERC20/ERC20Upgradeable.sol";
 import {ERC20BurnableUpgradeable} from "@openzeppelin/contracts-upgradeable/token/ERC20/extensions/ERC20BurnableUpgradeable.sol";
 import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
+import {SafeERC20} from "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
 import {UUPSUpgradeable} from "@openzeppelin/contracts-upgradeable/proxy/utils/UUPSUpgradeable.sol";
 import {IVault} from "../interfaces/IVault.sol";
 import {MathLib} from "../libraries/MathLib.sol";
+import {LPPriceOracle} from "../libraries/LPPriceOracle.sol";
 import {AdminControlled} from "./AdminControlled.sol";
+import {IKodiakVaultHook} from "../integrations/IKodiakVaultHook.sol";
 
 /**
  * @title BaseVault
@@ -22,6 +25,7 @@ import {AdminControlled} from "./AdminControlled.sol";
  */
 abstract contract BaseVault is ERC4626Upgradeable, IVault, AdminControlled, UUPSUpgradeable {
     using MathLib for uint256;
+    using SafeERC20 for IERC20;
     
     /// @dev Struct for LP holdings data
     struct LPHolding {
@@ -51,6 +55,16 @@ abstract contract BaseVault is ERC4626Upgradeable, IVault, AdminControlled, UUPS
     /// @dev Whitelisted depositors
     mapping(address => bool) internal _whitelistedDepositors;
     
+    /// @dev Kodiak integration
+    IKodiakVaultHook public kodiakHook;
+    
+    /// @dev Oracle configuration for vault value validation
+    address internal _oracleIsland;              // Kodiak Island address for price calculation
+    bool internal _stablecoinIsToken0;           // True if token0 is the stablecoin
+    uint256 internal _maxDeviationBps;           // Max allowed deviation (basis points, e.g., 500 = 5%)
+    bool internal _oracleEnabled;                // Enable/disable oracle checks
+    bool internal _useCalculatedValue;           // If true, use on-chain calculated value; if false, use admin-updated value
+    
     /// @dev Constants
     int256 internal constant MIN_PROFIT_BPS = -5000;  // -50% minimum
     int256 internal constant MAX_PROFIT_BPS = 10000;  // +100% maximum
@@ -64,6 +78,9 @@ abstract contract BaseVault is ERC4626Upgradeable, IVault, AdminControlled, UUPS
     event WhitelistedLPTokenRemoved(address indexed lpToken);
     event LPInvestment(address indexed lp, uint256 amount);
     event LPTokensWithdrawn(address indexed lpToken, address indexed lp, uint256 amount);
+    event KodiakDeployment(uint256 amount, uint256 lpReceived, uint256 timestamp);
+    event OracleConfigured(address indexed island, bool stablecoinIsToken0, uint256 maxDeviationBps, bool enabled);
+    event VaultValueValidated(uint256 providedValue, uint256 calculatedValue, uint256 deviationBps);
     
     /// @dev Errors (ZeroAddress inherited from AdminControlled)
     error InvalidProfitRange();
@@ -72,6 +89,10 @@ abstract contract BaseVault is ERC4626Upgradeable, IVault, AdminControlled, UUPS
     error OnlyWhitelistedDepositor();
     error WhitelistedLPNotFound();
     error LPAlreadyWhitelisted();
+    error KodiakHookNotSet();
+    error SlippageTooHigh();
+    error WrongVault();
+    error VaultValueDeviationTooHigh(uint256 provided, uint256 calculated, uint256 deviationBps);
     
     /// @dev Modifiers
     modifier onlySeniorVault() {
@@ -305,6 +326,153 @@ abstract contract BaseVault is ERC4626Upgradeable, IVault, AdminControlled, UUPS
         
         emit LPTokensWithdrawn(lpToken, lp, withdrawAmount);
     }
+    
+    // ============================================
+    // Kodiak Integration
+    // ============================================
+    
+    /**
+     * @notice Set Kodiak hook address
+     * @dev Automatically whitelists the hook as an LP protocol
+     * @param hook Address of KodiakVaultHook contract
+     */
+    function setKodiakHook(address hook) external onlyAdmin {
+        // Remove old hook from whitelist if exists
+        if (address(kodiakHook) != address(0)) {
+            _stablecoin.forceApprove(address(kodiakHook), 0);
+            
+            // Remove from whitelist
+            if (_isWhitelistedLP[address(kodiakHook)]) {
+                _removeWhitelistedLPInternal(address(kodiakHook));
+            }
+        }
+        
+        // Validate new hook
+        if (hook != address(0)) {
+            (bool ok, bytes memory data) = hook.staticcall(abi.encodeWithSignature("vault()"));
+            if (!(ok && data.length >= 32 && abi.decode(data, (address)) == address(this))) revert WrongVault();
+            
+            // Automatically whitelist the new hook so investInLP() can send funds to it
+            if (!_isWhitelistedLP[hook]) {
+                _whitelistedLPs.push(hook);
+                _isWhitelistedLP[hook] = true;
+                emit WhitelistedLPAdded(hook);
+            }
+        }
+        
+        kodiakHook = IKodiakVaultHook(hook);
+    }
+    
+    /**
+     * @notice Deploy funds to Kodiak with verified swap parameters
+     * @dev Admin-only, secure deployment with slippage protection
+     * @param amount Amount of stablecoins to deploy
+     * @param minLPTokens Minimum LP tokens to receive (slippage protection)
+     * @param swapToToken0Aggregator DEX aggregator for token0 swap
+     * @param swapToToken0Data Swap calldata for token0
+     * @param swapToToken1Aggregator DEX aggregator for token1 swap
+     * @param swapToToken1Data Swap calldata for token1
+     */
+    function deployToKodiak(
+        uint256 amount,
+        uint256 minLPTokens,
+        address swapToToken0Aggregator,
+        bytes calldata swapToToken0Data,
+        address swapToToken1Aggregator,
+        bytes calldata swapToToken1Data
+    ) external onlyAdmin {
+        if (amount == 0) revert InvalidAmount();
+        if (address(kodiakHook) == address(0)) revert KodiakHookNotSet();
+        
+        // Check vault has enough idle stablecoin
+        uint256 vaultBalance = _stablecoin.balanceOf(address(this));
+        if (vaultBalance < amount) revert InsufficientBalance();
+        
+        // Record LP balance before deployment
+        uint256 lpBefore = kodiakHook.getIslandLPBalance();
+        
+        // Transfer stablecoins to hook
+        _stablecoin.safeTransfer(address(kodiakHook), amount);
+        
+        // Deploy to Kodiak with verified swap params
+        kodiakHook.onAfterDepositWithSwaps(
+            amount,
+            swapToToken0Aggregator,
+            swapToToken0Data,
+            swapToToken1Aggregator,
+            swapToToken1Data
+        );
+        
+        // Verify slippage protection
+        uint256 lpAfter = kodiakHook.getIslandLPBalance();
+        uint256 lpReceived = lpAfter - lpBefore;
+        if (lpReceived < minLPTokens) revert SlippageTooHigh();
+        
+        emit KodiakDeployment(amount, lpReceived, block.timestamp);
+    }
+    
+    /**
+     * @notice Deploy all idle stablecoins to Kodiak (sweep dust)
+     * @dev Convenience function to deploy entire vault balance without specifying amount
+     * @param minLPTokens Minimum LP tokens to receive (slippage protection)
+     * @param swapToToken0Aggregator DEX aggregator for token0 swap
+     * @param swapToToken0Data Swap calldata for token0
+     * @param swapToToken1Aggregator DEX aggregator for token1 swap
+     * @param swapToToken1Data Swap calldata for token1
+     */
+    function sweepToKodiak(
+        uint256 minLPTokens,
+        address swapToToken0Aggregator,
+        bytes calldata swapToToken0Data,
+        address swapToToken1Aggregator,
+        bytes calldata swapToToken1Data
+    ) external onlyAdmin {
+        if (address(kodiakHook) == address(0)) revert KodiakHookNotSet();
+        
+        // Get all idle stablecoin balance
+        uint256 idle = _stablecoin.balanceOf(address(this));
+        if (idle == 0) revert InvalidAmount();
+        
+        // Deploy all idle funds
+        uint256 lpBefore = kodiakHook.getIslandLPBalance();
+        
+        // Transfer all idle stablecoins to hook
+        _stablecoin.safeTransfer(address(kodiakHook), idle);
+        
+        // Deploy to Kodiak with verified swap params
+        kodiakHook.onAfterDepositWithSwaps(
+            idle,
+            swapToToken0Aggregator,
+            swapToToken0Data,
+            swapToToken1Aggregator,
+            swapToToken1Data
+        );
+        
+        // Verify slippage protection
+        uint256 lpAfter = kodiakHook.getIslandLPBalance();
+        uint256 lpReceived = lpAfter - lpBefore;
+        if (lpReceived < minLPTokens) revert SlippageTooHigh();
+        
+        emit KodiakDeployment(idle, lpReceived, block.timestamp);
+    }
+    
+    /**
+     * @notice Internal helper to remove whitelisted LP
+     * @dev Uses swap-and-pop for gas efficiency
+     */
+    function _removeWhitelistedLPInternal(address lp) internal {
+        // Find and remove from array using swap-and-pop
+        for (uint256 i = 0; i < _whitelistedLPs.length; i++) {
+            if (_whitelistedLPs[i] == lp) {
+                _whitelistedLPs[i] = _whitelistedLPs[_whitelistedLPs.length - 1];
+                _whitelistedLPs.pop();
+                break;
+            }
+        }
+        
+        // Remove from mapping
+        _isWhitelistedLP[lp] = false;
+    }
 
     /**
      * @notice Set Senior vault address (fixes circular dependency)
@@ -362,14 +530,144 @@ abstract contract BaseVault is ERC4626Upgradeable, IVault, AdminControlled, UUPS
     }
     
     // ============================================
+    // Oracle Configuration
+    // ============================================
+    
+    /**
+     * @notice Configure on-chain oracle for vault value validation
+     * @dev Sets up parameters for automatic vault value validation using pool ratio
+     * @param island Kodiak Island address for price calculation
+     * @param stablecoinIsToken0 True if token0 is the stablecoin, false if token1
+     * @param maxDeviationBps Maximum allowed deviation in basis points (e.g., 500 = 5%)
+     * @param enableValidation Enable or disable oracle validation checks
+     * @param useCalculatedValue If true, vaultValue() returns calculated value; if false, returns admin-updated value
+     */
+    function configureOracle(
+        address island,
+        bool stablecoinIsToken0,
+        uint256 maxDeviationBps,
+        bool enableValidation,
+        bool useCalculatedValue
+    ) external onlyAdmin {
+        require(maxDeviationBps <= 10000, "Max deviation > 100%");
+        
+        _oracleIsland = island;
+        _stablecoinIsToken0 = stablecoinIsToken0;
+        _maxDeviationBps = maxDeviationBps;
+        _oracleEnabled = enableValidation;
+        _useCalculatedValue = useCalculatedValue;
+        
+        emit OracleConfigured(island, stablecoinIsToken0, maxDeviationBps, enableValidation);
+    }
+    
+    /**
+     * @notice Get on-chain calculated vault value (for comparison/debugging)
+     * @dev Public view function to see what the oracle calculates
+     * @return calculatedValue Vault value calculated from on-chain data (18 decimals)
+     */
+    function getCalculatedVaultValue() external view returns (uint256) {
+        return LPPriceOracle.calculateTotalVaultValue(
+            address(kodiakHook),
+            _oracleIsland,
+            _stablecoinIsToken0,
+            address(this),
+            address(_stablecoin)
+        );
+    }
+    
+    /**
+     * @notice Get oracle configuration
+     * @return island Kodiak Island address
+     * @return stablecoinIsToken0 True if token0 is stablecoin
+     * @return maxDeviationBps Max allowed deviation
+     * @return validationEnabled Oracle validation enabled status
+     * @return useCalculatedValue Whether vaultValue() returns calculated or stored value
+     */
+    function getOracleConfig() external view returns (
+        address island,
+        bool stablecoinIsToken0,
+        uint256 maxDeviationBps,
+        bool validationEnabled,
+        bool useCalculatedValue
+    ) {
+        return (_oracleIsland, _stablecoinIsToken0, _maxDeviationBps, _oracleEnabled, _useCalculatedValue);
+    }
+    
+    /**
+     * @notice Get stored vault value (always returns admin-updated value)
+     * @dev Use this to see the stored value regardless of useCalculatedValue flag
+     * @return storedValue The vault value stored by admin
+     */
+    function getStoredVaultValue() external view returns (uint256) {
+        return _vaultValue;
+    }
+    
+    /**
+     * @notice Validate vault value against on-chain oracle calculation
+     * @dev Internal function to check deviation between provided and calculated values
+     * @param providedValue The vault value being set by admin
+     */
+    function _validateVaultValue(uint256 providedValue) internal {
+        // Skip validation if oracle not enabled or not configured
+        if (!_oracleEnabled || _oracleIsland == address(0) || address(kodiakHook) == address(0)) {
+            return;
+        }
+        
+        // Calculate on-chain vault value
+        uint256 calculatedValue = LPPriceOracle.calculateTotalVaultValue(
+            address(kodiakHook),
+            _oracleIsland,
+            _stablecoinIsToken0,
+            address(this),
+            address(_stablecoin)
+        );
+        
+        // Allow if calculated value is 0 (no LP deployed yet)
+        if (calculatedValue == 0) {
+            return;
+        }
+        
+        // Calculate deviation in basis points
+        uint256 diff = providedValue > calculatedValue 
+            ? providedValue - calculatedValue 
+            : calculatedValue - providedValue;
+        
+        uint256 deviationBps = (diff * 10000) / calculatedValue;
+        
+        // Emit validation event
+        emit VaultValueValidated(providedValue, calculatedValue, deviationBps);
+        
+        // Revert if deviation exceeds max allowed
+        if (deviationBps > _maxDeviationBps) {
+            revert VaultValueDeviationTooHigh(providedValue, calculatedValue, deviationBps);
+        }
+    }
+    
+    // ============================================
     // IVault Interface Implementation
     // ============================================
     
     /**
      * @notice Get current vault value
-     * @dev Reference: State Variables (V_s, V_j, V_r)
+     * @dev Returns either calculated value (from oracle) or stored value (from admin) based on flag
+     * @return value Current vault value in USD (18 decimals)
      */
-    function vaultValue() public view virtual returns (uint256) {
+    function vaultValue() public view virtual returns (uint256 value) {
+        // If flag enabled and oracle configured, return calculated value
+        if (_useCalculatedValue && _oracleIsland != address(0) && address(kodiakHook) != address(0)) {
+            uint256 calculatedValue = LPPriceOracle.calculateTotalVaultValue(
+                address(kodiakHook),
+                _oracleIsland,
+                _stablecoinIsToken0,
+                address(this),
+                address(_stablecoin)
+            );
+            
+            // Fallback to stored value if calculated is 0
+            return calculatedValue > 0 ? calculatedValue : _vaultValue;
+        }
+        
+        // Otherwise return stored value (admin-updated)
         return _vaultValue;
     }
     
@@ -483,6 +781,9 @@ abstract contract BaseVault is ERC4626Upgradeable, IVault, AdminControlled, UUPS
      */
     function setVaultValue(uint256 newValue) public virtual onlyAdmin {
         // Allow 0 to enable truly empty vault state for first deposit
+        
+        // Validate against oracle if configured
+        _validateVaultValue(newValue);
         
         uint256 oldValue = _vaultValue;
         _vaultValue = newValue;
