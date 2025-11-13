@@ -17,3 +17,7 @@ interface IKodiakIsland is IERC20 {
     function burn(uint256 burnAmount, address receiver) external returns (uint256 amount0, uint256 amount1);
 }
 
+
+
+
+
