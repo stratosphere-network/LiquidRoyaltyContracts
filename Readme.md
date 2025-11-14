@@ -1,2089 +1,1120 @@
-# Liquid Royalty Protocol - Developer Guide
 
-> **A three-vault structured investment protocol with dynamic rebase mechanics and two-way profit/loss sharing**
 
-## 🆕 Version 3.0 - On-Chain Oracle & Kodiak Integration
-
-**New Features**:
-- ✅ **Pure On-Chain Oracle**: Calculate LP prices without Chainlink (stablecoin pools)
-- ✅ **Single Flag System**: `_useCalculatedValue` controls entire system trustlessness
-- ✅ **Kodiak Islands**: Single-sided liquidity + auto-compounding on Berachain
-- ✅ **Validation System**: Prevent admin manipulation with on-chain checks
-- ✅ **Hook Pattern**: Modular DeFi integration (easy to swap protocols)
-
-**All three vaults** (Senior, Junior, Reserve) now support:
-- Automatic vault value calculation
-- Automatic LP price calculation (Senior only for rebase)
-- Kodiak deployment with slippage protection
-- Sweep idle stablecoin dust to earning positions
-
-**Read More**: See [On-Chain Oracle & Kodiak Integration](#on-chain-oracle--kodiak-integration)
+> **Comprehensive guide to understanding the smart contract system, operational flows, and implementation details**
 
 ---
 
-## Table of Contents
+## 📑 Table of Contents
 
 1. [System Overview](#system-overview)
-2. [Architecture & Contracts](#architecture--contracts)
-3. [Mathematical Specification](#mathematical-specification)
-4. [Contract Deployments](#contract-deployments)
-5. [Key Flows & Patterns](#key-flows--patterns)
-6. [API Reference](#api-reference)
-7. [Frontend Integration](#frontend-integration)
-8. [Development Workflow](#development-workflow)
-9. [Testing](#testing)
-10. [Deployment & Upgrades](#deployment--upgrades)
-11. [Common Operations](#common-operations)
-12. [Troubleshooting](#troubleshooting)
+2. [Architecture Diagram](#architecture-diagram)
+3. [Contract Hierarchy](#contract-hierarchy)
+4. [Core Contracts](#core-contracts)
+5. [Operational Flows](#operational-flows)
+   - [Deposit Flow](#deposit-flow)
+   - [Withdrawal Flow](#withdrawal-flow)
+   - [Rebase Flow](#rebase-flow)
+   - [Kodiak LP Management](#kodiak-lp-management)
+   - [Spillover & Backstop](#spillover--backstop)
+6. [Technical Specifications](#technical-specifications)
+7. [Security Features](#security-features)
 
 ---
 
 ## System Overview
 
-### What is Liquid Royalty Protocol?
-
-A three-vault structured investment system where:
-- **Senior Vault (snrUSD)**: Stable, rebase token with 11-13% APY, pegged to $1
-- **Junior Vault (jnrUSD)**: Higher risk/reward, receives 80% of Senior profits, provides backstop
-- **Reserve Vault (resUSD)**: Primary backstop, receives 20% of Senior profits, emergency support
-
-### Core Mechanics
-
-**1. Dynamic Rebase (Monthly)**
-- Senior vault rebases every 30 days
-- APY dynamically selected: 13% → 12% → 11% (waterfall)
-- System tries highest APY that maintains ≥100% backing
-- Users' balances increase automatically via rebase index
-
-**2. Three Operating Zones**
-
-| Zone | Backing Ratio | Action | Frequency |
-|------|--------------|--------|-----------|
-| **Zone 1** | > 110% | Profit spillover to Junior (80%) & Reserve (20%) | When strategy performs very well |
-| **Zone 2** | 100-110% | **No action** - Healthy buffer | **Most common (normal operation)** |
-| **Zone 3** | < 100% | Backstop: Reserve → Junior → Senior (restore to 100.9%) | Rare (strategy underperforms) |
-
-**3. Two-Way Value Flow**
-
-```
-          ┌─────────────────────────────────────┐
-          │                                     │
-          │         SENIOR VAULT                │
-          │      (snrUSD, 11-13% APY)          │
-          │                                     │
-          └──────────┬──────────────┬───────────┘
-                     │              │
-         Profit      │              │      Backstop
-         (>110%)     │              │      (<100%)
-                     ▼              ▼
-          ┌──────────────┐   ┌──────────────┐
-          │   JUNIOR     │   │   RESERVE    │
-          │   (80%)      │   │   (20%)      │
-          │  jnrUSD      │   │   resUSD     │
-          └──────────────┘   └──────────────┘
-               ▲                    ▲
-               │                    │
-               └────────────────────┘
-                  Backstop Flow
-              (Reserve first, no cap!)
-             (Junior second, no cap!)
-```
-
----
-
-## Architecture & Contracts
-
-### Contract Structure
-
-```
-src/
-├── abstract/              # Base implementations
-│   ├── BaseVault.sol         # ERC4626 + Rebase logic
-│   ├── AdminControlled.sol   # Access control
-│   ├── UnifiedSeniorVault.sol # Senior logic with LP transfers
-│   ├── JuniorVault.sol        # Junior logic with LP transfers
-│   └── ReserveVault.sol       # Reserve logic with LP transfers
-│
-├── concrete/              # Deployed implementations
-│   ├── UnifiedConcreteSeniorVault.sol
-│   ├── ConcreteJuniorVault.sol
-│   └── ConcreteReserveVault.sol
-│
-├── interfaces/           # Contract interfaces
-│   ├── IVault.sol
-│   ├── ISeniorVault.sol
-│   ├── IJuniorVault.sol
-│   └── IReserveVault.sol
-│
-└── libraries/            # Shared utilities
-    ├── MathLib.sol       # Fixed-point math
-    ├── RebaseLib.sol     # Rebase calculations
-    ├── FeeLib.sol        # Fee calculations
-    ├── SpilloverLib.sol  # Spillover logic
-    └── LPPriceOracle.sol # On-chain LP price calculation
-```
-
-### Key Design Patterns
-
-**1. Upgradeable Proxy Pattern (UUPS)**
-- Each vault uses ERC1967Proxy
-- Implementation contracts are upgradeable by admin
-- Allows bug fixes and feature additions without changing addresses
-
-**2. Rebase Token Pattern**
-- User shares remain constant
-- Rebase index increases each rebase
-- Balance = shares × rebase_index
-- Automatic balance growth (no claim needed)
-
-**3. Two-Way Spillover Pattern**
-- **Profit Spillover (Senior → Junior/Reserve)**: When backing > 110%
-- **Backstop (Reserve/Junior → Senior)**: When backing < 100%
-- Creates balanced risk/reward for all participants
-
-**4. LP Token Transfer Pattern (NEW)**
-- During spillover/backstop, LP tokens are transferred (not stablecoins)
-- Admin provides current LP price during rebase
-- Contracts calculate LP token amounts based on USD value needed
-
-**5. On-Chain Oracle System (NEW)**
-- Pure on-chain LP price calculation (no Chainlink needed for stablecoin pools)
-- Automatic vault value calculation from LP holdings
-- Single flag (`_useCalculatedValue`) controls entire system trustlessness
-- Admin validation with configurable deviation threshold
-
-**6. Kodiak Islands Integration (NEW)**
-- Single-sided liquidity provision for vaults
-- Secure `deployToKodiak()` function with slippage protection
-- `sweepToKodiak()` for deploying idle stablecoin dust
-- Hook pattern for modular DeFi integration
-
----
-
-## On-Chain Oracle & Kodiak Integration
-
-### Overview
-
-**Problem**: Traditional DeFi vaults rely on off-chain keepers to calculate LP prices and vault values, creating centralization risks and requiring trust in admin inputs.
-
-**Solution**: Our system implements a **pure on-chain oracle** that calculates LP prices directly from pool reserves, enabling fully trustless vault operations when working with stablecoin-paired pools.
-
-### Architecture
-
-```
-┌─────────────────────────────────────────────────────────────┐
-│                    VAULT OPERATIONS                         │
-│  (deposit, withdraw, rebase, spillover, backstop)           │
-└────────────────┬────────────────────────────────────────────┘
-                 │
-                 │ Uses _useCalculatedValue flag
-                 │
-         ┌───────┴────────┐
-         │                │
-    ┌────▼─────┐    ┌────▼──────┐
-    │ AUTOMATIC │    │  MANUAL   │
-    │   MODE    │    │   MODE    │
-    │ (flag=true)│   │(flag=false)│
-    └────┬─────┘    └────┬──────┘
-         │                │
-         │                │
-    ┌────▼────────────────▼──────┐
-    │   LPPriceOracle.sol        │
-    │  (Pure On-Chain Calc)      │
-    └────┬───────────────────────┘
-         │
-         │ Reads from
-         │
-    ┌────▼───────────────────────┐
-    │  Kodiak Island Contract    │
-    │  • token0                  │
-    │  • token1                  │
-    │  • getUnderlyingBalances() │
-    │  • totalSupply()           │
-    └────────────────────────────┘
-```
-
-### LPPriceOracle - On-Chain Price Calculation
-
-#### How It Works
-
-For **stablecoin-paired pools** (e.g., USDC-BERA), we can calculate the LP token price purely on-chain:
-
-**Formula**:
-```solidity
-// 1. Get pool reserves
-(uint256 stablecoinAmount, uint256 otherTokenAmount) = island.getUnderlyingBalances();
-
-// 2. Calculate other token's price using the stablecoin as reference
-//    Since stablecoin = $1, we can derive the other token's price:
-otherTokenPrice = stablecoinAmount / otherTokenAmount;
-
-// 3. Calculate total pool value in USD
-totalValue = stablecoinAmount + (otherTokenAmount × otherTokenPrice);
-
-// 4. Calculate LP token price
-lpPrice = totalValue / lpTotalSupply;
-```
-
-**Example**: Pool has 100K USDC + 10K BERA
-```
-BERA price = 100,000 / 10,000 = $10
-Total value = $100,000 + (10,000 × $10) = $200,000
-LP supply = 31,622.77 (geometric mean)
-LP price = $200,000 / 31,622.77 = $6.32 ✅
-```
-
-#### Why This Works
-
-1. **Stablecoin = $1**: USDC/USDT/USDE always = $1 USD (by design)
-2. **Pool Ratio**: The ratio of reserves automatically reflects market price
-3. **Arbitrage**: Keeps pool balanced via MEV bots
-4. **No Oracle Needed**: All data is already on-chain in the Island contract
-
-#### Implementation
-
-```solidity
-// src/libraries/LPPriceOracle.sol
-library LPPriceOracle {
-    /**
-     * @notice Calculate LP price from Kodiak Island reserves
-     * @param island Kodiak Island address
-     * @param stablecoinIsToken0 True if token0 is the stablecoin
-     * @return lpPrice LP token price in USD (18 decimals)
-     */
-    function calculateLPPrice(address island, bool stablecoinIsToken0) 
-        internal view returns (uint256 lpPrice) 
-    {
-        IKodiakIsland islandContract = IKodiakIsland(island);
-        
-        // Get reserves and LP supply
-        (uint256 amt0, uint256 amt1) = islandContract.getUnderlyingBalances();
-        uint256 totalLP = islandContract.totalSupply();
-        
-        // Normalize decimals to 18
-        uint256 amt0In18 = _normalize(amt0, token0.decimals());
-        uint256 amt1In18 = _normalize(amt1, token1.decimals());
-        
-        uint256 totalValue;
-        if (stablecoinIsToken0) {
-            // Calculate token1 price from pool ratio
-            uint256 token1Price = (amt0In18 * 1e18) / amt1In18;
-            uint256 token1Value = (amt1In18 * token1Price) / 1e18;
-            totalValue = amt0In18 + token1Value;
-        } else {
-            // Calculate token0 price from pool ratio
-            uint256 token0Price = (amt1In18 * 1e18) / amt0In18;
-            uint256 token0Value = (amt0In18 * token0Price) / 1e18;
-            totalValue = token0Value + amt1In18;
-        }
-        
-        // LP price = total value / total supply
-        lpPrice = (totalValue * 1e18) / totalLP;
-    }
-    
-    /**
-     * @notice Calculate total vault value from LP + idle stablecoin
-     * @return totalVaultValue Total vault value in USD (18 decimals)
-     */
-    function calculateTotalVaultValue(
-        address hookAddress,
-        address islandAddress,
-        bool stablecoinIsToken0,
-        address vaultAddress,
-        address stablecoinAddress
-    ) internal view returns (uint256 totalVaultValue) {
-        // 1. Value from LP holdings in hook
-        uint256 lpBalance = IKodiakVaultHook(hookAddress).getIslandLPBalance();
-        uint256 lpValue = 0;
-        if (lpBalance > 0) {
-            uint256 lpPrice = calculateLPPrice(islandAddress, stablecoinIsToken0);
-            lpValue = (lpBalance * lpPrice) / 1e18;
-        }
-        
-        // 2. Value from idle stablecoin in vault
-        uint256 idleBalance = IERC20(stablecoinAddress).balanceOf(vaultAddress);
-        uint256 idleValue = _normalize(idleBalance, stablecoin.decimals());
-        
-        totalVaultValue = lpValue + idleValue;
-    }
-}
-```
-
-### The Flag System
-
-#### What is `_useCalculatedValue`?
-
-A **single boolean flag** that controls whether the system operates in **trustless automatic mode** or **keeper-managed manual mode**.
-
-```solidity
-// State variable in all vaults
-bool internal _useCalculatedValue;  // true = automatic, false = manual
-```
-
-#### What It Controls
-
-| Feature | Flag = true (AUTOMATIC) | Flag = false (MANUAL) |
-|---------|------------------------|----------------------|
-| **Vault Value** (`vaultValue()`) | Calculated on-chain from LP holdings | Uses admin-set `_vaultValue` |
-| **LP Price** (`rebase()`) | Calculated on-chain from pool ratio | Admin must provide manually |
-| **Trust Model** | 100% trustless | Requires trusted admin/keeper |
-| **Gas Cost** | Slightly higher (calculations) | Slightly lower (reads storage) |
-| **Use Case** | Stablecoin-paired pools | Volatile pairs or complex strategies |
-
-#### Configuration
-
-```solidity
-// Configure oracle for automatic mode
-vault.configureOracle(
-    KODIAK_ISLAND_ADDRESS,  // Island contract
-    true,                   // stablecoinIsToken0 (USDC is token0)
-    500,                    // maxDeviationBps (5% max deviation)
-    true,                   // enableValidation (validate admin inputs)
-    true                    // 🔥 useCalculatedValue (THE FLAG!)
-);
-```
-
-**Parameters Explained**:
-- `island`: Kodiak Island contract address for the LP pool
-- `stablecoinIsToken0`: Which token in the pair is the stablecoin (determines calculation)
-- `maxDeviationBps`: Maximum allowed deviation when validating admin inputs (basis points, 500 = 5%)
-- `enableValidation`: Enable on-chain validation of admin-provided values
-- `useCalculatedValue`: **THE FLAG** - true for automatic, false for manual
-
-#### Usage Examples
-
-**Scenario 1: Fully Automatic (Recommended for Stablecoin Pools)**
-```solidity
-// Setup (one-time)
-vault.configureOracle(ISLAND, true, 500, true, true);
-
-// Daily operations
-vault.deposit(1000e6, user);  // ✅ Auto-calculates vault value
-vault.rebase();               // ✅ Auto-calculates LP price
-// NO keeper bot needed! 🎉
-```
-
-**Scenario 2: Manual with Validation (Hybrid)**
-```solidity
-// Setup
-vault.configureOracle(ISLAND, true, 500, true, false);  // flag = false
-
-// Keeper bot calculates off-chain
-uint256 offChainValue = keeper.calculateValue();
-vault.setVaultValue(offChainValue);  // ✅ Validated against on-chain calc (±5%)
-
-// Rebase with manual LP price
-uint256 lpPrice = keeper.getLPPrice();
-vault.rebase(lpPrice);
-```
-
-**Scenario 3: Query-Only (Best of Both Worlds)**
-```solidity
-// Check both values
-uint256 calculated = vault.getCalculatedVaultValue();
-uint256 stored = vault.getStoredVaultValue();
-uint256 lpPrice = vault.getCalculatedLPPrice();
-
-// Keeper decides based on deviation
-if (abs(calculated - stored) / calculated < 0.01) {
-    // <1% deviation, use automatic
-    vault.rebase();
-} else {
-    // Use manual with override
-    vault.rebase(lpPrice);
-}
-```
-
-### Validation System
-
-Even in **manual mode**, the on-chain oracle provides a **safety check**:
-
-```solidity
-function setVaultValue(uint256 newValue) public onlyAdmin {
-    // If validation enabled, compare with on-chain calculation
-    if (_oracleEnabled && _oracleIsland != address(0)) {
-        uint256 calculatedValue = LPPriceOracle.calculateTotalVaultValue(...);
-        
-        // Calculate deviation
-        uint256 deviation = abs(newValue - calculatedValue) / calculatedValue;
-        
-        // Revert if deviation too high
-        if (deviation > _maxDeviationBps / 10000) {
-            revert VaultValueDeviationTooHigh(newValue, calculatedValue, deviation);
-        }
-    }
-    
-    _vaultValue = newValue;  // ✅ Validated!
-}
-```
-
-**Benefits**:
-- Prevents admin from setting malicious values (>5% off)
-- Catches errors in keeper bot calculations
-- Provides on-chain audit trail
-- Can be used even when flag=false
-
-### Kodiak Islands Integration
-
-#### What is Kodiak?
-
-**Kodiak Islands** are concentrated liquidity vaults on Berachain (like Beefy or Yearn for Uniswap V3). They:
-- Wrap Uniswap V3 positions into ERC20 LP tokens
-- Auto-compound trading fees
-- Auto-rebalance positions
-- Provide single-sided liquidity support
-
-#### Hook Pattern
-
-We use a **hook pattern** to integrate with Kodiak without tight coupling:
-
-```
-┌──────────────┐         ┌───────────────────┐         ┌─────────────┐
-│    Vault     │────────►│ KodiakVaultHook   │────────►│   Kodiak    │
-│  (Senior/    │         │   (Adapter)       │         │   Island    │
-│   Junior/    │         │                   │         │             │
-│   Reserve)   │         │ • Swaps           │         │ • LP Tokens │
-└──────────────┘         │ • LP management   │         │ • Balances  │
-                         └───────────────────┘         └─────────────┘
-```
-
-**Benefits**:
-- Vault doesn't need to know Kodiak details
-- Easy to swap strategies (Aave, Compound, etc.)
-- Isolated swap logic and aggregator management
-- Can upgrade hook without upgrading vault
-
-#### Deploy to Kodiak
-
-**Admin-only function** to securely deploy vault funds to Kodiak:
-
-```solidity
-function deployToKodiak(
-    uint256 amount,
-    uint256 minLPTokens,      // Slippage protection
-    address swapToToken0Aggregator,
-    bytes calldata swapToToken0Data,
-    address swapToToken1Aggregator,
-    bytes calldata swapToToken1Data
-) external onlyAdmin {
-    // 1. Transfer stablecoins to hook
-    _stablecoin.transfer(address(kodiakHook), amount);
-    
-    // 2. Hook swaps to balanced pair and mints LP
-    kodiakHook.onAfterDepositWithSwaps(
-        amount,
-        swapToToken0Aggregator,
-        swapToToken0Data,
-        swapToToken1Aggregator,
-        swapToToken1Data
-    );
-    
-    // 3. Verify slippage protection
-    uint256 lpReceived = kodiakHook.getIslandLPBalance() - lpBefore;
-    require(lpReceived >= minLPTokens, "Slippage too high");
-}
-```
-
-**Flow**:
-1. Admin gets swap quote from Kodiak API (off-chain)
-2. Kodiak API returns optimal swap routes and calldata
-3. Admin calls `deployToKodiak()` with verified params
-4. Vault transfers stablecoins to hook
-5. Hook executes swaps via whitelisted aggregators
-6. Hook mints Kodiak Island LP tokens
-7. LP tokens held in hook, accounted in vault value
-
-**Security**:
-- Only admin can deploy
-- Swap aggregators must be whitelisted
-- Slippage protection (`minLPTokens`)
-- Atomic operation (reverts on failure)
-
-#### Sweep to Kodiak
-
-**Convenience function** to deploy all idle stablecoin:
-
-```solidity
-function sweepToKodiak(
-    uint256 minLPTokens,
-    address swapToToken0Aggregator,
-    bytes calldata swapToToken0Data,
-    address swapToToken1Aggregator,
-    bytes calldata swapToToken1Data
-) external onlyAdmin {
-    // Get all idle stablecoin
-    uint256 idle = _stablecoin.balanceOf(address(this));
-    
-    // Deploy everything
-    deployToKodiak(idle, minLPTokens, ...);
-}
-```
-
-**Use Case**: After many user deposits, sweep accumulated "dust" into Kodiak to earn yield.
-
-### Integration Across All Vaults
-
-**All three vaults** (Senior, Junior, Reserve) have the oracle and Kodiak integration:
-
-| Vault | Vault Value (Auto) | LP Price (Auto) | Kodiak Deployment |
-|-------|-------------------|-----------------|-------------------|
-| **Senior** | ✅ | ✅ (for rebase) | ✅ |
-| **Junior** | ✅ | N/A (receives from Senior) | ✅ |
-| **Reserve** | ✅ | N/A (receives from Senior) | ✅ |
-
-**Why Junior/Reserve need it**:
-- For their own deposit/withdrawal share calculations
-- To deploy their own funds to Kodiak independently
-- To calculate spillover value when receiving LP tokens
-
-### Benefits Summary
-
-#### 1. Trustlessness
-- No reliance on off-chain keepers for price data
-- Fully verifiable on-chain calculations
-- Censorship-resistant operations
-
-#### 2. Security
-- Validation prevents admin manipulation
-- Slippage protection on Kodiak deployments
-- Whitelisted aggregators for swaps
-
-#### 3. Flexibility
-- Can switch between automatic/manual mode anytime
-- Query calculated values even in manual mode
-- Gradual migration path (test manual, then go automatic)
-
-#### 4. Gas Efficiency
-- On-chain calculation only when needed
-- Can use stored values for better UX
-- Batched operations supported
-
-#### 5. Transparency
-- All calculations auditable on-chain
-- Deviation events logged
-- Price history traceable
-
-### Migration Guide
-
-**Existing Vaults → Add Oracle System**
-
-```solidity
-// Step 1: Deploy with oracle support (already done!)
-// All vaults now inherit oracle capabilities
-
-// Step 2: Start in manual mode (safe)
-vault.configureOracle(
-    ISLAND,
-    true,      // stablecoinIsToken0
-    500,       // 5% max deviation
-    true,      // enable validation
-    false      // 👈 Start manual
-);
-
-// Step 3: Test validation
-// Keeper continues setting values, but they're validated now
-vault.setVaultValue(calculatedValue);  // ✅ Checked against on-chain
-
-// Step 4: Test automatic queries
-uint256 calc = vault.getCalculatedVaultValue();
-uint256 stored = vault.getStoredVaultValue();
-// Compare and verify accuracy
-
-// Step 5: Switch to automatic when confident
-vault.configureOracle(
-    ISLAND,
-    true,
-    500,
-    true,
-    true       // 👈 Now automatic!
-);
-
-// Step 6: Simplify operations
-vault.rebase();  // No parameters needed! 🎉
-```
-
-### Real-World Example
-
-**USDC-BERA Pool on Kodiak (Berachain)**
-
-```solidity
-// Setup
-seniorVault.setKodiakHook(KODIAK_HOOK_ADDRESS);
-seniorVault.configureOracle(
-    USDC_BERA_ISLAND,  // 0x123...
-    true,              // USDC is token0
-    500,               // 5% max deviation
-    true,              // validation on
-    true               // automatic mode ✅
-);
-
-// Admin deploys idle USDC to Kodiak
-// (Gets swap quote from Kodiak API first)
-seniorVault.deployToKodiak(
-    100000e6,    // 100K USDC
-    15000e18,    // Min 15K LP tokens (slippage protection)
-    ROUTER_ADDRESS,
-    swapData0,
-    ROUTER_ADDRESS,
-    swapData1
-);
-
-// User deposits
-user.deposit(1000e6, userAddress);
-// ✅ Shares calculated using on-chain vault value
-// ✅ No keeper needed!
-
-// Monthly rebase
-admin.rebase();
-// ✅ LP price calculated on-chain: $6.32
-// ✅ Spillover LP transfers use correct amounts
-// ✅ Fully trustless!
-```
-
-### Testing
-
-See comprehensive test suite:
-- `test/unit/LPPriceOracle.t.sol` - LP price calculation tests
-- `test/unit/OracleIntegration.t.sol` - Oracle validation tests
-- `test/unit/KodiakIntegration.t.sol` - Kodiak deployment tests
-- `test/integration/KodiakOracleIntegration.t.sol` - End-to-end tests
-- `test/e2e/KodiakOracleE2E.t.sol` - Full system tests
-
-**Key Test Case** (100K USDC + 10K OTHER):
-```solidity
-function test_realPool_100K_USDC_10K_OTHER() public {
-    // Setup mock Island
-    island.setReserves(100000e6, 10000e18);  // 100K USDC, 10K OTHER
-    island.setTotalSupply(31622.77e18);      // LP supply = sqrt(100K × 10K)
-    
-    // Calculate LP price
-    uint256 lpPrice = LPPriceOracle.calculateLPPrice(address(island), true);
-    
-    // Verify: $6.32 ✅
-    assertGt(lpPrice, 6.32e18);
-    assertLt(lpPrice, 6.33e18);
-}
-```
-
----
-
-## Mathematical Specification
-
-### Core Formulas
-
-**See `math_spec.md` for complete mathematical specification.**
-
-#### User Balance (Rebase Index)
-```
-balance_i = shares_i × rebase_index
-```
-
-#### Dynamic APY Selection
-```solidity
-// Try 13% APY first
-S_new_13 = S × 1.011050  // includes 2% performance fee
-if (vault_value / S_new_13 >= 1.00) {
-    use 13% APY
-} else {
-    // Try 12% APY
-    S_new_12 = S × 1.010200
-    if (vault_value / S_new_12 >= 1.00) {
-        use 12% APY
-    } else {
-        // Use 11% APY (+ backstop if needed)
-        S_new_11 = S × 1.009350
-        use 11% APY
-    }
-}
-```
-
-#### Backing Ratio
-```
-R_senior = vault_value / total_supply
-```
-
-#### Three-Zone Logic
-```solidity
-if (R_senior > 1.10) {
-    // ZONE 1: Profit Spillover
-    excess = vault_value - (1.10 × total_supply)
-    transfer_to_junior = excess × 0.80
-    transfer_to_reserve = excess × 0.20
-} else if (R_senior >= 1.00 && R_senior <= 1.10) {
-    // ZONE 2: Healthy Buffer - NO ACTION
-    // Most common state!
-} else {
-    // ZONE 3: Backstop
-    deficit = (1.009 × total_supply) - vault_value
-    pull_from_reserve = min(reserve_value, deficit)
-    pull_from_junior = min(junior_value, deficit - pull_from_reserve)
-}
-```
-
-### How Code Implements Math Spec
-
-#### 1. Rebase Index Update (`RebaseLib.sol`)
-```solidity
-// Math Spec: I_new = I_old × (1 + r_selected × 1.02)
-function updateIndex(uint256 currentIndex, uint256 selectedRate) 
-    internal pure returns (uint256) 
-{
-    // selectedRate is one of: 10833, 10000, or 9167 (basis points)
-    uint256 multiplier = 1e18 + (selectedRate * 102 / 10000);
-    return (currentIndex * multiplier) / 1e18;
-}
-```
-
-#### 2. Management Fee (`FeeLib.sol`)
-```solidity
-// Math Spec: F_mgmt = V_s × (0.01 / 12)
-function calculateManagementFee(uint256 vaultValue) 
-    internal pure returns (uint256) 
-{
-    return (vaultValue * 100) / 1200000; // 1% annual / 12 months
-}
-```
-
-#### 3. Spillover Logic (`SpilloverLib.sol`)
-```solidity
-// Math Spec: E = V_s - (1.10 × S_new)
-function calculateSpillover(uint256 vaultValue, uint256 newSupply) 
-    internal pure returns (uint256 toJunior, uint256 toReserve) 
-{
-    uint256 target = (newSupply * 110) / 100;
-    if (vaultValue > target) {
-        uint256 excess = vaultValue - target;
-        toJunior = (excess * 80) / 100;
-        toReserve = excess - toJunior;
-    }
-}
-```
-
-#### 4. Backstop Logic (`UnifiedSeniorVault.sol`)
-```solidity
-// Math Spec: D = (1.009 × S_new) - V_s
-//            X_r = min(V_r, D)
-//            X_j = min(V_j, D - X_r)
-function _executeBackstop(uint256 deficit, uint256 lpPrice) internal {
-    // Pull from Reserve first (no cap)
-    uint256 fromReserve = reserveVault.provideBackstop(deficit, lpPrice);
-    uint256 remaining = deficit - fromReserve;
-    
-    if (remaining > 0) {
-        // Pull from Junior if Reserve insufficient (no cap)
-        uint256 fromJunior = juniorVault.provideBackstop(remaining, lpPrice);
-    }
-}
-```
-
-#### 5. LP Token Transfer (NEW)
-```solidity
-// During spillover, calculate LP tokens needed
-function _transferToJunior(uint256 amountUSD, uint256 lpPrice) internal {
-    // amountUSD = USD value to transfer (e.g., $10,000)
-    // lpPrice = current LP token price (e.g., $6.32)
-    uint256 lpTokens = (amountUSD * 1e18) / lpPrice;
-    lpToken.transfer(address(juniorVault), lpTokens);
-}
-
-// During backstop, calculate LP tokens to receive
-function _pullFromReserve(uint256 amountUSD, uint256 lpPrice) internal {
-    // Reserve calculates and transfers LP tokens
-    reserveVault.provideBackstop(amountUSD, lpPrice);
-}
-```
-
----
-
-## Contract Deployments
-
-### Polygon Mainnet (Chain ID: 137)
-
-#### Vault Proxies (User-Facing Addresses)
-```javascript
-SENIOR_VAULT   = "0xc87086848c82089FE2Da4997Eac4EbF42591a579"
-JUNIOR_VAULT   = "0xFf5462cECd8f9eC7eD737Ec0014449f559850f37"
-RESERVE_VAULT  = "0x1bf9735Df7836a9e1f3EAdb53bD38D5f5BD3cd14"
-```
-
-#### Current Implementations
-```javascript
-SENIOR_IMPL  = "0x3F5369885125F420fD9de849451007bbd66e7377"
-JUNIOR_IMPL  = "0xaDE61a9A8453fFE3F5032EFccD30990d2D145B1a"
-RESERVE_IMPL = "0x6981c3057472D9d770784A1F13A706733f97A951"
-```
-
-#### Token Addresses
-```javascript
-// Mock tokens for testing
-TSTUSDE = "0x0f5E6C7c2C559F3996923e41eC441Cd782fdb9d7"  // Test stablecoin
-TSAIL   = "0x7F7eCd18978aB5Dc0767e84c8648ba96cD84D30e"  // Test SAIL
-
-// Uniswap V2 LP
-LP_TOKEN = "0xFC1569338f0efb7F7Dee9bd4AF62C9278C6C685C"
-PAIR_ADDRESS = "0xFC1569338f0efb7F7Dee9bd4AF62C9278C6C685C"
-```
-
-#### Admin & Configuration
-```javascript
-ADMIN_ADDRESS = "0xE09883Cb3Fe2d973cEfE4BB28E3A3849E7e5f0A7"
-REBASE_INTERVAL = 30 days (2592000 seconds)
-```
-
-### Configuration Files
-
-**Backend Constants**: `wrapper/src/constants.ts`
-```typescript
-export const SENIOR_VAULT_ADDRESS = "0xc87086848c82089FE2Da4997Eac4EbF42591a579";
-export const JUNIOR_VAULT_ADDRESS = "0xFf5462cECd8f9eC7eD737Ec0014449f559850f37";
-export const RESERVE_VAULT_ADDRESS = "0x1bf9735Df7836a9e1f3EAdb53bD38D5f5BD3cd14";
-export const LP_TOKEN_ADDRESS = "0xFC1569338f0efb7F7Dee9bd4AF62C9278C6C685C";
-export const RPC_URL = "https://polygon-rpc.com";
-```
-
-**Frontend Config**: `simulation/src/config.ts`
-```typescript
-export const config = {
-  apiUrl: 'http://localhost:3000',
-  chainId: 137,
-  networkName: 'Polygon',
-  admin: {
-    privateKey: process.env.VITE_ADMIN_PRIVATE_KEY,
-    address: "0xE09883Cb3Fe2d973cEfE4BB28E3A3849E7e5f0A7"
-  }
-};
-```
-
----
-
-## Key Flows & Patterns
-
-### 1. User Deposit Flow
-
-**User deposits stablecoins → Gets vault tokens**
-
-```
-User
-  ↓ deposits $1000 USDE
-Senior Vault (ERC4626)
-  ↓ calculates shares = $1000 / rebase_index
-  ↓ mints shares to user
-  ↓ stores USDE in vault
-User receives snrUSD balance
-  (balance = shares × rebase_index)
-```
-
-**Code Implementation**:
-```solidity
-// User calls deposit() on vault proxy
-function deposit(uint256 assets, address receiver) public returns (uint256) {
-    uint256 shares = previewDeposit(assets);
-    _mint(receiver, shares);
-    asset.transferFrom(msg.sender, address(this), assets);
-    return shares;
-}
-
-// Balance calculated via rebase index
-function balanceOf(address account) public view returns (uint256) {
-    return (sharesOf[account] * rebaseIndex) / 1e18;
-}
-```
-
-**Backend API**:
-```typescript
-POST /deposit-to-vault
-{
-  "privateKey": "0x...",
-  "amountLPTokens": "100",
-  "vaultType": "senior" | "junior" | "reserve"
-}
-```
-
-### 1.5. Vault Value Synchronization ⚠️
-
-**CRITICAL**: Vault values must be up-to-date before user deposits/withdrawals.
-
-#### Why This Matters
-
-The ERC4626 standard calculates shares based on the vault's reported `totalAssets()`:
-
-```solidity
-// Share calculation in ERC4626
-shares = depositAmount × totalSupply / totalAssets()
-
-// In our implementation
-function totalAssets() public view returns (uint256) {
-    return _vaultValue;  // Uses internal accounting, NOT actual token balance
-}
-```
-
-#### The Problem
-
-If `_vaultValue` is **out of sync** with actual holdings:
-
-| Scenario | Impact | Example |
-|----------|--------|---------|
-| `_vaultValue` too low | Users get MORE shares than deserved | Vault has $1M actual, but `_vaultValue = $500K` → User deposits $100 and gets 2x the shares |
-| `_vaultValue` too high | Users get FEWER shares (or **zero shares!**) | Vault has $0 actual, but `_vaultValue = $1M` → User deposits $100 and gets 0 shares |
-
-**Real Bug We Fixed**:
-```solidity
-// Initial test setup had this problem:
-_vaultValue = 1000e18  // Set via initialize
-actual LP tokens = 0    // No tokens yet!
-
-// When user deposits 100 tokens:
-shares = 100 × 0 / 1000 = 0 shares  ❌ USER GETS NOTHING!
-```
-
-#### The Solution
-
-**Keeper bot updates vault values regularly**:
-
-```typescript
-// Keeper bot runs every hour
-async function keeperBot() {
-    // 1. Calculate current USD value of all LP positions
-    const seniorLPBalance = await lpToken.balanceOf(seniorVault);
-    const lpPrice = await getLPTokenPrice(); // From Uniswap
-    const seniorValueUSD = seniorLPBalance × lpPrice;
-    
-    // 2. Update on-chain vault value
-    await seniorVault.setVaultValue(seniorValueUSD);
-    
-    // 3. Repeat for Junior and Reserve vaults
-}
-```
-
-**When to Update**:
-- ✅ Every 1-4 hours (regular sync)
-- ✅ Before monthly rebase (critical!)
-- ✅ After large LP position changes
-- ✅ When backing ratio deviates > 1%
-
-**Test Strategy** (See `test/unit/concrete/ConcreteJuniorVault.t.sol`):
-```solidity
-// Helper function for tests that need backstop/spillover
-function _initializeVaultWithValue() internal {
-    vm.prank(keeper);
-    vault.setVaultValue(INITIAL_VALUE);  // Sync vault value
-    lpToken.mint(address(vault), INITIAL_VALUE);  // Actual tokens
-    vault.addWhitelistedLPToken(address(lpToken));  // Enable transfers
-}
-
-// Tests start with _vaultValue = 0 to mimic fresh vault
-// Then explicitly set value before operations that need it
-```
-
-**Production Best Practice**:
-```solidity
-// Add staleness protection
-modifier notStale() {
-    require(
-        block.timestamp - lastVaultValueUpdate < 24 hours,
-        "Vault value stale - deposits/withdrawals paused"
-    );
-    _;
-}
-
-function deposit(uint256 assets) public notStale returns (uint256) {
-    // ... deposit logic
-}
-```
-
-**See Also**:
-- Section 3: "Rebase Flow" (lines 392-491) - Updates all vault values before rebase
-- Section 6: "Real-World Solutions" - Keeper bot architecture
-
-### 2. Vault Investment Flow (Admin Only)
-
-**Vault invests in LP → Earns yield**
-
-```
-Admin calls investVaultInLP()
-  ↓
-Vault transfers stablecoins to Uniswap
-  ↓ addLiquidity(TSTUSDE, TSAIL)
-Vault receives LP tokens
-  ↓ stores LP tokens
-Vault value increases over time
-  (via LP token appreciation + trading fees)
-```
-
-**Code Implementation**:
-```solidity
-function investInLP(uint256 amount, address lpProtocol) external onlyAdmin {
-    // Approve tokens
-    asset.approve(lpProtocol, amount);
-    
-    // Add liquidity (gets LP tokens back)
-    IUniswapV2Router(lpProtocol).addLiquidity(...);
-    
-    // Update vault state
-    emit Invested(amount, lpProtocol);
-}
-```
-
-### 3. Rebase Flow (Admin Monthly)
-
-**The most critical operation - updates all vault values and executes rebase**
-
-```
-Admin triggers rebase
-  ↓
-Backend fetches LP token price ($6.32)
-  ↓
-1️⃣ Update Senior vault value
-   (LP holdings × LP price)
-  ↓
-2️⃣ Update Junior vault value
-  ↓
-3️⃣ Update Reserve vault value
-  ↓
-4️⃣ Execute Senior rebase(lpPrice)
-  ├─ Calculate dynamic APY (13% → 12% → 11%)
-  ├─ Deduct management fee
-  ├─ Calculate new supply (with 2% performance fee)
-  ├─ Determine zone (1, 2, or 3)
-  │
-  ├─ IF Zone 1 (>110%): Profit Spillover
-  │   ├─ Calculate excess = value - (110% × supply)
-  │   ├─ Transfer 80% LP tokens to Junior
-  │   ├─ Transfer 20% LP tokens to Reserve
-  │   └─ Senior returns to exactly 110%
-  │
-  ├─ IF Zone 2 (100-110%): No Action
-  │   └─ Everyone keeps their value
-  │
-  └─ IF Zone 3 (<100%): Backstop
-      ├─ Calculate deficit = (100.9% × supply) - value
-      ├─ Pull LP tokens from Reserve (no cap!)
-      ├─ If insufficient, pull from Junior (no cap!)
-      └─ Senior restored to 100.9%
-  ↓
-Update rebase index
-  (users' balances auto-increase)
-```
-
-**Code Implementation**:
-
-```solidity
-// Entry point - called by admin
-function rebase(uint256 lpPrice) external onlyAdmin {
-    require(canRebase(), "Too soon");
-    
-    // Step 1: Calculate fees
-    uint256 vaultValue = getVaultValue();
-    uint256 mgmtFee = calculateManagementFee(vaultValue);
-    uint256 netValue = vaultValue - mgmtFee;
-    
-    // Step 2: Dynamic APY selection
-    uint256 currentSupply = totalSupply();
-    (uint256 selectedRate, uint256 newSupply) = 
-        selectDynamicAPY(netValue, currentSupply);
-    
-    // Step 3: Calculate backing ratio
-    uint256 backingRatio = (netValue * 1e18) / newSupply;
-    
-    // Step 4: Three-zone decision
-    if (backingRatio > 1.10e18) {
-        // Zone 1: Profit spillover
-        _executeProfitSpillover(netValue, newSupply, lpPrice);
-    } else if (backingRatio >= 1.00e18) {
-        // Zone 2: No action
-    } else {
-        // Zone 3: Backstop
-        _executeBackstop(netValue, newSupply, lpPrice);
-    }
-    
-    // Step 5: Update rebase index
-    rebaseIndex = (rebaseIndex * (1e18 + selectedRate * 102 / 10000)) / 1e18;
-    lastRebaseTime = block.timestamp;
-    
-    emit RebaseExecuted(selectedRate, newSupply, backingRatio);
-}
-```
-
-**Backend Flow** (`wrapper/src/utils.ts`):
-
-```typescript
-export const updateAllVaultsAndRebase = async (adminPrivateKey: string) => {
-  // 1. Get LP price from Uniswap
-  const lpPrice = await getLPTokenPrice();
-  
-  // 2. Update all vault values
-  await setVaultValue('senior', seniorValue, adminPrivateKey);
-  await setVaultValue('junior', juniorValue, adminPrivateKey);
-  await setVaultValue('reserve', reserveValue, adminPrivateKey);
-  
-  // 3. Execute rebase with LP price
-  await seniorVault.rebase(lpPrice, {
-    gasLimit: 800000,
-    maxFeePerGas: ethers.parseUnits('300', 'gwei'),
-    maxPriorityFeePerGas: ethers.parseUnits('50', 'gwei')
-  });
-};
-```
-
-**Frontend Trigger** (`simulation/src/components/Dashboard.tsx`):
-
-```typescript
-const handleRebase = async () => {
-  try {
-    setRebaseStatus('Updating vault values...');
-    const result = await apiService.updateAllVaultsAndRebase(adminPrivateKey);
-    setRebaseStatus('✅ Rebase complete!');
-  } catch (error) {
-    setRebaseStatus(`❌ Error: ${error.message}`);
-  }
-};
-```
-
-### 4. Withdrawal Flow
-
-**User withdraws → Receives stablecoins**
-
-```
-User initiates withdrawal
-  ↓ calls withdraw($500)
-Vault calculates shares to burn
-  shares = $500 / rebase_index
-  ↓
-Check cooldown (7 days)
-  ↓ if < 7 days: 5% penalty
-  ↓ if ≥ 7 days: no penalty
-Burn shares from user
-  ↓
-Check vault liquidity
-  ↓ if sufficient liquid USDE: transfer
-  ↓ if insufficient: exit LP position
-Transfer USDE to user
-```
-
-**Code Implementation**:
-```solidity
-function withdraw(uint256 assets, address receiver, address owner) 
-    public returns (uint256) 
-{
-    uint256 shares = previewWithdraw(assets);
-    
-    // Check cooldown
-    if (block.timestamp - cooldownStart[owner] < COOLDOWN_PERIOD) {
-        // Apply 5% penalty
-        assets = (assets * 95) / 100;
-    }
-    
-    _burn(owner, shares);
-    asset.transfer(receiver, assets);
-    return shares;
-}
-```
-
-### 5. Spillover Flow (Zone 1)
-
-**Senior backing > 110% → Share excess with Junior/Reserve**
-
-```
-Rebase detects backing > 110%
-  ↓
-Calculate excess value
-  excess = vault_value - (1.10 × supply)
-  ↓
-Calculate LP tokens to transfer
-  lp_to_junior = (excess × 0.80) / lp_price
-  lp_to_reserve = (excess × 0.20) / lp_price
-  ↓
-Transfer LP tokens
-  ├─ 80% LP tokens → Junior vault
-  └─ 20% LP tokens → Reserve vault
-  ↓
-Senior returns to exactly 110% backing
-```
-
-**Code Implementation**:
-```solidity
-function _executeProfitSpillover(
-    uint256 vaultValue, 
-    uint256 newSupply,
-    uint256 lpPrice
-) internal {
-    uint256 target = (newSupply * 110) / 100;
-    uint256 excess = vaultValue - target;
-    
-    // Calculate USD amounts
-    uint256 toJuniorUSD = (excess * 80) / 100;
-    uint256 toReserveUSD = excess - toJuniorUSD;
-    
-    // Transfer LP tokens based on USD value
-    _transferToJunior(toJuniorUSD, lpPrice);
-    _transferToReserve(toReserveUSD, lpPrice);
-}
-
-function _transferToJunior(uint256 amountUSD, uint256 lpPrice) internal {
-    // Convert USD to LP tokens
-    uint256 lpTokens = (amountUSD * 1e18) / lpPrice;
-    lpToken.transfer(address(juniorVault), lpTokens);
-    juniorVault.receiveSpillover(lpTokens);
-}
-```
-
-### 6. Backstop Flow (Zone 3)
-
-**Senior backing < 100% → Pull funds from Reserve/Junior**
-
-```
-Rebase detects backing < 100%
-  ↓
-Calculate deficit to restore to 100.9%
-  deficit = (1.009 × supply) - vault_value
-  ↓
-WATERFALL: Reserve → Junior (NO CAPS!)
-  ↓
-1. Pull from Reserve first
-   amount_from_reserve = min(reserve_value, deficit)
-   ↓ Reserve calculates LP tokens = amount / lp_price
-   ↓ Reserve transfers LP tokens to Senior
-   ↓
-2. If deficit remains, pull from Junior
-   remaining = deficit - amount_from_reserve
-   amount_from_junior = min(junior_value, remaining)
-   ↓ Junior calculates LP tokens
-   ↓ Junior transfers LP tokens to Senior
-   ↓
-Senior restored to 100.9% backing
-```
-
-**Code Implementation**:
-```solidity
-function _executeBackstop(
-    uint256 vaultValue,
-    uint256 newSupply,
-    uint256 lpPrice
-) internal {
-    uint256 target = (newSupply * 1009) / 1000; // 100.9%
-    uint256 deficit = target - vaultValue;
-    
-    // Pull from Reserve first (no cap!)
-    uint256 fromReserve = reserveVault.provideBackstop(deficit, lpPrice);
-    uint256 remaining = deficit - fromReserve;
-    
-    if (remaining > 0) {
-        // Pull from Junior if needed (no cap!)
-        uint256 fromJunior = juniorVault.provideBackstop(remaining, lpPrice);
-    }
-}
-```
-
-**In Reserve/Junior Vaults**:
-```solidity
-function provideBackstop(uint256 amountUSD, uint256 lpPrice) 
-    external onlySeniorVault returns (uint256) 
-{
-    // Calculate how much we can provide
-    uint256 available = getVaultValue();
-    uint256 toProvide = available < amountUSD ? available : amountUSD;
-    
-    // Calculate LP tokens to transfer
-    uint256 lpTokens = (toProvide * 1e18) / lpPrice;
-    
-    // Transfer LP tokens to Senior
-    lpToken.transfer(msg.sender, lpTokens);
-    
-    return toProvide;
-}
-```
-
----
-
-## API Reference
-
-### Backend Server (`wrapper/`)
-
-**Base URL**: `http://localhost:3000`
-
-#### Health & System Info
-
-```http
-GET /health
-Response: { status: "ok", timestamp: "..." }
-```
-
-#### Pool & Price Data
-
-```http
-GET /reserves
-Response: {
-  success: true,
-  data: {
-    tsailReserve: "1000000",
-    tusdReserve: "950000",
-    pairAddress: "0x..."
-  }
-}
-
-GET /lp-price
-Response: {
-  success: true,
-  data: {
-    lpTokenPrice: "6.3254",
-    tsailPrice: "0.95"
-  }
-}
-```
-
-#### Vault Data
-
-```http
-GET /vaults/total-supply
-Response: {
-  success: true,
-  data: {
-    seniorVault: { supply: "1000000" },
-    juniorVault: { supply: "500000" },
-    reserveVault: { supply: "300000" }
-  }
-}
-
-GET /vaults/value
-Response: {
-  success: true,
-  data: {
-    seniorVault: { value: "1050000" },
-    juniorVault: { value: "525000" },
-    reserveVault: { value: "315000" }
-  }
-}
-
-GET /vaults/lp-holdings
-Response: {
-  success: true,
-  data: {
-    seniorVault: { lpTokens: "150000", valueUSD: "949000" },
-    juniorVault: { lpTokens: "80000", valueUSD: "506000" },
-    reserveVault: { lpTokens: "50000", valueUSD: "316000" }
-  }
-}
-```
-
-#### Vault Metrics
-
-```http
-GET /senior/backing-ratio
-Response: {
-  success: true,
-  data: {
-    seniorVault: {
-      backingRatio: "105.23",
-      onChainValue: "1050000",
-      supply: "1000000"
-    }
-  }
-}
-
-GET /junior/token-price
-Response: {
-  success: true,
-  data: {
-    juniorVault: {
-      tokenPrice: "1.05",  // Unstaking ratio
-      supply: "500000",
-      value: "525000"
-    }
-  }
-}
-
-GET /reserve/token-price
-Response: {
-  success: true,
-  data: {
-    reserveVault: {
-      tokenPrice: "1.05",
-      supply: "300000",
-      value: "315000"
-    }
-  }
-}
-```
-
-#### User Operations
-
-```http
-POST /stake-and-invest-complete
-Body: {
-  "userPrivateKey": "0x...",
-  "adminPrivateKey": "0x...",
-  "vaultType": "senior",
-  "amountTSTUSDE": "1000",
-  "slippageTolerance": 0.5
-}
-Response: {
-  success: true,
-  txHash: "0x...",
-  shares: "952.38"
-}
-
-POST /deposit-to-vault
-Body: {
-  "privateKey": "0x...",
-  "amountLPTokens": "100",
-  "vaultType": "senior"
-}
-
-POST /invest-vault-in-lp
-Body: {
-  "privateKey": "0x...",  // Admin only
-  "vaultType": "senior",
-  "lpProtocolAddress": "0x...",
-  "amount": "10000"
-}
-```
-
-#### Admin Operations
-
-```http
-POST /vault/update-value
-Body: {
-  "privateKey": "0x...",  // Admin
-  "profitBps": 500,  // 5% profit
-  "vaultType": "senior"
-}
-
-POST /vault/rebase
-Body: {
-  "privateKey": "0x..."  // Admin
-}
-
-POST /vault/update-and-rebase
-Body: {
-  "privateKey": "0x..."  // Admin
-}
-Response: {
-  success: true,
-  updates: [...],
-  rebaseTx: "0x...",
-  selectedAPY: "13%",
-  zone: 2
-}
-```
-
----
-
-## Frontend Integration
-
-### Structure (`simulation/`)
-
-```
-simulation/
-├── src/
-│   ├── components/
-│   │   ├── Dashboard.tsx       # Main vault metrics display
-│   │   ├── BotCard.tsx         # Bot simulation cards
-│   │   └── TransactionFeed.tsx # Live transaction feed
-│   ├── services/
-│   │   └── api.ts             # Backend API client
-│   ├── config.ts              # Configuration
-│   └── App.tsx                # Main app component
-```
+The **Senior Tranche Protocol** is a structured finance system with three risk-segregated vaults that work together to provide stable returns for senior holders while offering higher risk/reward opportunities for junior participants.
 
 ### Key Components
 
-#### Dashboard Component
-
-Displays:
-- Senior backing ratio (on-chain vs. calculated)
-- Junior/Reserve unstaking ratios
-- LP holdings for all vaults
-- Admin rebase controls
-
-```typescript
-// Fetching vault data
-const fetchVaultData = async () => {
-  const [backing, supply, lpHoldings] = await Promise.all([
-    apiService.getSeniorBackingRatio(),
-    apiService.getVaultsTotalSupply(),
-    apiService.getVaultsLPHoldings()
-  ]);
-  
-  setBackingRatio(backing.data.seniorVault.backingRatio);
-  setLPHoldings(lpHoldings.data);
-};
+```
+┌─────────────────────────────────────────────────────────────┐
+│                    SENIOR TRANCHE PROTOCOL                  │
+│                                                             │
+│  ┌──────────────┐  ┌──────────────┐  ┌──────────────┐    │
+│  │   SENIOR     │  │   JUNIOR     │  │   RESERVE    │    │
+│  │    VAULT     │  │    VAULT     │  │    VAULT     │    │
+│  │              │  │              │  │              │    │
+│  │  snrUSD      │  │  jnrUSD      │  │  resUSD      │    │
+│  │  11-13% APY  │  │  Variable    │  │  Backstop    │    │
+│  └──────┬───────┘  └──────┬───────┘  └──────┬───────┘    │
+│         │                  │                  │             │
+│         └──────────────────┼──────────────────┘             │
+│                            │                                │
+│                    ┌───────▼────────┐                       │
+│                    │  KODIAK HOOK   │                       │
+│                    │  LP Management │                       │
+│                    └───────┬────────┘                       │
+│                            │                                │
+│                    ┌───────▼────────┐                       │
+│                    │ KODIAK ISLAND  │                       │
+│                    │ WBTC/HONEY LP  │                       │
+│                    └────────────────┘                       │
+└─────────────────────────────────────────────────────────────┘
 ```
 
-#### Bot Simulation
+### Vault Characteristics
 
-Two bots simulate user behavior:
-- **Whale**: Large deposits (5000-10000 USDE)
-- **Farmer**: Smaller deposits (500-2000 USDE)
-
-```typescript
-const simulateBot = async (bot) => {
-  const amount = generateRandomAmount(bot.type);
-  await apiService.stakeAndInvestComplete(
-    bot.privateKey,
-    ADMIN_PRIVATE_KEY,
-    'senior',
-    amount
-  );
-};
-```
+| Vault | Token | Returns | Risk | Peg | Rebase |
+|-------|-------|---------|------|-----|--------|
+| **Senior** | snrUSD | 11-13% APY | Low | 1:1 Stable | ✅ Yes (elastic) |
+| **Junior** | jnrUSD | Variable (high upside) | Medium | Standard | ❌ No (standard ERC4626) |
+| **Reserve** | resUSD | Passive growth | High | Standard | ❌ No (standard ERC4626) |
 
 ---
 
-## Development Workflow
+## Architecture Diagram
 
-### Setup
+```mermaid
+graph TB
+    subgraph "User Layer"
+        U1[👤 Senior Holders]
+        U2[👤 Junior Holders]
+        U3[👤 Reserve Holders]
+    end
 
-```bash
-# 1. Clone repository
-git clone <repo-url>
-cd LiquidRoyaltyContracts
+    subgraph "Vault Layer"
+        SV[🏦 Senior Vault<br/>UnifiedSeniorVault.sol<br/>IS snrUSD Token]
+        JV[🏦 Junior Vault<br/>ConcreteJuniorVault.sol<br/>Standard ERC4626]
+        RV[🏦 Reserve Vault<br/>ConcreteReserveVault.sol<br/>Standard ERC4626]
+    end
 
-# 2. Install dependencies
-forge install              # Solidity dependencies
-cd wrapper && npm install  # Backend
-cd simulation && npm install  # Frontend
+    subgraph "Integration Layer"
+        KH[🔗 Kodiak Hook<br/>KodiakVaultHook.sol<br/>LP Manager]
+    end
 
-# 3. Set up environment variables
-cp .env.example .env
-# Edit .env with your private keys and RPC URLs
-```
+    subgraph "External DeFi"
+        KI[🏝️ Kodiak Island<br/>WBTC/HONEY Pool<br/>Concentrated Liquidity]
+    end
 
-### Environment Variables
+    subgraph "Libraries"
+        ML[📚 MathLib<br/>Core Math]
+        FL[📚 FeeLib<br/>Fee Calc]
+        RL[📚 RebaseLib<br/>Dynamic APY]
+        SL[📚 SpilloverLib<br/>3-Zone System]
+    end
 
-```bash
-# .env (root)
-PRIVATE_KEY=0x...                    # Deployer private key
-POLYGON_RPC_URL=https://polygon-rpc.com
-
-# wrapper/.env
-ADMIN_PRIVATE_KEY=0x...
-POLYGON_RPC_URL=https://polygon-rpc.com
-
-# simulation/.env
-VITE_API_URL=http://localhost:3000
-VITE_ADMIN_PRIVATE_KEY=0x...
-```
-
-### Running the System
-
-**1. Start Backend**
-```bash
-cd wrapper
-npm run dev
-# Server runs on http://localhost:3000
-```
-
-**2. Start Frontend**
-```bash
-cd simulation
-npm run dev
-# Opens browser at http://localhost:5173
-```
-
-**3. Access Frontend**
-- Open `http://localhost:5173`
-- View vault metrics, perform operations
-- Use admin controls for rebase
-
-### Local Development Cycle
-
-```bash
-# 1. Make contract changes
-vim src/abstract/UnifiedSeniorVault.sol
-
-# 2. Compile contracts
-forge build
-
-# 3. Run tests
-forge test -vvv
-
-# 4. Deploy new implementation
-forge script script/DeployLPRebaseImplementations.s.sol --rpc-url $POLYGON_RPC_URL --broadcast
-
-# 5. Upgrade proxy
-forge script script/UpgradeLPRebaseProxies.s.sol --rpc-url $POLYGON_RPC_URL --broadcast
-
-# 6. Restart backend (auto-restarts with nodemon)
-# 7. Refresh frontend
-```
-
----
-
-## Testing
-
-### Unit Tests
-
-```bash
-# Run all tests
-forge test
-
-# Run specific test file
-forge test --match-path test/unit/UnifiedSeniorVault.t.sol
-
-# Run with verbosity
-forge test -vvv
-
-# Run with gas reporting
-forge test --gas-report
-```
-
-### Test Structure
-
-```
-test/
-├── unit/                    # Unit tests for individual contracts
-│   ├── UnifiedSeniorVault.t.sol
-│   ├── ConcreteJuniorVault.t.sol
-│   ├── FeeLib.t.sol
-│   └── RebaseLib.t.sol
-├── e2e/                     # End-to-end integration tests
-│   ├── FullRebaseCycleE2E.t.sol
-│   ├── SpilloverE2E.t.sol
-│   └── BackstopE2E.t.sol
-```
-
-### Writing Tests
-
-```solidity
-// test/unit/MyVault.t.sol
-pragma solidity ^0.8.20;
-
-import "forge-std/Test.sol";
-import "../src/concrete/UnifiedConcreteSeniorVault.sol";
-
-contract MyVaultTest is Test {
-    UnifiedConcreteSeniorVault vault;
+    U1 -->|Deposit HONEY| SV
+    U2 -->|Deposit HONEY| JV
+    U3 -->|Deposit HONEY| RV
     
-    function setUp() public {
-        vault = new UnifiedConcreteSeniorVault();
-        vault.initialize(...);
-    }
+    SV -->|Deploy Idle $| KH
+    JV -->|Deploy Idle $| KH
+    RV -->|Deploy Idle $| KH
     
-    function testRebaseWithProfitSpillover() public {
-        // Arrange
-        vm.prank(admin);
-        vault.setVaultValue(1150000e18);
+    KH -->|Add Liquidity| KI
+    KI -->|LP Tokens| KH
+    
+    SV -.->|Rebase Logic| RL
+    SV -.->|Spillover/Backstop| SL
+    SV -.->|Fee Calculations| FL
+    SV -.->|Math Operations| ML
+    
+    SV <-->|Profit Spillover<br/>Backstop Transfers| JV
+    SV <-->|Profit Spillover<br/>Backstop Transfers| RV
+```
+
+---
+
+## Contract Hierarchy
+
+### Inheritance Structure
+
+```mermaid
+graph TD
+    subgraph "Senior Vault Stack"
+        IERC20[IERC20 Interface]
+        ISV[ISeniorVault Interface]
+        AC[AdminControlled Abstract]
+        PU[PausableUpgradeable]
+        UU[UUPSUpgradeable]
+        USV[UnifiedSeniorVault Abstract]
+        UCSV[UnifiedConcreteSeniorVault<br/>⭐ DEPLOYED]
         
-        // Act
-        uint256 lpPrice = 6.32e18;
-        vault.rebase(lpPrice);
+        IERC20 --> USV
+        ISV --> USV
+        AC --> USV
+        PU --> USV
+        UU --> USV
+        USV --> UCSV
+    end
+
+    subgraph "Junior/Reserve Vault Stack"
+        IV[IVault Interface]
+        ERC46[ERC4626Upgradeable]
+        BV[BaseVault Abstract]
+        JVA[JuniorVault Abstract]
+        RVA[ReserveVault Abstract]
+        CJV[ConcreteJuniorVault<br/>⭐ DEPLOYED]
+        CRV[ConcreteReserveVault<br/>⭐ DEPLOYED]
         
-        // Assert
-        assertEq(vault.getBackingRatio(), 110e16); // 110%
-    }
-}
+        IV --> BV
+        ERC46 --> BV
+        AC --> BV
+        UU --> BV
+        BV --> JVA
+        BV --> RVA
+        JVA --> CJV
+        RVA --> CRV
+    end
+
+    subgraph "Integration Layer"
+        IKH[IKodiakVaultHook Interface]
+        ACA[AccessControl]
+        KHI[KodiakVaultHook<br/>⭐ DEPLOYED]
+        
+        IKH --> KHI
+        ACA --> KHI
+    end
 ```
 
-### Manual Testing via Cast
+### File Structure
 
-```bash
-# Check vault value
-cast call $SENIOR_VAULT "getVaultValue()" --rpc-url $POLYGON_RPC_URL
-
-# Check backing ratio
-cast call $SENIOR_VAULT "getBackingRatio()" --rpc-url $POLYGON_RPC_URL
-
-# Execute rebase (as admin)
-LP_PRICE="6325400000000000000"  # $6.3254 in wei
-cast send $SENIOR_VAULT "rebase(uint256)" $LP_PRICE \
-  --rpc-url $POLYGON_RPC_URL \
-  --private-key $ADMIN_PRIVATE_KEY \
-  --gas-limit 800000
 ```
-
----
-
-## Deployment & Upgrades
-
-### Deploying New Implementations
-
-```bash
-# 1. Compile contracts
-forge build
-
-# 2. Deploy new implementations
-forge script script/DeployLPRebaseImplementations.s.sol \
-  --rpc-url $POLYGON_RPC_URL \
-  --broadcast \
-  --verify
-
-# Output:
-# Senior Impl:  0x3F5369885125F420fD9de849451007bbd66e7377
-# Junior Impl:  0xaDE61a9A8453fFE3F5032EFccD30990d2D145B1a
-# Reserve Impl: 0x6981c3057472D9d770784A1F13A706733f97A951
-```
-
-### Upgrading Proxies
-
-```bash
-# 1. Update script/UpgradeLPRebaseProxies.s.sol with new implementation addresses
-vim script/UpgradeLPRebaseProxies.s.sol
-
-# 2. Run upgrade script
-forge script script/UpgradeLPRebaseProxies.s.sol \
-  --rpc-url $POLYGON_RPC_URL \
-  --broadcast
-
-# 3. Verify upgrade
-cast call $SENIOR_VAULT "implementation()" --rpc-url $POLYGON_RPC_URL
-```
-
-### Deploying Fresh Vaults (Complete Reset)
-
-```bash
-# 1. Deploy new proxy contracts
-forge script script/DeployVaults.s.sol \
-  --rpc-url $POLYGON_RPC_URL \
-  --broadcast
-
-# 2. Configure vault cross-references
-bash configure-vault-links.sh
-
-# 3. Whitelist LP token in all vaults
-bash whitelist-correct-lp.sh
-
-# 4. Update backend constants
-vim wrapper/src/constants.ts
-# Update SENIOR_VAULT_ADDRESS, JUNIOR_VAULT_ADDRESS, RESERVE_VAULT_ADDRESS
-
-# 5. Restart backend
-cd wrapper && npm run dev
-```
-
-### Generating ABIs
-
-```bash
-# After deploying or upgrading contracts
-bash src/scripts/generate_abis.sh
-
-# Copies ABIs to:
-# - abi/
-# - wrapper/abi/
+src/
+├── abstract/              # Base contract logic
+│   ├── AdminControlled.sol          # Admin access control
+│   ├── BaseVault.sol                # ERC4626 vault base (Junior/Reserve)
+│   ├── UnifiedSeniorVault.sol       # Senior vault (IS snrUSD token)
+│   ├── JuniorVault.sol              # Junior-specific logic
+│   └── ReserveVault.sol             # Reserve-specific logic
+│
+├── concrete/              # Deployable implementations
+│   ├── UnifiedConcreteSeniorVault.sol    # ⭐ Deploy this for Senior
+│   ├── ConcreteJuniorVault.sol            # ⭐ Deploy this for Junior
+│   └── ConcreteReserveVault.sol           # ⭐ Deploy this for Reserve
+│
+├── integrations/          # External protocol integrations
+│   ├── KodiakVaultHook.sol          # ⭐ Deploy this for Kodiak LP management
+│   ├── IKodiakVaultHook.sol         # Hook interface
+│   ├── IKodiakIsland.sol            # Kodiak Island interface
+│   └── IKodiakIslandRouter.sol      # Kodiak Router interface
+│
+├── interfaces/            # Contract interfaces
+│   ├── IVault.sol                   # Base vault interface
+│   ├── ISeniorVault.sol             # Senior vault interface
+│   ├── IJuniorVault.sol             # Junior vault interface
+│   └── IReserveVault.sol            # Reserve vault interface
+│
+└── libraries/             # Pure logic libraries
+    ├── MathLib.sol                  # Core math operations
+    ├── FeeLib.sol                   # Fee calculations
+    ├── RebaseLib.sol                # Dynamic APY selection (11-13%)
+    └── SpilloverLib.sol             # Three-zone spillover system
 ```
 
 ---
 
-## Common Operations
+## Core Contracts
 
-### As Admin
+### 1. UnifiedSeniorVault (Senior Vault = snrUSD Token)
 
-#### 1. Perform Monthly Rebase
+**File**: `src/concrete/UnifiedConcreteSeniorVault.sol`
 
-**Via Frontend**:
-1. Open `http://localhost:5173`
-2. Navigate to "Admin Rebase" section
-3. Enter admin private key
-4. Click "Update All Vaults & Rebase"
+**Key Features**:
+- **IS the snrUSD token** (not ERC4626, unified architecture)
+- Rebasing token (balances grow automatically)
+- Dynamic APY selection (11-13% annually)
+- Three-zone spillover system (profit sharing & backstop)
+- 7-day cooldown for penalty-free withdrawals
 
-**Via Backend API**:
-```bash
-curl -X POST http://localhost:3000/vault/update-and-rebase \
-  -H "Content-Type: application/json" \
-  -d '{"privateKey":"0x..."}'
+**State Variables**:
+```solidity
+// Token State (snrUSD)
+mapping(address => uint256) private _shares;      // User shares (σ_i)
+uint256 private _totalShares;                     // Total shares (Σ)
+uint256 private _rebaseIndex;                     // Rebase index (I)
+
+// Vault State
+uint256 internal _vaultValue;                     // Current USD value (V_s)
+IERC20 internal _stablecoin;                      // HONEY stablecoin
+IJuniorVault internal _juniorVault;               // Junior vault ref
+IReserveVault internal _reserveVault;             // Reserve vault ref
+IKodiakVaultHook public kodiakHook;               // Kodiak LP manager
+
+// Rebase State
+uint256 internal _lastRebaseTime;                 // Last rebase timestamp
+uint256 internal _minRebaseInterval;              // Min time between rebases
+
+// Cooldown State (7 days)
+mapping(address => uint256) internal _cooldownStart;
 ```
 
-**Via Cast (Direct)**:
-```bash
-LP_PRICE="6325400000000000000"
-cast send $SENIOR_VAULT "rebase(uint256)" $LP_PRICE \
-  --rpc-url $POLYGON_RPC_URL \
-  --private-key $ADMIN_PRIVATE_KEY \
-  --gas-limit 800000
+**Core Functions**:
+```solidity
+// Deposit & Withdraw
+function deposit(uint256 assets, address receiver) external returns (uint256 shares);
+function withdraw(uint256 assets, address receiver, address owner) external returns (uint256 shares);
+function initiateCooldown() external;  // Start 7-day countdown
+
+// Rebase (Monthly)
+function rebase(uint256 lpPrice) external onlyAdmin;
+
+// Kodiak Management
+function deployToKodiak(uint256 amount, uint256 minLPTokens, ...) external onlyAdmin;
+function sweepToKodiak(uint256 minLPTokens, ...) external onlyAdmin;
+
+// Admin
+function setJuniorReserve(address junior, address reserve) external onlyAdmin;
+function setKodiakHook(address hook) external onlyAdmin;
+function configureOracle(...) external onlyAdmin;
 ```
 
-#### 2. Update Vault Value (Manual)
+**Balance Formula**:
+```solidity
+// User balance grows with rebase index
+balance = shares × rebaseIndex
 
-```bash
-# Update Senior vault to $1,050,000
-cast send $SENIOR_VAULT "setVaultValue(uint256)" "1050000000000000000000000" \
-  --rpc-url $POLYGON_RPC_URL \
-  --private-key $ADMIN_PRIVATE_KEY
+// Example:
+// User has 1000 shares, index starts at 1.0
+// After rebase: index = 1.01 (1% growth)
+// User balance = 1000 × 1.01 = 1010 snrUSD (automatic growth!)
 ```
 
-#### 3. Whitelist LP Token
+---
 
-```bash
-cast send $SENIOR_VAULT "addWhitelistedLP(address)" $LP_TOKEN \
-  --rpc-url $POLYGON_RPC_URL \
-  --private-key $ADMIN_PRIVATE_KEY
+### 2. Junior & Reserve Vaults (Standard ERC4626)
+
+**Files**: 
+- `src/concrete/ConcreteJuniorVault.sol`
+- `src/concrete/ConcreteReserveVault.sol`
+
+**Key Features**:
+- Standard ERC4626 vaults (non-rebasing)
+- Accept deposits, mint shares (standard 1:1 at launch)
+- Can deploy idle funds to Kodiak via hook
+- Participate in spillover system (receive profits from Senior)
+- Provide backstop to Senior (in emergency scenarios)
+
+**State Variables**:
+```solidity
+// ERC4626 Standard
+IERC20 internal _stablecoin;                      // HONEY (the "asset")
+uint256 internal _vaultValue;                     // Current USD value
+address internal _seniorVault;                    // Senior vault reference
+IKodiakVaultHook public kodiakHook;               // Kodiak LP manager
+
+// Whitelist Control
+mapping(address => bool) internal _whitelistedDepositors;
+address[] internal _whitelistedLPs;
+address[] internal _whitelistedLPTokens;
 ```
 
-#### 4. Invest Vault in LP
+**Core Functions**:
+```solidity
+// ERC4626 Standard Interface
+function deposit(uint256 assets, address receiver) external returns (uint256 shares);
+function withdraw(uint256 assets, address receiver, address owner) external returns (uint256 shares);
+function mint(uint256 shares, address receiver) external returns (uint256 assets);
+function redeem(uint256 shares, address receiver, address owner) external returns (uint256 assets);
 
-```bash
-# Via backend
-curl -X POST http://localhost:3000/invest-vault-in-lp \
-  -H "Content-Type: application/json" \
-  -d '{
-    "privateKey":"0x...",
-    "vaultType":"senior",
-    "lpProtocolAddress":"0x...",
-    "amount":"10000"
-  }'
+// Kodiak Management
+function deployToKodiak(uint256 amount, uint256 minLPTokens, ...) external onlyAdmin;
+
+// Spillover (called by Senior)
+function receiveSpillover(uint256 amount) external onlySeniorVault;
+function transferToSenior(uint256 amount) external onlySeniorVault;  // Backstop
+
+// Admin
+function setSeniorVault(address senior) external onlyAdmin;
+function setKodiakHook(address hook) external onlyAdmin;
 ```
 
-### As User
+---
 
-#### 1. Deposit to Vault
+### 3. KodiakVaultHook (LP Management)
 
-```typescript
-// Via frontend/backend
-const result = await apiService.stakeAndInvestComplete(
-  userPrivateKey,
-  adminPrivateKey,
-  'senior',
-  '1000'  // $1000
-);
+**File**: `src/integrations/KodiakVaultHook.sol`
+
+**Purpose**: Manages liquidity deployment to Kodiak Island (WBTC/HONEY concentrated liquidity pool)
+
+**Key Features**:
+- Receives stablecoins from vaults
+- Swaps HONEY → balanced WBTC/HONEY ratio
+- Adds liquidity to Kodiak Island
+- Burns LP tokens for withdrawals (smart algorithm)
+- Manages dust tokens (WBTC leftovers)
+
+**State Variables**:
+```solidity
+address public immutable vault;                   // Vault that owns this hook
+IERC20 public immutable assetToken;               // HONEY stablecoin
+IKodiakIslandRouter public router;                // Kodiak router
+IKodiakIsland public island;                      // Kodiak Island (LP pool)
+
+// LP Liquidation Parameters
+uint256 public safetyMultiplier = 250;            // 2.5x buffer for LP burns
+
+// Slippage Control
+uint256 public minSharesPerAssetBps = 0;          // Min LP tokens per asset
+uint256 public minAssetOutBps = 0;                // Min asset out on withdrawal
+
+// Aggregator Whitelist (for swaps)
+mapping(address => bool) public whitelistedAggregators;
 ```
 
-#### 2. Check Balance
+**Core Functions**:
+```solidity
+// Deposit Flow (called by vault)
+function onAfterDepositWithSwaps(
+    uint256 assets,
+    address swapToToken0Aggregator,
+    bytes calldata swapToToken0Data,
+    address swapToToken1Aggregator,
+    bytes calldata swapToToken1Data
+) external onlyVault;
 
-```bash
-cast call $SENIOR_VAULT "balanceOf(address)" $USER_ADDRESS \
-  --rpc-url $POLYGON_RPC_URL
+// Withdrawal Flow (called by vault)
+function liquidateLPForAmount(uint256 unstake_usd) external onlyVault;
+
+// Admin Management
+function setRouter(address _router) external onlyRole(ADMIN_ROLE);
+function setIsland(address _island) external onlyRole(ADMIN_ROLE);
+function setSafetyMultiplier(uint256 multiplier) external onlyRole(ADMIN_ROLE);
+function setAggregatorWhitelisted(address target, bool status) external onlyRole(ADMIN_ROLE);
+
+// Dust Management
+function adminSwapAndReturnToVault(
+    address tokenIn,
+    uint256 amountIn,
+    bytes calldata swapData,
+    address aggregator
+) external onlyRole(ADMIN_ROLE);
+
+function adminRescueTokens(address token, address to, uint256 amount) external onlyRole(ADMIN_ROLE);
 ```
 
-#### 3. Initiate Cooldown
+**LP Liquidation Algorithm** (Fixed!):
+```solidity
+// OLD (BROKEN): Used vault value estimate
+// uint256 lpPrice = (vaultValue * lpPercentage) / lpBalance;  // ❌ Inflated!
+
+// NEW (FIXED): Use actual pool data
+(, uint256 honeyInPool) = island.getUnderlyingBalances();
+uint256 totalLPSupply = island.totalSupply();
+uint256 honeyPerLP = (honeyInPool * 1e18) / totalLPSupply;  // ✅ Accurate!
+
+// Calculate LP needed
+uint256 lpNeeded = (unstake_usd * 1e18) / honeyPerLP;
+uint256 lpToSend = (lpNeeded * safetyMultiplier) / 100;  // 2.5x buffer
+
+// Burn LP to get HONEY back
+island.burn(lpToSend, address(this));
+```
+
+---
+
+## Operational Flows
+
+### Deposit Flow
+
+```mermaid
+sequenceDiagram
+    participant User
+    participant Senior as Senior Vault<br/>(snrUSD)
+    participant Junior as Junior Vault<br/>(jnrUSD)
+    participant Hook as Kodiak Hook
+    participant Island as Kodiak Island<br/>(WBTC/HONEY LP)
+
+    Note over User,Island: USER DEPOSITS TO SENIOR VAULT
+
+    User->>Senior: deposit(1000 HONEY, User)
+    activate Senior
+    
+    Senior->>Senior: Calculate shares to mint<br/>shares = assets / rebaseIndex
+    Note right of Senior: Example: 1000 HONEY / 1.0 = 1000 shares
+    
+    Senior->>Senior: Mint shares to User<br/>_shares[user] += 1000
+    
+    Senior->>User: Transfer 1000 HONEY from User
+    
+    Senior->>Senior: Update vault value<br/>_vaultValue += 1000
+    
+    Senior->>User: Emit Deposit event
+    deactivate Senior
+    
+    Note over User,Island: USER BALANCE GROWS AUTOMATICALLY WITH REBASE
+    
+    Note over Senior: After rebase (monthly):<br/>rebaseIndex = 1.01<br/>User balance = 1000 shares × 1.01 = 1010 snrUSD ✨
+
+    Note over User,Island: ADMIN DEPLOYS IDLE FUNDS TO KODIAK
+
+    Senior->>Hook: deployToKodiak(500 HONEY, ...)
+    activate Hook
+    
+    Hook->>Hook: Swap HONEY → balanced<br/>WBTC/HONEY (via Enso)
+    
+    Hook->>Island: Add liquidity<br/>(WBTC + HONEY)
+    activate Island
+    
+    Island->>Hook: Mint LP tokens
+    deactivate Island
+    
+    Hook->>Senior: LP tokens stored in hook
+    deactivate Hook
+    
+    Note over Senior,Island: Vault assets now:<br/>- 500 HONEY (idle)<br/>- $X LP tokens (deployed)
+```
+
+#### Key Points - Deposit Flow
+
+1. **Senior Vault** (snrUSD):
+   - User deposits HONEY stablecoin
+   - Receives shares: `shares = assets / rebaseIndex`
+   - Balance auto-grows with rebase index
+   - Example: 1000 HONEY → 1000 shares → grows to 1010 after 1% rebase
+
+2. **Junior/Reserve Vaults** (ERC4626):
+   - Standard ERC4626 deposit
+   - Shares calculated by: `shares = assets × totalSupply / totalAssets`
+   - No auto-growth (standard vault shares)
+
+3. **Kodiak Deployment**:
+   - Admin calls `deployToKodiak()` with swap parameters
+   - Hook swaps HONEY to balanced WBTC/HONEY ratio
+   - Adds liquidity to Kodiak Island concentrated liquidity pool
+   - LP tokens held by hook (not transferred back to vault)
+
+---
+
+### Withdrawal Flow
+
+```mermaid
+sequenceDiagram
+    participant User
+    participant Senior as Senior Vault<br/>(snrUSD)
+    participant Hook as Kodiak Hook
+    participant Island as Kodiak Island<br/>(WBTC/HONEY LP)
+
+    Note over User,Island: USER INITIATES WITHDRAWAL
+
+    User->>Senior: initiateCooldown()
+    Senior->>Senior: _cooldownStart[user] = block.timestamp
+    Senior->>User: Emit CooldownInitiated<br/>(Wait 7 days for penalty-free)
+
+    Note over User,Island: AFTER 7 DAYS (PENALTY-FREE)
+
+    User->>Senior: withdraw(200 HONEY, User, User)
+    activate Senior
+    
+    Senior->>Senior: Check cooldown:<br/>canWithdrawWithoutPenalty(user)
+    
+    alt Cooldown Complete (>7 days)
+        Senior->>Senior: penalty = 0 ✅
+    else Cooldown Incomplete (<7 days)
+        Senior->>Senior: penalty = 200 × 5% = 10 HONEY ⚠️<br/>netAmount = 190 HONEY
+    end
+    
+    Senior->>Senior: Calculate shares to burn<br/>shares = assets / rebaseIndex
+    
+    Senior->>Senior: Check idle HONEY balance<br/>balance = _stablecoin.balanceOf(vault)
+    
+    alt Sufficient Idle HONEY
+        Senior->>Senior: Use idle funds ✅
+    else Insufficient Idle HONEY
+        Note over Senior,Island: NEED TO LIQUIDATE LP!
+        
+        Senior->>Hook: liquidateLPForAmount(needed)
+        activate Hook
+        
+        Hook->>Hook: Calculate LP to burn<br/>using actual pool data
+        Note right of Hook: honeyPerLP = honeyInPool / totalLPSupply<br/>lpNeeded = needed / honeyPerLP<br/>lpToSend = lpNeeded × 2.5x (safety)
+        
+        Hook->>Island: burn(lpTokens, hook)
+        activate Island
+        Island->>Hook: Returns WBTC + HONEY
+        deactivate Island
+        
+        Hook->>Hook: Keep WBTC dust
+        Hook->>Senior: Transfer HONEY to vault
+        deactivate Hook
+    end
+    
+    Senior->>Senior: Burn user shares<br/>_shares[user] -= shares
+    
+    Senior->>User: Transfer HONEY to user<br/>(minus penalty if applicable)
+    
+    Senior->>Senior: Emit Withdraw event
+    deactivate Senior
+    
+    Note over User,Island: Withdrawal complete!
+```
+
+#### Key Points - Withdrawal Flow
+
+1. **Cooldown Period** (Senior only):
+   - User calls `initiateCooldown()` to start 7-day countdown
+   - If withdrawn before 7 days: 5% penalty applied
+   - Penalty stays in vault (benefits remaining holders)
+
+2. **Smart LP Liquidation**:
+   - Vault checks idle HONEY balance first
+   - If insufficient, calls hook to liquidate LP
+   - Hook uses **on-chain pool data** to calculate exact LP needed (not inflated estimate!)
+   - Burns LP → receives WBTC + HONEY
+   - WBTC dust accumulates in hook (managed separately)
+   - HONEY sent to vault for user withdrawal
+
+3. **Iterative Approach**:
+   - Vault tries up to 10 times to free enough liquidity
+   - Uses 2.5x safety multiplier to account for slippage
+   - Reverts with `InsufficientLiquidity` if still not enough after max attempts
+
+---
+
+### Rebase Flow
+
+```mermaid
+sequenceDiagram
+    participant Admin
+    participant Senior as Senior Vault<br/>(snrUSD)
+    participant RebaseLib as RebaseLib
+    participant SpilloverLib as SpilloverLib
+    participant Junior as Junior Vault
+    participant Reserve as Reserve Vault
+
+    Note over Admin,Reserve: MONTHLY REBASE EXECUTION
+
+    Admin->>Senior: rebase(lpPrice)
+    activate Senior
+    
+    Senior->>Senior: Check rebase interval<br/>(must be ≥ minRebaseInterval)
+    
+    Note over Senior: STEP 1: Calculate Fees
+    
+    Senior->>Senior: Management Fee:<br/>F_mgmt = V_s × (1% / 12)<br/>= V_s × 0.000833
+    
+    Senior->>Senior: Net Vault Value:<br/>V_s^net = V_s - F_mgmt
+    
+    Note over Senior: STEP 2: Dynamic APY Selection
+    
+    Senior->>RebaseLib: selectDynamicAPY(supply, V_s^net)
+    activate RebaseLib
+    
+    RebaseLib->>RebaseLib: Try 13% APY first<br/>S_new = S × 1.011050<br/>R_13 = V_s^net / S_new
+    
+    alt R_13 ≥ 100%
+        RebaseLib-->>Senior: ✅ Use 13% APY
+    else Try 12% APY
+        RebaseLib->>RebaseLib: S_new = S × 1.010200<br/>R_12 = V_s^net / S_new
+        alt R_12 ≥ 100%
+            RebaseLib-->>Senior: ✅ Use 12% APY
+        else Try 11% APY
+            RebaseLib->>RebaseLib: S_new = S × 1.009350<br/>R_11 = V_s^net / S_new
+            alt R_11 ≥ 100%
+                RebaseLib-->>Senior: ✅ Use 11% APY
+            else Use 11% + Backstop
+                RebaseLib-->>Senior: ⚠️ Use 11% APY<br/>+ flag backstopNeeded
+            end
+        end
+    end
+    deactivate RebaseLib
+    
+    Note over Senior: STEP 3: Determine Operating Zone
+    
+    Senior->>SpilloverLib: determineZone(R_senior)
+    activate SpilloverLib
+    
+    alt R_senior > 110%
+        SpilloverLib-->>Senior: Zone 1: PROFIT SPILLOVER 🎉
+        
+        Note over Senior,Reserve: ZONE 1: PROFIT SPILLOVER
+        
+        Senior->>SpilloverLib: calculateProfitSpillover(V_s^net, S_new)
+        SpilloverLib-->>Senior: Returns:<br/>- Excess amount<br/>- 80% to Junior<br/>- 20% to Reserve
+        
+        Senior->>Junior: transferSpillover(80% of excess)
+        Junior->>Junior: _vaultValue += spillover
+        
+        Senior->>Reserve: transferSpillover(20% of excess)
+        Reserve->>Reserve: _vaultValue += spillover
+        
+        Senior->>Senior: V_s = exactly 110% ✅
+        
+    else R_senior between 100% and 110%
+        SpilloverLib-->>Senior: Zone 2: HEALTHY BUFFER ✅
+        
+        Note over Senior,Reserve: ZONE 2: NO ACTION NEEDED
+        
+        Senior->>Senior: No spillover in either direction<br/>Everyone keeps their money ✅
+        
+    else R_senior < 100%
+        SpilloverLib-->>Senior: Zone 3: BACKSTOP NEEDED 🚨
+        
+        Note over Senior,Reserve: ZONE 3: BACKSTOP (DEPEGGED!)
+        
+        Senior->>SpilloverLib: calculateBackstop(V_s^net, S_new, V_r, V_j)
+        SpilloverLib-->>Senior: Returns:<br/>- Deficit amount<br/>- From Reserve (first)<br/>- From Junior (if needed)
+        
+        Senior->>Reserve: pullFromReserve(X_r)
+        Reserve->>Senior: Transfer X_r to Senior
+        Reserve->>Reserve: _vaultValue -= X_r
+        
+        alt Reserve sufficient
+            Note over Senior: Reserve covered deficit ✅
+        else Reserve depleted
+            Senior->>Junior: pullFromJunior(X_j)
+            Junior->>Senior: Transfer X_j to Senior
+            Junior->>Junior: _vaultValue -= X_j
+        end
+        
+        Senior->>Senior: V_s restored to 100.9% ✅
+    end
+    deactivate SpilloverLib
+    
+    Note over Senior: STEP 4: Update Rebase Index
+    
+    Senior->>Senior: I_new = I_old × (1 + r_selected × 1.02)<br/>(includes 2% performance fee)
+    
+    Senior->>Senior: _rebaseIndex = I_new
+    Senior->>Senior: _epoch++
+    Senior->>Senior: _lastRebaseTime = now
+    
+    Note over Senior: User balances grow automatically!<br/>balance = shares × I_new
+    
+    Senior->>Admin: Emit Rebase(epoch, oldIndex, newIndex, newSupply)
+    deactivate Senior
+    
+    Note over Admin,Reserve: Rebase complete!<br/>All holders see updated balances ✨
+```
+
+#### Key Points - Rebase Flow
+
+1. **Management Fee (Value Deduction)**:
+   - Calculated monthly: `V_s × (1% / 12) = V_s × 0.000833`
+   - Deducted from vault value before backing checks
+   - Sent to protocol treasury
+
+2. **Performance Fee (Token Dilution)**:
+   - 2% extra tokens minted on top of user APY
+   - Example: 11% APY → users get 0.9167%, treasury gets 0.000183% (0.9167% × 2%)
+   - Included in rebase index multiplier: `I_new = I_old × (1 + rate × 1.02)`
+   - Treasury shares grow with rebase like all other shares
+
+3. **Dynamic APY Selection (Waterfall)**:
+   - System tries to maximize returns while maintaining peg
+   - **Try 13% first** → If R ≥ 100%, use it!
+   - **Try 12% next** → If R ≥ 100%, use it!
+   - **Try 11% last** → Always use (trigger backstop if R < 100%)
+   - Result: Users always get highest APY possible
+
+4. **Three-Zone Spillover System**:
+
+   **Zone 1: Profit Spillover (R > 110%)**
+   - Senior has excess backing
+   - Share 80% with Junior, 20% with Reserve
+   - Senior returns to exactly 110%
+   - Everyone wins! 🎉
+
+   **Zone 2: Healthy Buffer (100% ≤ R ≤ 110%)**
+   - Most common operating state
+   - No action needed
+   - Senior maintains peg + buffer
+   - 10% range prevents constant spillover
+
+   **Zone 3: Backstop (R < 100%)**
+   - Senior depegged (below 1:1 backing)
+   - Emergency support triggered
+   - Reserve provides first (no cap!)
+   - Junior provides second (no cap!)
+   - Restore to 100.9% (not just 100%)
+   - Why 100.9%? Enables next month's 11% APY without depeg
+
+5. **Rebase Index Update**:
+   - Single multiplication updates all user balances
+   - No need to loop through users
+   - Gas efficient: O(1) regardless of user count
+   - Example: `I_old = 1.0 → I_new = 1.01 → 1% growth for all holders`
+
+---
+
+### Kodiak LP Management
+
+```mermaid
+sequenceDiagram
+    participant Admin
+    participant Vault as Senior/Junior/Reserve<br/>Vault
+    participant Hook as Kodiak Hook
+    participant Enso as Enso API<br/>(Off-chain)
+    participant Island as Kodiak Island<br/>(WBTC/HONEY LP)
+
+    Note over Admin,Island: ADMIN DEPLOYS IDLE FUNDS TO KODIAK
+
+    Admin->>Enso: GET /shortcut<br/>fromChainId=80094<br/>fromAddress=hook<br/>fromAmount=1000 HONEY<br/>receiver=hook<br/>spender=router
+    
+    Enso-->>Admin: Returns:<br/>- swapToToken0Aggregator<br/>- swapToToken0Data<br/>- swapToToken1Aggregator<br/>- swapToToken1Data<br/>- Expected LP out
+    
+    Note right of Admin: Enso calculates optimal<br/>HONEY → WBTC/HONEY split<br/>and provides swap calldata
+    
+    Admin->>Vault: deployToKodiak(<br/>  amount: 1000 HONEY,<br/>  minLPTokens: expectedLP × 0.98,<br/>  swapToToken0Aggregator,<br/>  swapToToken0Data,<br/>  swapToToken1Aggregator,<br/>  swapToToken1Data<br/>)
+    
+    activate Vault
+    Vault->>Vault: Check vault balance ≥ amount
+    Vault->>Vault: Record LP balance before:<br/>lpBefore = hook.getIslandLPBalance()
+    
+    Vault->>Hook: Transfer 1000 HONEY to hook
+    
+    Vault->>Hook: onAfterDepositWithSwaps(...)
+    activate Hook
+    
+    Note over Hook: Execute Swaps via Enso
+    
+    Hook->>Hook: Check aggregators whitelisted
+    
+    Hook->>Hook: Execute swap calldata:<br/>HONEY → WBTC (token0)<br/>via Enso aggregator
+    
+    Hook->>Hook: Execute swap calldata:<br/>HONEY → HONEY (token1, passthrough)<br/>via Enso aggregator
+    
+    Hook->>Hook: Now have balanced<br/>WBTC + HONEY
+    
+    Note over Hook,Island: Add Liquidity to Island
+    
+    Hook->>Island: getMintAmounts(wbtcBal, honeyBal)
+    Island-->>Hook: Returns amounts to use<br/>+ LP tokens to mint
+    
+    Hook->>Island: Approve WBTC & HONEY
+    
+    Hook->>Island: mint(lpAmount, hook)
+    activate Island
+    Island->>Island: Add liquidity to concentrated<br/>liquidity position
+    Island->>Hook: Mint LP tokens to hook
+    deactivate Island
+    
+    Hook->>Hook: Store LP tokens<br/>(held by hook, not vault!)
+    
+    Hook-->>Vault: Deployment complete
+    deactivate Hook
+    
+    Vault->>Vault: Record LP balance after:<br/>lpAfter = hook.getIslandLPBalance()
+    
+    Vault->>Vault: Calculate LP received:<br/>lpReceived = lpAfter - lpBefore
+    
+    alt lpReceived < minLPTokens
+        Vault-->>Admin: ❌ Revert: SlippageTooHigh
+    else lpReceived ≥ minLPTokens
+        Vault->>Admin: ✅ Emit KodiakDeployment<br/>(amount, lpReceived, timestamp)
+    end
+    deactivate Vault
+    
+    Note over Admin,Island: LP tokens now earning<br/>trading fees in Kodiak pool! 🎉
+```
+
+#### Key Points - Kodiak LP Management
+
+1. **Off-Chain Preparation (Enso API)**:
+   - Admin calls Enso Shortcut API to get optimal swap route
+   - Enso calculates balanced WBTC/HONEY split based on pool ratio
+   - Returns aggregator addresses + encoded swap calldata
+   - Admin passes this data to `deployToKodiak()`
+
+2. **On-Chain Execution (KodiakVaultHook)**:
+   - Hook receives HONEY from vault
+   - Executes swaps via whitelisted aggregators
+   - Swaps to balanced WBTC + HONEY ratio
+   - Adds liquidity to Kodiak Island concentrated liquidity pool
+   - LP tokens stored in hook (not transferred to vault)
+
+3. **Slippage Protection**:
+   - Admin specifies `minLPTokens` (e.g., expectedLP × 0.98 for 2% slippage)
+   - Vault checks `lpReceived ≥ minLPTokens`
+   - Reverts if slippage too high
+
+4. **LP Token Custody**:
+   - LP tokens held by **hook**, not vault
+   - Vault tracks LP value via `hook.getIslandLPBalance()`
+   - Hook liquidates LP when vault needs HONEY for withdrawals
+
+---
+
+### Spillover & Backstop
+
+```mermaid
+graph TB
+    subgraph "Three Operating Zones"
+        Z1[Zone 1: R > 110%<br/>PROFIT SPILLOVER 🎉]
+        Z2[Zone 2: 100% ≤ R ≤ 110%<br/>HEALTHY BUFFER ✅]
+        Z3[Zone 3: R < 100%<br/>BACKSTOP 🚨]
+    end
+
+    subgraph "Zone 1: Profit Spillover Flow"
+        S1[Senior: 115% backing]
+        S1 -->|Calculate excess| E1[Excess = 115% - 110% = 5%]
+        E1 -->|Split 80/20| J1[Junior gets 4%]
+        E1 -->|Split 80/20| R1[Reserve gets 1%]
+        J1 --> S2[Senior returns to 110%]
+        R1 --> S2
+    end
+
+    subgraph "Zone 2: Healthy Buffer Flow"
+        H1[Senior: 105% backing]
+        H1 -->|Check range| H2[100% ≤ R ≤ 110% ✅]
+        H2 --> H3[No action needed<br/>Everyone keeps their money]
+    end
+
+    subgraph "Zone 3: Backstop Flow"
+        B1[Senior: 98% backing<br/>DEPEGGED!]
+        B1 -->|Calculate deficit| D1[Deficit = 100.9% - 98% = 2.9%]
+        D1 -->|Reserve first| R2{Reserve has<br/>enough?}
+        R2 -->|Yes| B2[Reserve provides 2.9%<br/>Junior untouched ✅]
+        R2 -->|No| B3[Reserve provides all it can<br/>Junior covers remainder]
+        B2 --> B4[Senior restored to 100.9%]
+        B3 --> B4
+    end
+
+    Z1 -.-> S1
+    Z2 -.-> H1
+    Z3 -.-> B1
+
+    style Z1 fill:#90EE90
+    style Z2 fill:#87CEEB
+    style Z3 fill:#FFB6C1
+```
+
+#### Spillover & Backstop Examples
+
+**Example 1: Profit Spillover (Zone 1)**
+
+```
+Initial State:
+- Senior value: $1,150,000
+- Senior supply: 1,000,000 snrUSD
+- Current backing: 115%
+
+After management fee (1%/12 = 0.000833):
+- Fee: $1,150,000 × 0.000833 = $958
+- Net value: $1,149,042
+
+After rebase (use 13% APY):
+- New supply: 1,011,050 snrUSD
+- Backing: $1,149,042 / 1,011,050 = 113.6%
+
+Zone 1 Triggered (R > 110%):
+- Target (110%): $1,112,155
+- Excess: $1,149,042 - $1,112,155 = $36,887
+
+Spillover Distribution:
+- Junior receives: $36,887 × 80% = $29,510 🎉
+- Reserve receives: $36,887 × 20% = $7,377 🎉
+- Senior final: $1,112,155 (exactly 110%) ✅
+
+Result: Everyone wins! Junior and Reserve share in profits.
+```
+
+**Example 2: Healthy Buffer (Zone 2)**
+
+```
+Initial State:
+- Senior value: $1,050,000
+- Senior supply: 1,000,000 snrUSD
+- Current backing: 105%
+
+After fees + rebase:
+- Net value: $1,049,125
+- New supply: 1,009,350 snrUSD (11% APY)
+- Backing: $1,049,125 / 1,009,350 = 103.9%
+
+Zone 2 Active (100% ≤ R ≤ 110%):
+- No spillover needed
+- No backstop needed
+- Everyone keeps their money ✅
+
+Result: System operating normally in healthy buffer zone (most common state).
+```
+
+**Example 3: Backstop (Zone 3)**
+
+```
+Initial State:
+- Senior value: $980,000 (after losses)
+- Senior supply: 1,000,000 snrUSD
+- Current backing: 98% 🚨 DEPEGGED!
+
+After fees + rebase:
+- Net value: $979,183
+- New supply: 1,009,350 snrUSD (11% APY)
+- Backing: $979,183 / 1,009,350 = 97.0% 🚨
+
+Zone 3 Triggered (R < 100%):
+- Restore target (100.9%): $1,018,436
+- Deficit: $1,018,436 - $979,183 = $39,253
+
+Backstop Waterfall:
+- Reserve has: $625,000
+- Reserve provides: min($625,000, $39,253) = $39,253 ✅
+- Junior NOT needed (Reserve covered it)
+
+Senior Final State:
+- Value: $979,183 + $39,253 = $1,018,436
+- Backing: 100.9% ✅
+- Peg restored!
+
+Reserve Final State:
+- Value: $625,000 - $39,253 = $585,747 (6.3% loss)
+
+Junior Final State:
+- Value: $850,000 (untouched, Reserve took the hit)
+
+Result: System restored to sustainable state. Reserve absorbed loss, Junior protected.
+```
+
+**Example 4: Catastrophic Backstop (Reserve + Junior both hit)**
+
+```
+Initial State:
+- Senior value: $200,000 (catastrophic loss!)
+- Senior supply: 1,000,000 snrUSD
+- Current backing: 20% 🚨🚨🚨
+
+After fees + rebase:
+- Net value: $199,834
+- New supply: 1,009,350 snrUSD
+- Backing: 19.8% 🚨🚨🚨
+
+Zone 3 Triggered:
+- Restore target: $1,018,436
+- Deficit: $1,018,436 - $199,834 = $818,602
+
+Backstop Waterfall:
+- Reserve has: $625,000
+- Reserve provides: $625,000 (ALL OF IT) 💀
+- Remaining deficit: $818,602 - $625,000 = $193,602
+
+- Junior has: $850,000
+- Junior provides: $193,602 ✅
+- Deficit covered!
+
+Final State:
+- Senior: $1,018,436 (100.9%, peg restored) ✅
+- Reserve: $0 (WIPED OUT!) 💀
+- Junior: $850,000 - $193,602 = $656,398 (22.8% loss)
+
+Result: System survives catastrophic loss. Reserve wiped out, Junior takes significant hit, but Senior peg maintained.
+```
+
+---
+
+## Technical Specifications
+
+### Constants & Parameters
 
 ```solidity
-// User calls on vault contract
-function initiateCooldown() external {
-    cooldownStart[msg.sender] = block.timestamp;
-}
+// Mathematical Specification Reference: Parameters (Constants)
+
+// APY Tiers (Annual → Monthly)
+uint256 constant MAX_MONTHLY_RATE = 0.010833e18;  // 13% APY → 1.0833% monthly
+uint256 constant MID_MONTHLY_RATE = 0.010000e18;  // 12% APY → 1.0000% monthly
+uint256 constant MIN_MONTHLY_RATE = 0.009167e18;  // 11% APY → 0.9167% monthly
+
+// Fees
+uint256 constant MGMT_FEE_BPS = 100;              // 1% annual → 0.0833% monthly
+uint256 constant PERF_FEE_BPS = 200;              // 2% on rebase (token dilution)
+uint256 constant PENALTY_BPS = 500;               // 5% early withdrawal
+
+// Three-Zone System
+uint256 constant SENIOR_TARGET_BACKING = 1.10e18; // 110% (spillover trigger)
+uint256 constant SENIOR_TRIGGER_BACKING = 1.00e18; // 100% (backstop trigger)
+uint256 constant SENIOR_RESTORE_BACKING = 1.009e18; // 100.9% (backstop target)
+
+// Spillover Splits
+uint256 constant JUNIOR_SPILLOVER_SHARE = 0.80e18; // 80% to Junior
+uint256 constant RESERVE_SPILLOVER_SHARE = 0.20e18; // 20% to Reserve
+
+// Deposit Cap
+uint256 constant DEPOSIT_CAP_MULTIPLIER = 10;     // S_max = 10 × V_r
+
+// Cooldown Period (Senior only)
+uint256 constant COOLDOWN_PERIOD = 7 days;        // 604800 seconds
+
+// Precision
+uint256 constant PRECISION = 1e18;                // 18 decimals
 ```
 
-#### 4. Withdraw (After Cooldown)
+### Gas Optimization Techniques
 
-```solidity
-function withdraw(uint256 amount) external {
-    require(block.timestamp - cooldownStart[msg.sender] >= 7 days);
-    _withdraw(amount, msg.sender, msg.sender);
-}
-```
+1. **Rebase Index (O(1) updates)**:
+   - Single multiplication updates all balances
+   - No loops through users
+   - Gas cost independent of user count
+
+2. **Packed Storage**:
+   - Minimize storage slots
+   - Use `mapping` for user-specific data
+   - Pack related variables in same slot
+
+3. **Unchecked Math**:
+   - Use `unchecked {}` for safe operations
+   - Reduces gas cost by ~20% for arithmetic
+
+4. **External Calls**:
+   - Batch operations when possible
+   - Use `calldata` for large data
+   - Minimize cross-contract calls
+
+### Security Features
+
+1. **Access Control**:
+   - `AdminControlled` base contract
+   - Role-based permissions (admin, pauser)
+   - Separate admin for each component
+
+2. **Pausable**:
+   - Emergency pause for Senior vault
+   - Admin can always operate when paused
+   - Protects users during emergencies
+
+3. **UUPS Upgradeable**:
+   - Proxy pattern for upgradeability
+   - `_authorizeUpgrade()` restricted to admin
+   - Preserves state during upgrades
+
+4. **Reentrancy Protection**:
+   - Checks-Effects-Interactions pattern
+   - State updates before external calls
+   - OpenZeppelin `ReentrancyGuard` where needed
+
+5. **Slippage Protection**:
+   - `minLPTokens` parameter for LP deployments
+   - `minAssetOutBps` for LP liquidations
+   - Reverts if slippage exceeds limit
+
+6. **Whitelisting**:
+   - Depositor whitelist for controlled access
+   - Aggregator whitelist for swap safety
+   - LP protocol whitelist for integrations
+
+7. **Cooldown System**:
+   - 7-day cooldown for penalty-free withdrawals
+   - Prevents bank runs
+   - Penalty stays in vault (benefits remaining holders)
 
 ---
 
-## Troubleshooting
+## Summary
 
-### Common Issues
+The **Senior Tranche Protocol** implements a sophisticated three-vault structured finance system with:
 
-#### 1. Backend Compilation Errors
+- ✅ **Unified Senior Vault** (IS the snrUSD rebasing token)
+- ✅ **Dynamic APY Selection** (11-13% waterfall)
+- ✅ **Three-Zone Spillover System** (profit sharing + backstop)
+- ✅ **Kodiak LP Integration** (automated yield deployment)
+- ✅ **Smart Withdrawal Liquidation** (on-chain pool data, not estimates)
+- ✅ **Gas-Optimized Rebase** (O(1) balance updates)
+- ✅ **Comprehensive Security** (pausable, upgradeable, access-controlled)
 
-**Problem**: `SyntaxError: Identifier 'X' has already been declared`
+**Key Innovations**:
 
-**Solution**: Check for duplicate code blocks in `wrapper/src/utils.ts` or `wrapper/src/index.ts`
-```bash
-cd wrapper
-# Kill all Node processes
-pkill -f node
-# Restart
-npm run dev
-```
-
-#### 2. Frontend Build Errors
-
-**Problem**: `Transform failed with 1 error: ERROR: Unexpected "}"`
-
-**Solution**: Check `simulation/src/config.ts` and `simulation/src/services/api.ts` for syntax errors
-```bash
-cd simulation
-npm run dev
-```
-
-#### 3. Transaction Reverts with Empty Data
-
-**Problem**: `transaction execution reverted (data=null)`
-
-**Causes**:
-- Contract proxy not pointing to correct implementation
-- Admin not set correctly
-- LP token not whitelisted
-- Insufficient gas
-
-**Debug**:
-```bash
-# Check implementation
-cast call $SENIOR_VAULT "implementation()" --rpc-url $POLYGON_RPC_URL
-
-# Check admin
-cast call $SENIOR_VAULT "admin()" --rpc-url $POLYGON_RPC_URL
-
-# Check LP whitelist
-cast call $SENIOR_VAULT "isLPWhitelisted(address)" $LP_TOKEN --rpc-url $POLYGON_RPC_URL
-
-# Try with higher gas
-cast send ... --gas-limit 1000000
-```
-
-#### 4. Rebase Transaction Fails
-
-**Problem**: Rebase fails even with correct setup
-
-**Checklist**:
-1. ✅ All vaults have updated values?
-2. ✅ LP price is current and in wei (18 decimals)?
-3. ✅ Vaults have LP tokens to transfer?
-4. ✅ Senior vault has correct Junior/Reserve addresses?
-5. ✅ Sufficient gas (use 800000)?
-
-```bash
-# Verify vault links
-cast call $SENIOR_VAULT "juniorVault()" --rpc-url $POLYGON_RPC_URL
-cast call $SENIOR_VAULT "reserveVault()" --rpc-url $POLYGON_RPC_URL
-```
-
-#### 5. Backend Can't Connect to RPC
-
-**Problem**: `Error: could not detect network`
-
-**Solution**: Check RPC URL and rate limits
-```typescript
-// wrapper/src/constants.ts
-export const RPC_URL = "https://polygon.llamarpc.com"; // Try alternative RPC
-```
-
-#### 6. Nodemon Keeps Crashing
-
-**Problem**: `[nodemon] app crashed - waiting for file changes`
-
-**Solution**:
-```bash
-cd wrapper
-# Check nodemon.json syntax
-cat nodemon.json
-# Should be valid JSON with no extra braces
-
-# Kill all instances
-pkill -f nodemon
-# Restart
-npm run dev
-```
-
-### Debugging Tips
-
-**1. Use Cast for Direct Queries**
-```bash
-# Check any public variable
-cast call $CONTRACT "variableName()" --rpc-url $RPC_URL
-
-# Check any public function
-cast call $CONTRACT "functionName(params)" --rpc-url $RPC_URL
-```
-
-**2. Check Transaction Traces**
-```bash
-# Get transaction receipt
-cast receipt $TX_HASH --rpc-url $POLYGON_RPC_URL
-
-# Get detailed logs
-cast receipt $TX_HASH --rpc-url $POLYGON_RPC_URL -v
-```
-
-**3. Test in Isolation**
-```solidity
-// Write minimal test case
-function testIsolatedIssue() public {
-    // Reproduce exact scenario
-    vault.rebase(lpPrice);
-}
-```
-
-**4. Enable Debug Logging**
-```typescript
-// wrapper/src/utils.ts
-console.log('🔍 DEBUG:', {
-  vaultValue,
-  lpPrice,
-  backingRatio
-});
-```
+1. **Unified Architecture**: Senior vault IS the snrUSD token (simpler, more secure)
+2. **Dynamic APY**: System automatically maximizes returns (13% → 12% → 11%)
+3. **Wide Buffer Zone**: 10% healthy range (100-110%) prevents constant spillover
+4. **Fair Backstop**: Reserve first, Junior second (no caps, can be wiped out)
+5. **Accurate LP Pricing**: Uses actual pool data (not inflated estimates)
 
 ---
 
-## Additional Resources
+**Documentation Status**: ✅ Complete  
+**Last Updated**: November 14, 2025  
+**Version**: 1.0.0  
+**Author**: AI Assistant
 
-### Documentation
-- **Math Specification**: See `math_spec.md` for complete mathematical details
-- **Solidity Docs**: https://docs.soliditylang.org/
-- **Foundry Book**: https://book.getfoundry.sh/
-- **ERC4626 Standard**: https://eips.ethereum.org/EIPS/eip-4626
-
-### Smart Contract Patterns
-- **UUPS Proxy**: https://eips.ethereum.org/EIPS/eip-1822
-- **Rebase Tokens**: Study Ampleforth, Olympus DAO
-- **Structured Tranches**: Barnbridge, Saffron Finance
-
-### Network Resources
-- **Polygon RPC**: https://polygon-rpc.com
-- **Polygon Explorer**: https://polygonscan.com
-- **Gas Tracker**: https://polygonscan.com/gastracker
-
----
-
-## Quick Reference Card
-
-### Deployed Addresses (Polygon Mainnet)
-```
-Senior:  0xc87086848c82089FE2Da4997Eac4EbF42591a579
-Junior:  0xFf5462cECd8f9eC7eD737Ec0014449f559850f37
-Reserve: 0x1bf9735Df7836a9e1f3EAdb53bD38D5f5BD3cd14
-LP Token: 0xFC1569338f0efb7F7Dee9bd4AF62C9278C6C685C
-Admin:   0xE09883Cb3Fe2d973cEfE4BB28E3A3849E7e5f0A7
-```
-
-### Key Commands
-```bash
-# Backend
-cd wrapper && npm run dev
-
-# Frontend  
-cd simulation && npm run dev
-
-# Compile contracts
-forge build
-
-# Run tests
-forge test -vvv
-
-# Deploy implementation
-forge script script/DeployLPRebaseImplementations.s.sol --rpc-url $POLYGON_RPC_URL --broadcast
-
-# Upgrade proxy
-forge script script/UpgradeLPRebaseProxies.s.sol --rpc-url $POLYGON_RPC_URL --broadcast
-
-# Manual rebase
-cast send $SENIOR_VAULT "rebase(uint256)" "6325400000000000000" \
-  --rpc-url $POLYGON_RPC_URL \
-  --private-key $ADMIN_PRIVATE_KEY \
-  --gas-limit 800000
-```
-
-### Three Operating Zones
-```
->110%    : Profit spillover (Junior 80%, Reserve 20%)
-100-110% : Healthy buffer (NO ACTION) ← Most common
-<100%    : Backstop (Reserve → Junior → Senior)
-```
-
-### Dynamic APY Selection
-```
-Try 13% first (greedy)
-  ↓ if backing < 100%, try 12%
-  ↓ if backing < 100%, use 11% (+ backstop if needed)
-Always maximize APY while maintaining peg!
-```
-
----
-
-## Support & Contact
-
-For questions, issues, or contributions:
-- Create an issue in the repository
-- Contact the dev team
-- Review `math_spec.md` for mathematical details
-
----
-
-**Last Updated**: November 12, 2025
-**Version**: 3.0.0 (On-Chain Oracle & Kodiak Integration)
+For mathematical specifications, see: `math_spec.md`
 
