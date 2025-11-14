@@ -2,6 +2,25 @@
 
 > **A three-vault structured investment protocol with dynamic rebase mechanics and two-way profit/loss sharing**
 
+## 🆕 Version 3.0 - On-Chain Oracle & Kodiak Integration
+
+**New Features**:
+- ✅ **Pure On-Chain Oracle**: Calculate LP prices without Chainlink (stablecoin pools)
+- ✅ **Single Flag System**: `_useCalculatedValue` controls entire system trustlessness
+- ✅ **Kodiak Islands**: Single-sided liquidity + auto-compounding on Berachain
+- ✅ **Validation System**: Prevent admin manipulation with on-chain checks
+- ✅ **Hook Pattern**: Modular DeFi integration (easy to swap protocols)
+
+**All three vaults** (Senior, Junior, Reserve) now support:
+- Automatic vault value calculation
+- Automatic LP price calculation (Senior only for rebase)
+- Kodiak deployment with slippage protection
+- Sweep idle stablecoin dust to earning positions
+
+**Read More**: See [On-Chain Oracle & Kodiak Integration](#on-chain-oracle--kodiak-integration)
+
+---
+
 ## Table of Contents
 
 1. [System Overview](#system-overview)
@@ -100,7 +119,8 @@ src/
     ├── MathLib.sol       # Fixed-point math
     ├── RebaseLib.sol     # Rebase calculations
     ├── FeeLib.sol        # Fee calculations
-    └── SpilloverLib.sol  # Spillover logic
+    ├── SpilloverLib.sol  # Spillover logic
+    └── LPPriceOracle.sol # On-chain LP price calculation
 ```
 
 ### Key Design Patterns
@@ -125,6 +145,525 @@ src/
 - During spillover/backstop, LP tokens are transferred (not stablecoins)
 - Admin provides current LP price during rebase
 - Contracts calculate LP token amounts based on USD value needed
+
+**5. On-Chain Oracle System (NEW)**
+- Pure on-chain LP price calculation (no Chainlink needed for stablecoin pools)
+- Automatic vault value calculation from LP holdings
+- Single flag (`_useCalculatedValue`) controls entire system trustlessness
+- Admin validation with configurable deviation threshold
+
+**6. Kodiak Islands Integration (NEW)**
+- Single-sided liquidity provision for vaults
+- Secure `deployToKodiak()` function with slippage protection
+- `sweepToKodiak()` for deploying idle stablecoin dust
+- Hook pattern for modular DeFi integration
+
+---
+
+## On-Chain Oracle & Kodiak Integration
+
+### Overview
+
+**Problem**: Traditional DeFi vaults rely on off-chain keepers to calculate LP prices and vault values, creating centralization risks and requiring trust in admin inputs.
+
+**Solution**: Our system implements a **pure on-chain oracle** that calculates LP prices directly from pool reserves, enabling fully trustless vault operations when working with stablecoin-paired pools.
+
+### Architecture
+
+```
+┌─────────────────────────────────────────────────────────────┐
+│                    VAULT OPERATIONS                         │
+│  (deposit, withdraw, rebase, spillover, backstop)           │
+└────────────────┬────────────────────────────────────────────┘
+                 │
+                 │ Uses _useCalculatedValue flag
+                 │
+         ┌───────┴────────┐
+         │                │
+    ┌────▼─────┐    ┌────▼──────┐
+    │ AUTOMATIC │    │  MANUAL   │
+    │   MODE    │    │   MODE    │
+    │ (flag=true)│   │(flag=false)│
+    └────┬─────┘    └────┬──────┘
+         │                │
+         │                │
+    ┌────▼────────────────▼──────┐
+    │   LPPriceOracle.sol        │
+    │  (Pure On-Chain Calc)      │
+    └────┬───────────────────────┘
+         │
+         │ Reads from
+         │
+    ┌────▼───────────────────────┐
+    │  Kodiak Island Contract    │
+    │  • token0                  │
+    │  • token1                  │
+    │  • getUnderlyingBalances() │
+    │  • totalSupply()           │
+    └────────────────────────────┘
+```
+
+### LPPriceOracle - On-Chain Price Calculation
+
+#### How It Works
+
+For **stablecoin-paired pools** (e.g., USDC-BERA), we can calculate the LP token price purely on-chain:
+
+**Formula**:
+```solidity
+// 1. Get pool reserves
+(uint256 stablecoinAmount, uint256 otherTokenAmount) = island.getUnderlyingBalances();
+
+// 2. Calculate other token's price using the stablecoin as reference
+//    Since stablecoin = $1, we can derive the other token's price:
+otherTokenPrice = stablecoinAmount / otherTokenAmount;
+
+// 3. Calculate total pool value in USD
+totalValue = stablecoinAmount + (otherTokenAmount × otherTokenPrice);
+
+// 4. Calculate LP token price
+lpPrice = totalValue / lpTotalSupply;
+```
+
+**Example**: Pool has 100K USDC + 10K BERA
+```
+BERA price = 100,000 / 10,000 = $10
+Total value = $100,000 + (10,000 × $10) = $200,000
+LP supply = 31,622.77 (geometric mean)
+LP price = $200,000 / 31,622.77 = $6.32 ✅
+```
+
+#### Why This Works
+
+1. **Stablecoin = $1**: USDC/USDT/USDE always = $1 USD (by design)
+2. **Pool Ratio**: The ratio of reserves automatically reflects market price
+3. **Arbitrage**: Keeps pool balanced via MEV bots
+4. **No Oracle Needed**: All data is already on-chain in the Island contract
+
+#### Implementation
+
+```solidity
+// src/libraries/LPPriceOracle.sol
+library LPPriceOracle {
+    /**
+     * @notice Calculate LP price from Kodiak Island reserves
+     * @param island Kodiak Island address
+     * @param stablecoinIsToken0 True if token0 is the stablecoin
+     * @return lpPrice LP token price in USD (18 decimals)
+     */
+    function calculateLPPrice(address island, bool stablecoinIsToken0) 
+        internal view returns (uint256 lpPrice) 
+    {
+        IKodiakIsland islandContract = IKodiakIsland(island);
+        
+        // Get reserves and LP supply
+        (uint256 amt0, uint256 amt1) = islandContract.getUnderlyingBalances();
+        uint256 totalLP = islandContract.totalSupply();
+        
+        // Normalize decimals to 18
+        uint256 amt0In18 = _normalize(amt0, token0.decimals());
+        uint256 amt1In18 = _normalize(amt1, token1.decimals());
+        
+        uint256 totalValue;
+        if (stablecoinIsToken0) {
+            // Calculate token1 price from pool ratio
+            uint256 token1Price = (amt0In18 * 1e18) / amt1In18;
+            uint256 token1Value = (amt1In18 * token1Price) / 1e18;
+            totalValue = amt0In18 + token1Value;
+        } else {
+            // Calculate token0 price from pool ratio
+            uint256 token0Price = (amt1In18 * 1e18) / amt0In18;
+            uint256 token0Value = (amt0In18 * token0Price) / 1e18;
+            totalValue = token0Value + amt1In18;
+        }
+        
+        // LP price = total value / total supply
+        lpPrice = (totalValue * 1e18) / totalLP;
+    }
+    
+    /**
+     * @notice Calculate total vault value from LP + idle stablecoin
+     * @return totalVaultValue Total vault value in USD (18 decimals)
+     */
+    function calculateTotalVaultValue(
+        address hookAddress,
+        address islandAddress,
+        bool stablecoinIsToken0,
+        address vaultAddress,
+        address stablecoinAddress
+    ) internal view returns (uint256 totalVaultValue) {
+        // 1. Value from LP holdings in hook
+        uint256 lpBalance = IKodiakVaultHook(hookAddress).getIslandLPBalance();
+        uint256 lpValue = 0;
+        if (lpBalance > 0) {
+            uint256 lpPrice = calculateLPPrice(islandAddress, stablecoinIsToken0);
+            lpValue = (lpBalance * lpPrice) / 1e18;
+        }
+        
+        // 2. Value from idle stablecoin in vault
+        uint256 idleBalance = IERC20(stablecoinAddress).balanceOf(vaultAddress);
+        uint256 idleValue = _normalize(idleBalance, stablecoin.decimals());
+        
+        totalVaultValue = lpValue + idleValue;
+    }
+}
+```
+
+### The Flag System
+
+#### What is `_useCalculatedValue`?
+
+A **single boolean flag** that controls whether the system operates in **trustless automatic mode** or **keeper-managed manual mode**.
+
+```solidity
+// State variable in all vaults
+bool internal _useCalculatedValue;  // true = automatic, false = manual
+```
+
+#### What It Controls
+
+| Feature | Flag = true (AUTOMATIC) | Flag = false (MANUAL) |
+|---------|------------------------|----------------------|
+| **Vault Value** (`vaultValue()`) | Calculated on-chain from LP holdings | Uses admin-set `_vaultValue` |
+| **LP Price** (`rebase()`) | Calculated on-chain from pool ratio | Admin must provide manually |
+| **Trust Model** | 100% trustless | Requires trusted admin/keeper |
+| **Gas Cost** | Slightly higher (calculations) | Slightly lower (reads storage) |
+| **Use Case** | Stablecoin-paired pools | Volatile pairs or complex strategies |
+
+#### Configuration
+
+```solidity
+// Configure oracle for automatic mode
+vault.configureOracle(
+    KODIAK_ISLAND_ADDRESS,  // Island contract
+    true,                   // stablecoinIsToken0 (USDC is token0)
+    500,                    // maxDeviationBps (5% max deviation)
+    true,                   // enableValidation (validate admin inputs)
+    true                    // 🔥 useCalculatedValue (THE FLAG!)
+);
+```
+
+**Parameters Explained**:
+- `island`: Kodiak Island contract address for the LP pool
+- `stablecoinIsToken0`: Which token in the pair is the stablecoin (determines calculation)
+- `maxDeviationBps`: Maximum allowed deviation when validating admin inputs (basis points, 500 = 5%)
+- `enableValidation`: Enable on-chain validation of admin-provided values
+- `useCalculatedValue`: **THE FLAG** - true for automatic, false for manual
+
+#### Usage Examples
+
+**Scenario 1: Fully Automatic (Recommended for Stablecoin Pools)**
+```solidity
+// Setup (one-time)
+vault.configureOracle(ISLAND, true, 500, true, true);
+
+// Daily operations
+vault.deposit(1000e6, user);  // ✅ Auto-calculates vault value
+vault.rebase();               // ✅ Auto-calculates LP price
+// NO keeper bot needed! 🎉
+```
+
+**Scenario 2: Manual with Validation (Hybrid)**
+```solidity
+// Setup
+vault.configureOracle(ISLAND, true, 500, true, false);  // flag = false
+
+// Keeper bot calculates off-chain
+uint256 offChainValue = keeper.calculateValue();
+vault.setVaultValue(offChainValue);  // ✅ Validated against on-chain calc (±5%)
+
+// Rebase with manual LP price
+uint256 lpPrice = keeper.getLPPrice();
+vault.rebase(lpPrice);
+```
+
+**Scenario 3: Query-Only (Best of Both Worlds)**
+```solidity
+// Check both values
+uint256 calculated = vault.getCalculatedVaultValue();
+uint256 stored = vault.getStoredVaultValue();
+uint256 lpPrice = vault.getCalculatedLPPrice();
+
+// Keeper decides based on deviation
+if (abs(calculated - stored) / calculated < 0.01) {
+    // <1% deviation, use automatic
+    vault.rebase();
+} else {
+    // Use manual with override
+    vault.rebase(lpPrice);
+}
+```
+
+### Validation System
+
+Even in **manual mode**, the on-chain oracle provides a **safety check**:
+
+```solidity
+function setVaultValue(uint256 newValue) public onlyAdmin {
+    // If validation enabled, compare with on-chain calculation
+    if (_oracleEnabled && _oracleIsland != address(0)) {
+        uint256 calculatedValue = LPPriceOracle.calculateTotalVaultValue(...);
+        
+        // Calculate deviation
+        uint256 deviation = abs(newValue - calculatedValue) / calculatedValue;
+        
+        // Revert if deviation too high
+        if (deviation > _maxDeviationBps / 10000) {
+            revert VaultValueDeviationTooHigh(newValue, calculatedValue, deviation);
+        }
+    }
+    
+    _vaultValue = newValue;  // ✅ Validated!
+}
+```
+
+**Benefits**:
+- Prevents admin from setting malicious values (>5% off)
+- Catches errors in keeper bot calculations
+- Provides on-chain audit trail
+- Can be used even when flag=false
+
+### Kodiak Islands Integration
+
+#### What is Kodiak?
+
+**Kodiak Islands** are concentrated liquidity vaults on Berachain (like Beefy or Yearn for Uniswap V3). They:
+- Wrap Uniswap V3 positions into ERC20 LP tokens
+- Auto-compound trading fees
+- Auto-rebalance positions
+- Provide single-sided liquidity support
+
+#### Hook Pattern
+
+We use a **hook pattern** to integrate with Kodiak without tight coupling:
+
+```
+┌──────────────┐         ┌───────────────────┐         ┌─────────────┐
+│    Vault     │────────►│ KodiakVaultHook   │────────►│   Kodiak    │
+│  (Senior/    │         │   (Adapter)       │         │   Island    │
+│   Junior/    │         │                   │         │             │
+│   Reserve)   │         │ • Swaps           │         │ • LP Tokens │
+└──────────────┘         │ • LP management   │         │ • Balances  │
+                         └───────────────────┘         └─────────────┘
+```
+
+**Benefits**:
+- Vault doesn't need to know Kodiak details
+- Easy to swap strategies (Aave, Compound, etc.)
+- Isolated swap logic and aggregator management
+- Can upgrade hook without upgrading vault
+
+#### Deploy to Kodiak
+
+**Admin-only function** to securely deploy vault funds to Kodiak:
+
+```solidity
+function deployToKodiak(
+    uint256 amount,
+    uint256 minLPTokens,      // Slippage protection
+    address swapToToken0Aggregator,
+    bytes calldata swapToToken0Data,
+    address swapToToken1Aggregator,
+    bytes calldata swapToToken1Data
+) external onlyAdmin {
+    // 1. Transfer stablecoins to hook
+    _stablecoin.transfer(address(kodiakHook), amount);
+    
+    // 2. Hook swaps to balanced pair and mints LP
+    kodiakHook.onAfterDepositWithSwaps(
+        amount,
+        swapToToken0Aggregator,
+        swapToToken0Data,
+        swapToToken1Aggregator,
+        swapToToken1Data
+    );
+    
+    // 3. Verify slippage protection
+    uint256 lpReceived = kodiakHook.getIslandLPBalance() - lpBefore;
+    require(lpReceived >= minLPTokens, "Slippage too high");
+}
+```
+
+**Flow**:
+1. Admin gets swap quote from Kodiak API (off-chain)
+2. Kodiak API returns optimal swap routes and calldata
+3. Admin calls `deployToKodiak()` with verified params
+4. Vault transfers stablecoins to hook
+5. Hook executes swaps via whitelisted aggregators
+6. Hook mints Kodiak Island LP tokens
+7. LP tokens held in hook, accounted in vault value
+
+**Security**:
+- Only admin can deploy
+- Swap aggregators must be whitelisted
+- Slippage protection (`minLPTokens`)
+- Atomic operation (reverts on failure)
+
+#### Sweep to Kodiak
+
+**Convenience function** to deploy all idle stablecoin:
+
+```solidity
+function sweepToKodiak(
+    uint256 minLPTokens,
+    address swapToToken0Aggregator,
+    bytes calldata swapToToken0Data,
+    address swapToToken1Aggregator,
+    bytes calldata swapToToken1Data
+) external onlyAdmin {
+    // Get all idle stablecoin
+    uint256 idle = _stablecoin.balanceOf(address(this));
+    
+    // Deploy everything
+    deployToKodiak(idle, minLPTokens, ...);
+}
+```
+
+**Use Case**: After many user deposits, sweep accumulated "dust" into Kodiak to earn yield.
+
+### Integration Across All Vaults
+
+**All three vaults** (Senior, Junior, Reserve) have the oracle and Kodiak integration:
+
+| Vault | Vault Value (Auto) | LP Price (Auto) | Kodiak Deployment |
+|-------|-------------------|-----------------|-------------------|
+| **Senior** | ✅ | ✅ (for rebase) | ✅ |
+| **Junior** | ✅ | N/A (receives from Senior) | ✅ |
+| **Reserve** | ✅ | N/A (receives from Senior) | ✅ |
+
+**Why Junior/Reserve need it**:
+- For their own deposit/withdrawal share calculations
+- To deploy their own funds to Kodiak independently
+- To calculate spillover value when receiving LP tokens
+
+### Benefits Summary
+
+#### 1. Trustlessness
+- No reliance on off-chain keepers for price data
+- Fully verifiable on-chain calculations
+- Censorship-resistant operations
+
+#### 2. Security
+- Validation prevents admin manipulation
+- Slippage protection on Kodiak deployments
+- Whitelisted aggregators for swaps
+
+#### 3. Flexibility
+- Can switch between automatic/manual mode anytime
+- Query calculated values even in manual mode
+- Gradual migration path (test manual, then go automatic)
+
+#### 4. Gas Efficiency
+- On-chain calculation only when needed
+- Can use stored values for better UX
+- Batched operations supported
+
+#### 5. Transparency
+- All calculations auditable on-chain
+- Deviation events logged
+- Price history traceable
+
+### Migration Guide
+
+**Existing Vaults → Add Oracle System**
+
+```solidity
+// Step 1: Deploy with oracle support (already done!)
+// All vaults now inherit oracle capabilities
+
+// Step 2: Start in manual mode (safe)
+vault.configureOracle(
+    ISLAND,
+    true,      // stablecoinIsToken0
+    500,       // 5% max deviation
+    true,      // enable validation
+    false      // 👈 Start manual
+);
+
+// Step 3: Test validation
+// Keeper continues setting values, but they're validated now
+vault.setVaultValue(calculatedValue);  // ✅ Checked against on-chain
+
+// Step 4: Test automatic queries
+uint256 calc = vault.getCalculatedVaultValue();
+uint256 stored = vault.getStoredVaultValue();
+// Compare and verify accuracy
+
+// Step 5: Switch to automatic when confident
+vault.configureOracle(
+    ISLAND,
+    true,
+    500,
+    true,
+    true       // 👈 Now automatic!
+);
+
+// Step 6: Simplify operations
+vault.rebase();  // No parameters needed! 🎉
+```
+
+### Real-World Example
+
+**USDC-BERA Pool on Kodiak (Berachain)**
+
+```solidity
+// Setup
+seniorVault.setKodiakHook(KODIAK_HOOK_ADDRESS);
+seniorVault.configureOracle(
+    USDC_BERA_ISLAND,  // 0x123...
+    true,              // USDC is token0
+    500,               // 5% max deviation
+    true,              // validation on
+    true               // automatic mode ✅
+);
+
+// Admin deploys idle USDC to Kodiak
+// (Gets swap quote from Kodiak API first)
+seniorVault.deployToKodiak(
+    100000e6,    // 100K USDC
+    15000e18,    // Min 15K LP tokens (slippage protection)
+    ROUTER_ADDRESS,
+    swapData0,
+    ROUTER_ADDRESS,
+    swapData1
+);
+
+// User deposits
+user.deposit(1000e6, userAddress);
+// ✅ Shares calculated using on-chain vault value
+// ✅ No keeper needed!
+
+// Monthly rebase
+admin.rebase();
+// ✅ LP price calculated on-chain: $6.32
+// ✅ Spillover LP transfers use correct amounts
+// ✅ Fully trustless!
+```
+
+### Testing
+
+See comprehensive test suite:
+- `test/unit/LPPriceOracle.t.sol` - LP price calculation tests
+- `test/unit/OracleIntegration.t.sol` - Oracle validation tests
+- `test/unit/KodiakIntegration.t.sol` - Kodiak deployment tests
+- `test/integration/KodiakOracleIntegration.t.sol` - End-to-end tests
+- `test/e2e/KodiakOracleE2E.t.sol` - Full system tests
+
+**Key Test Case** (100K USDC + 10K OTHER):
+```solidity
+function test_realPool_100K_USDC_10K_OTHER() public {
+    // Setup mock Island
+    island.setReserves(100000e6, 10000e18);  // 100K USDC, 10K OTHER
+    island.setTotalSupply(31622.77e18);      // LP supply = sqrt(100K × 10K)
+    
+    // Calculate LP price
+    uint256 lpPrice = LPPriceOracle.calculateLPPrice(address(island), true);
+    
+    // Verify: $6.32 ✅
+    assertGt(lpPrice, 6.32e18);
+    assertLt(lpPrice, 6.33e18);
+}
+```
 
 ---
 
@@ -1545,6 +2084,6 @@ For questions, issues, or contributions:
 
 ---
 
-**Last Updated**: November 7, 2025
-**Version**: 2.0.0 (LP Token Transfer Update)
+**Last Updated**: November 12, 2025
+**Version**: 3.0.0 (On-Chain Oracle & Kodiak Integration)
 

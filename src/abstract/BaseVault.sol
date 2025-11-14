@@ -5,10 +5,12 @@ import {ERC4626Upgradeable} from "@openzeppelin/contracts-upgradeable/token/ERC2
 import {ERC20Upgradeable} from "@openzeppelin/contracts-upgradeable/token/ERC20/ERC20Upgradeable.sol";
 import {ERC20BurnableUpgradeable} from "@openzeppelin/contracts-upgradeable/token/ERC20/extensions/ERC20BurnableUpgradeable.sol";
 import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
+import {SafeERC20} from "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
 import {UUPSUpgradeable} from "@openzeppelin/contracts-upgradeable/proxy/utils/UUPSUpgradeable.sol";
 import {IVault} from "../interfaces/IVault.sol";
 import {MathLib} from "../libraries/MathLib.sol";
 import {AdminControlled} from "./AdminControlled.sol";
+import {IKodiakVaultHook} from "../integrations/IKodiakVaultHook.sol";
 
 /**
  * @title BaseVault
@@ -22,6 +24,7 @@ import {AdminControlled} from "./AdminControlled.sol";
  */
 abstract contract BaseVault is ERC4626Upgradeable, IVault, AdminControlled, UUPSUpgradeable {
     using MathLib for uint256;
+    using SafeERC20 for IERC20;
     
     /// @dev Struct for LP holdings data
     struct LPHolding {
@@ -51,6 +54,9 @@ abstract contract BaseVault is ERC4626Upgradeable, IVault, AdminControlled, UUPS
     /// @dev Whitelisted depositors
     mapping(address => bool) internal _whitelistedDepositors;
     
+    /// @dev Kodiak integration
+    IKodiakVaultHook public kodiakHook;
+    
     /// @dev Constants
     int256 internal constant MIN_PROFIT_BPS = -5000;  // -50% minimum
     int256 internal constant MAX_PROFIT_BPS = 10000;  // +100% maximum
@@ -64,6 +70,8 @@ abstract contract BaseVault is ERC4626Upgradeable, IVault, AdminControlled, UUPS
     event WhitelistedLPTokenRemoved(address indexed lpToken);
     event LPInvestment(address indexed lp, uint256 amount);
     event LPTokensWithdrawn(address indexed lpToken, address indexed lp, uint256 amount);
+    event KodiakDeployment(uint256 amount, uint256 lpReceived, uint256 timestamp);
+    event LiquidityFreedForWithdrawal(uint256 requested, uint256 freedFromLP);
     
     /// @dev Errors (ZeroAddress inherited from AdminControlled)
     error InvalidProfitRange();
@@ -72,6 +80,10 @@ abstract contract BaseVault is ERC4626Upgradeable, IVault, AdminControlled, UUPS
     error OnlyWhitelistedDepositor();
     error WhitelistedLPNotFound();
     error LPAlreadyWhitelisted();
+    error KodiakHookNotSet();
+    error SlippageTooHigh();
+    error WrongVault();
+    error InsufficientLiquidity();
     
     /// @dev Modifiers
     modifier onlySeniorVault() {
@@ -305,6 +317,153 @@ abstract contract BaseVault is ERC4626Upgradeable, IVault, AdminControlled, UUPS
         
         emit LPTokensWithdrawn(lpToken, lp, withdrawAmount);
     }
+    
+    // ============================================
+    // Kodiak Integration
+    // ============================================
+    
+    /**
+     * @notice Set Kodiak hook address
+     * @dev Automatically whitelists the hook as an LP protocol
+     * @param hook Address of KodiakVaultHook contract
+     */
+    function setKodiakHook(address hook) external onlyAdmin {
+        // Remove old hook from whitelist if exists
+        if (address(kodiakHook) != address(0)) {
+            _stablecoin.forceApprove(address(kodiakHook), 0);
+            
+            // Remove from whitelist
+            if (_isWhitelistedLP[address(kodiakHook)]) {
+                _removeWhitelistedLPInternal(address(kodiakHook));
+            }
+        }
+        
+        // Validate new hook
+        if (hook != address(0)) {
+            (bool ok, bytes memory data) = hook.staticcall(abi.encodeWithSignature("vault()"));
+            if (!(ok && data.length >= 32 && abi.decode(data, (address)) == address(this))) revert WrongVault();
+            
+            // Automatically whitelist the new hook so investInLP() can send funds to it
+            if (!_isWhitelistedLP[hook]) {
+                _whitelistedLPs.push(hook);
+                _isWhitelistedLP[hook] = true;
+                emit WhitelistedLPAdded(hook);
+            }
+        }
+        
+        kodiakHook = IKodiakVaultHook(hook);
+    }
+    
+    /**
+     * @notice Deploy funds to Kodiak with verified swap parameters
+     * @dev Admin-only, secure deployment with slippage protection
+     * @param amount Amount of stablecoins to deploy
+     * @param minLPTokens Minimum LP tokens to receive (slippage protection)
+     * @param swapToToken0Aggregator DEX aggregator for token0 swap
+     * @param swapToToken0Data Swap calldata for token0
+     * @param swapToToken1Aggregator DEX aggregator for token1 swap
+     * @param swapToToken1Data Swap calldata for token1
+     */
+    function deployToKodiak(
+        uint256 amount,
+        uint256 minLPTokens,
+        address swapToToken0Aggregator,
+        bytes calldata swapToToken0Data,
+        address swapToToken1Aggregator,
+        bytes calldata swapToToken1Data
+    ) external onlyAdmin {
+        if (amount == 0) revert InvalidAmount();
+        if (address(kodiakHook) == address(0)) revert KodiakHookNotSet();
+        
+        // Check vault has enough idle stablecoin
+        uint256 vaultBalance = _stablecoin.balanceOf(address(this));
+        if (vaultBalance < amount) revert InsufficientBalance();
+        
+        // Record LP balance before deployment
+        uint256 lpBefore = kodiakHook.getIslandLPBalance();
+        
+        // Transfer stablecoins to hook
+        _stablecoin.safeTransfer(address(kodiakHook), amount);
+        
+        // Deploy to Kodiak with verified swap params
+        kodiakHook.onAfterDepositWithSwaps(
+            amount,
+            swapToToken0Aggregator,
+            swapToToken0Data,
+            swapToToken1Aggregator,
+            swapToToken1Data
+        );
+        
+        // Verify slippage protection
+        uint256 lpAfter = kodiakHook.getIslandLPBalance();
+        uint256 lpReceived = lpAfter - lpBefore;
+        if (lpReceived < minLPTokens) revert SlippageTooHigh();
+        
+        emit KodiakDeployment(amount, lpReceived, block.timestamp);
+    }
+    
+    /**
+     * @notice Deploy all idle stablecoins to Kodiak (sweep dust)
+     * @dev Convenience function to deploy entire vault balance without specifying amount
+     * @param minLPTokens Minimum LP tokens to receive (slippage protection)
+     * @param swapToToken0Aggregator DEX aggregator for token0 swap
+     * @param swapToToken0Data Swap calldata for token0
+     * @param swapToToken1Aggregator DEX aggregator for token1 swap
+     * @param swapToToken1Data Swap calldata for token1
+     */
+    function sweepToKodiak(
+        uint256 minLPTokens,
+        address swapToToken0Aggregator,
+        bytes calldata swapToToken0Data,
+        address swapToToken1Aggregator,
+        bytes calldata swapToToken1Data
+    ) external onlyAdmin {
+        if (address(kodiakHook) == address(0)) revert KodiakHookNotSet();
+        
+        // Get all idle stablecoin balance
+        uint256 idle = _stablecoin.balanceOf(address(this));
+        if (idle == 0) revert InvalidAmount();
+        
+        // Deploy all idle funds
+        uint256 lpBefore = kodiakHook.getIslandLPBalance();
+        
+        // Transfer all idle stablecoins to hook
+        _stablecoin.safeTransfer(address(kodiakHook), idle);
+        
+        // Deploy to Kodiak with verified swap params
+        kodiakHook.onAfterDepositWithSwaps(
+            idle,
+            swapToToken0Aggregator,
+            swapToToken0Data,
+            swapToToken1Aggregator,
+            swapToToken1Data
+        );
+        
+        // Verify slippage protection
+        uint256 lpAfter = kodiakHook.getIslandLPBalance();
+        uint256 lpReceived = lpAfter - lpBefore;
+        if (lpReceived < minLPTokens) revert SlippageTooHigh();
+        
+        emit KodiakDeployment(idle, lpReceived, block.timestamp);
+    }
+    
+    /**
+     * @notice Internal helper to remove whitelisted LP
+     * @dev Uses swap-and-pop for gas efficiency
+     */
+    function _removeWhitelistedLPInternal(address lp) internal {
+        // Find and remove from array using swap-and-pop
+        for (uint256 i = 0; i < _whitelistedLPs.length; i++) {
+            if (_whitelistedLPs[i] == lp) {
+                _whitelistedLPs[i] = _whitelistedLPs[_whitelistedLPs.length - 1];
+                _whitelistedLPs.pop();
+                break;
+            }
+        }
+        
+        // Remove from mapping
+        _isWhitelistedLP[lp] = false;
+    }
 
     /**
      * @notice Set Senior vault address (fixes circular dependency)
@@ -367,9 +526,10 @@ abstract contract BaseVault is ERC4626Upgradeable, IVault, AdminControlled, UUPS
     
     /**
      * @notice Get current vault value
-     * @dev Reference: State Variables (V_s, V_j, V_r)
+     * @dev Returns admin-updated vault value
+     * @return value Current vault value in USD (18 decimals)
      */
-    function vaultValue() public view virtual returns (uint256) {
+    function vaultValue() public view virtual returns (uint256 value) {
         return _vaultValue;
     }
     
@@ -483,7 +643,6 @@ abstract contract BaseVault is ERC4626Upgradeable, IVault, AdminControlled, UUPS
      */
     function setVaultValue(uint256 newValue) public virtual onlyAdmin {
         // Allow 0 to enable truly empty vault state for first deposit
-        
         uint256 oldValue = _vaultValue;
         _vaultValue = newValue;
         _lastUpdateTime = block.timestamp;
@@ -557,6 +716,76 @@ abstract contract BaseVault is ERC4626Upgradeable, IVault, AdminControlled, UUPS
         _burn(account, amount);
     }
 
+    // ============================================
+    // ERC4626 Internal Overrides
+    // ============================================
+    
+    /**
+     * @notice Override ERC4626 internal withdraw to ensure liquidity
+     * @dev Automatically frees up liquidity from Kodiak LP if needed using iterative approach
+     * @param caller Address calling the withdrawal
+     * @param receiver Address receiving the assets
+     * @param owner Owner of the shares
+     * @param assets Amount of assets to withdraw
+     * @param shares Amount of shares to burn
+     */
+    function _withdraw(
+        address caller,
+        address receiver,
+        address owner,
+        uint256 assets,
+        uint256 shares
+    ) internal virtual override {
+        // Iterative approach: Try up to 3 times to free up liquidity
+        uint256 maxAttempts = 3;
+        uint256 totalFreed = 0;
+        
+        for (uint256 i = 0; i < maxAttempts; i++) {
+            uint256 vaultBalance = _stablecoin.balanceOf(address(this));
+            
+            if (vaultBalance >= assets) {
+                break; // We have enough!
+            }
+            
+            if (address(kodiakHook) == address(0)) {
+                revert InsufficientLiquidity();
+            }
+            
+            // Calculate how much more we need
+            uint256 needed = assets - vaultBalance;
+            uint256 balanceBefore = vaultBalance;
+            
+            // Call hook to liquidate LP with smart estimation
+            try kodiakHook.liquidateLPForAmount(needed) {
+                uint256 balanceAfter = _stablecoin.balanceOf(address(this));
+                uint256 freedThisRound = balanceAfter > balanceBefore ? balanceAfter - balanceBefore : 0;
+                totalFreed += freedThisRound;
+                
+                // If we didn't get any more funds, stop trying
+                if (freedThisRound == 0) {
+                    break;
+                }
+            } catch {
+                // If hook call fails, stop trying
+                break;
+            }
+        }
+        
+        // Final check: do we have enough now?
+        uint256 finalBalance = _stablecoin.balanceOf(address(this));
+        if (finalBalance < assets) {
+            revert InsufficientLiquidity();
+        }
+        
+        // Emit event if we had to free up liquidity
+        if (totalFreed > 0) {
+            emit LiquidityFreedForWithdrawal(assets, totalFreed);
+        }
+        
+        // Call parent implementation to handle actual withdrawal
+        super._withdraw(caller, receiver, owner, assets, shares);
+    }
+    
     // ============================================
     // Internal Hooks
     // ============================================

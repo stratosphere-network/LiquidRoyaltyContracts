@@ -4,6 +4,7 @@ pragma solidity ^0.8.20;
 import {UnifiedSeniorVault} from "../abstract/UnifiedSeniorVault.sol";
 import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 
+
 /**
  * @title UnifiedConcreteSeniorVault
  * @notice Concrete implementation of unified Senior vault (IS snrUSD token)
@@ -66,23 +67,24 @@ contract UnifiedConcreteSeniorVault is UnifiedSeniorVault {
     function _transferToJunior(uint256 amountUSD, uint256 lpPrice) internal override {
         if (amountUSD == 0) return;
         if (lpPrice == 0) return;
-        
-        // Get whitelisted LP tokens (should be only one)
-        if (_whitelistedLPTokens.length == 0) return;
-        address lpToken = _whitelistedLPTokens[0];
+        if (address(kodiakHook) == address(0)) return;
         
         // Calculate LP amount from USD amount
         // LP amount = (amountUSD * 1e18) / lpPrice
         uint256 lpAmount = (amountUSD * 1e18) / lpPrice;
         
-        // Check actual LP token balance
-        uint256 lpBalance = IERC20(lpToken).balanceOf(address(this));
+        // Check Senior Hook's LP token balance
+        uint256 lpBalance = kodiakHook.getIslandLPBalance();
         uint256 actualLPAmount = lpAmount > lpBalance ? lpBalance : lpAmount;
         
         if (actualLPAmount == 0) return; // No LP tokens available
         
-        // Transfer LP tokens from this vault to Junior vault
-        IERC20(lpToken).transfer(address(_juniorVault), actualLPAmount);
+        // Get Junior's hook address
+        address juniorHook = address(_juniorVault.kodiakHook());
+        if (juniorHook == address(0)) return;
+        
+        // Transfer LP tokens from Senior Hook to Junior Hook
+        kodiakHook.transferIslandLP(juniorHook, actualLPAmount);
         
         // Update Junior vault value (they track USD value internally)
         uint256 actualUSDAmount = (actualLPAmount * lpPrice) / 1e18;
@@ -98,23 +100,24 @@ contract UnifiedConcreteSeniorVault is UnifiedSeniorVault {
     function _transferToReserve(uint256 amountUSD, uint256 lpPrice) internal override {
         if (amountUSD == 0) return;
         if (lpPrice == 0) return;
-        
-        // Get whitelisted LP tokens (should be only one)
-        if (_whitelistedLPTokens.length == 0) return;
-        address lpToken = _whitelistedLPTokens[0];
+        if (address(kodiakHook) == address(0)) return;
         
         // Calculate LP amount from USD amount
         // LP amount = (amountUSD * 1e18) / lpPrice
         uint256 lpAmount = (amountUSD * 1e18) / lpPrice;
         
-        // Check actual LP token balance
-        uint256 lpBalance = IERC20(lpToken).balanceOf(address(this));
+        // Check Senior Hook's LP token balance
+        uint256 lpBalance = kodiakHook.getIslandLPBalance();
         uint256 actualLPAmount = lpAmount > lpBalance ? lpBalance : lpAmount;
         
         if (actualLPAmount == 0) return; // No LP tokens available
         
-        // Transfer LP tokens from this vault to Reserve vault
-        IERC20(lpToken).transfer(address(_reserveVault), actualLPAmount);
+        // Get Reserve's hook address
+        address reserveHook = address(_reserveVault.kodiakHook());
+        if (reserveHook == address(0)) return;
+        
+        // Transfer LP tokens from Senior Hook to Reserve Hook
+        kodiakHook.transferIslandLP(reserveHook, actualLPAmount);
         
         // Update Reserve vault value (they track USD value internally)
         uint256 actualUSDAmount = (actualLPAmount * lpPrice) / 1e18;
