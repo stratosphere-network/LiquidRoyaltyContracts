@@ -883,12 +883,11 @@ abstract contract UnifiedSeniorVault is ISeniorVault, IERC20, AdminControlled, P
         // Transfer stablecoin from user
         _stablecoin.transferFrom(msg.sender, address(this), assets);
         
+        // Track capital inflow: increase vault value by deposited assets
+        _vaultValue += assets;
+        
         // Mint snrUSD to receiver (1:1 at current index)
         _mint(receiver, assets);
-        
-        // Note: _vaultValue is NOT auto-updated here
-        // Vault value (USD) is updated by keeper via updateVaultValue()
-        // This follows the "off-chain profit calculation" model
         
         emit Deposit(receiver, assets, assets);
         
@@ -970,9 +969,8 @@ abstract contract UnifiedSeniorVault is ISeniorVault, IERC20, AdminControlled, P
         // Transfer stablecoin to receiver (net of penalty)
         _stablecoin.transfer(receiver, netAssets);
         
-        // Note: _vaultValue is NOT auto-updated here
-        // Vault value (USD) is updated by keeper via updateVaultValue()
-        // This follows the "off-chain profit calculation" model
+        // Track capital outflow: decrease vault value by actual assets withdrawn
+        _vaultValue -= netAssets;
         
         if (penalty > 0) {
             emit WithdrawalPenaltyCharged(owner, penalty);

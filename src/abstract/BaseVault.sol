@@ -589,7 +589,12 @@ abstract contract BaseVault is ERC4626Upgradeable, IVault, AdminControlled, UUPS
         override(ERC4626Upgradeable) 
         returns (uint256 shares) 
     {
-        return super.deposit(assets, receiver);
+        shares = super.deposit(assets, receiver);
+        
+        // Track capital inflow: increase vault value by deposited assets
+        _vaultValue += assets;
+        
+        return shares;
     }
     
     /**
@@ -605,7 +610,12 @@ abstract contract BaseVault is ERC4626Upgradeable, IVault, AdminControlled, UUPS
         override(ERC4626Upgradeable) 
         returns (uint256 assets) 
     {
-        return super.mint(shares, receiver);
+        assets = super.mint(shares, receiver);
+        
+        // Track capital inflow: increase vault value by deposited assets
+        _vaultValue += assets;
+        
+        return assets;
     }
     
     // ============================================
@@ -784,6 +794,9 @@ abstract contract BaseVault is ERC4626Upgradeable, IVault, AdminControlled, UUPS
         
         // Call parent implementation to handle actual withdrawal
         super._withdraw(caller, receiver, owner, assets, shares);
+        
+        // Track capital outflow: decrease vault value by actual assets withdrawn
+        _vaultValue -= assets;
     }
     
     // ============================================
