@@ -164,16 +164,13 @@ abstract contract ReserveVault is BaseVault, IReserveVault {
     function provideBackstop(uint256 amountUSD, uint256 lpPrice) public virtual onlySeniorVault returns (uint256 actualAmount) {
         if (amountUSD == 0) return 0;
         if (lpPrice == 0) return 0;
-        
-        // Get whitelisted LP tokens (should be only one)
-        if (_whitelistedLPTokens.length == 0) revert ReserveDepleted();
-        address lpToken = _whitelistedLPTokens[0];
+        if (address(kodiakHook) == address(0)) revert ReserveDepleted();
         
         // Calculate LP amount needed
         uint256 lpAmountNeeded = (amountUSD * 1e18) / lpPrice;
         
-        // Check actual LP token balance
-        uint256 lpBalance = IERC20(lpToken).balanceOf(address(this));
+        // Check Reserve Hook's actual LP token balance
+        uint256 lpBalance = kodiakHook.getIslandLPBalance();
         
         // Provide up to available LP tokens
         uint256 actualLPAmount = lpAmountNeeded > lpBalance ? lpBalance : lpAmountNeeded;
@@ -189,8 +186,10 @@ abstract contract ReserveVault is BaseVault, IReserveVault {
         _totalBackstopProvided += actualAmount;
         uint256 newCap = currentDepositCap();
         
-        // Transfer LP tokens to Senior vault
-        IERC20(lpToken).transfer(_seniorVault, actualLPAmount);
+        // Get Senior's hook address and transfer LP from Reserve Hook to Senior Hook
+        address seniorHook = address(IVault(_seniorVault).kodiakHook());
+        require(seniorHook != address(0), "Senior hook not set");
+        kodiakHook.transferIslandLP(seniorHook, actualLPAmount);
         
         emit BackstopProvided(actualAmount, msg.sender);
         emit DepositCapUpdated(oldCap, newCap);

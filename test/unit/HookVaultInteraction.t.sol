@@ -347,6 +347,8 @@ contract MockKodiakHook is IKodiakVaultHook {
     
     function ensureFundsAvailable(uint256) external override {}
     
+    function liquidateLPForAmount(uint256) external override {}
+    
     function transferIslandLP(address, uint256) external override {}
     
     function getIslandLPBalance() external view override returns (uint256) {

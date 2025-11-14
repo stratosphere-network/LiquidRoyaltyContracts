@@ -22,7 +22,6 @@ contract VerifyDeployment is Script {
         
         // Senior Vault Checks
         console.log("SENIOR VAULT:", seniorVault);
-        console.log("  Asset:", UnifiedConcreteSeniorVault(seniorVault).asset());
         console.log("  Junior:", UnifiedConcreteSeniorVault(seniorVault).juniorVault());
         console.log("  Reserve:", UnifiedConcreteSeniorVault(seniorVault).reserveVault());
         console.log("  Hook:", address(UnifiedConcreteSeniorVault(seniorVault).kodiakHook()));
@@ -30,14 +29,12 @@ contract VerifyDeployment is Script {
         
         // Junior Vault Checks
         console.log("JUNIOR VAULT:", juniorVault);
-        console.log("  Asset:", ConcreteJuniorVault(juniorVault).asset());
         console.log("  Senior:", ConcreteJuniorVault(juniorVault).seniorVault());
         console.log("  Hook:", address(ConcreteJuniorVault(juniorVault).kodiakHook()));
         console.log("");
         
         // Reserve Vault Checks
         console.log("RESERVE VAULT:", reserveVault);
-        console.log("  Asset:", ConcreteReserveVault(reserveVault).asset());
         console.log("  Senior:", ConcreteReserveVault(reserveVault).seniorVault());
         console.log("  Hook:", address(ConcreteReserveVault(reserveVault).kodiakHook()));
         console.log("");

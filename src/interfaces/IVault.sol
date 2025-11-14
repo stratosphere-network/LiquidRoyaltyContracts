@@ -2,6 +2,7 @@
 pragma solidity ^0.8.20;
 
 import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
+import {IKodiakVaultHook} from "../integrations/IKodiakVaultHook.sol";
 
 /**
  * @title IVault
@@ -67,6 +68,12 @@ interface IVault {
      * @return seniorVault Address of Senior vault
      */
     function seniorVault() external view returns (address seniorVault);
+    
+    /**
+     * @notice Get Kodiak vault hook address
+     * @return hook Address of Kodiak vault hook
+     */
+    function kodiakHook() external view returns (IKodiakVaultHook hook);
     
     // Note: deposit, withdraw, previewDeposit, previewWithdraw, totalAssets
     // are defined in ERC4626 standard for Junior/Reserve vaults

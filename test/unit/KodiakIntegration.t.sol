@@ -325,6 +325,10 @@ contract MockKodiakHook is IKodiakVaultHook {
         // Mock: do nothing
     }
     
+    function liquidateLPForAmount(uint256) external override {
+        // Mock: do nothing
+    }
+    
     function transferIslandLP(address, uint256) external override {
         // Mock: do nothing
     }

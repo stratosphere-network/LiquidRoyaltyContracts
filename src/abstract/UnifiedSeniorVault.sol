@@ -12,7 +12,6 @@ import {MathLib} from "../libraries/MathLib.sol";
 import {FeeLib} from "../libraries/FeeLib.sol";
 import {RebaseLib} from "../libraries/RebaseLib.sol";
 import {SpilloverLib} from "../libraries/SpilloverLib.sol";
-import {LPPriceOracle} from "../libraries/LPPriceOracle.sol";
 import {AdminControlled} from "./AdminControlled.sol";
 import {IKodiakVaultHook} from "../integrations/IKodiakVaultHook.sol";
 /**
@@ -20,7 +19,7 @@ import {IKodiakVaultHook} from "../integrations/IKodiakVaultHook.sol";
  * @notice Senior vault that IS the snrUSD rebasing token (unified architecture)
  * @dev This contract is both the ERC20 token AND the vault logic
  * @dev Upgradeable using UUPS proxy pattern
- * 
+ * but 
  * ARCHITECTURAL DECISION:
  * - NOT ERC4626 (rebasing incompatible with share-based vaults)
  * - Unified contract (vault logic + token logic together)
@@ -97,13 +96,6 @@ abstract contract UnifiedSeniorVault is ISeniorVault, IERC20, AdminControlled, P
     mapping(address => bool) internal _isWhitelistedLP;
     mapping(address => bool) internal _isWhitelistedLPToken;
     
-    /// @dev Oracle configuration for vault value validation
-    address internal _oracleIsland;              // Kodiak Island address for price calculation
-    bool internal _stablecoinIsToken0;           // True if token0 is the stablecoin
-    uint256 internal _maxDeviationBps;           // Max allowed deviation (basis points, e.g., 500 = 5%)
-    bool internal _oracleEnabled;                // Enable/disable oracle checks
-    bool internal _useCalculatedValue;           // If true, use on-chain calculated value; if false, use admin-updated value
-    
     /// @dev Profit/loss tracking
     int256 internal constant MIN_PROFIT_BPS = -5000;
     int256 internal constant MAX_PROFIT_BPS = 10000;
@@ -121,8 +113,7 @@ abstract contract UnifiedSeniorVault is ISeniorVault, IERC20, AdminControlled, P
     event WhitelistedLPTokenAdded(address indexed lpToken);
     event WhitelistedLPTokenRemoved(address indexed lpToken);
     event KodiakDeployment(uint256 amount, uint256 lpReceived, uint256 timestamp);
-    event OracleConfigured(address indexed island, bool stablecoinIsToken0, uint256 maxDeviationBps, bool enabled);
-    event VaultValueValidated(uint256 providedValue, uint256 calculatedValue, uint256 deviationBps);
+    event LiquidityFreedForWithdrawal(uint256 requested, uint256 freedFromLP);
     
     /// @dev Errors (ZeroAddress inherited from AdminControlled, InsufficientBalance from IVault)
     error InvalidProfitRange();
@@ -135,8 +126,7 @@ abstract contract UnifiedSeniorVault is ISeniorVault, IERC20, AdminControlled, P
     error WrongVault();
     error KodiakHookNotSet();
     error SlippageTooHigh();
-    error VaultValueDeviationTooHigh(uint256 provided, uint256 calculated, uint256 deviationBps);
-    error OracleNotConfigured();
+    error InsufficientLiquidity();
     
     /// @dev Modifiers
     modifier whenNotPausedOrAdmin() {
@@ -631,83 +621,6 @@ abstract contract UnifiedSeniorVault is ISeniorVault, IERC20, AdminControlled, P
     }
     
     // ============================================
-    // Oracle Configuration
-    // ============================================
-    
-    /**
-     * @notice Configure on-chain oracle for vault value validation
-     * @dev Sets up parameters for automatic vault value validation using pool ratio
-     * @param island Kodiak Island address for price calculation
-     * @param stablecoinIsToken0 True if token0 is the stablecoin, false if token1
-     * @param maxDeviationBps Maximum allowed deviation in basis points (e.g., 500 = 5%)
-     * @param enableValidation Enable or disable oracle validation checks
-     * @param useCalculatedValue If true, vaultValue() returns calculated value; if false, returns admin-updated value
-     */
-    function configureOracle(
-        address island,
-        bool stablecoinIsToken0,
-        uint256 maxDeviationBps,
-        bool enableValidation,
-        bool useCalculatedValue
-    ) external onlyAdmin {
-        require(maxDeviationBps <= 10000, "Max deviation > 100%");
-        
-        _oracleIsland = island;
-        _stablecoinIsToken0 = stablecoinIsToken0;
-        _maxDeviationBps = maxDeviationBps;
-        _oracleEnabled = enableValidation;
-        _useCalculatedValue = useCalculatedValue;
-        
-        emit OracleConfigured(island, stablecoinIsToken0, maxDeviationBps, enableValidation);
-    }
-    
-    /**
-     * @notice Get on-chain calculated vault value (for comparison/debugging)
-     * @dev Public view function to see what the oracle calculates
-     * @return calculatedValue Vault value calculated from on-chain data (18 decimals)
-     */
-    function getCalculatedVaultValue() external view returns (uint256 calculatedValue) {
-        if (_oracleIsland == address(0) || address(kodiakHook) == address(0)) {
-            return 0;
-        }
-        
-        return LPPriceOracle.calculateTotalVaultValue(
-            address(kodiakHook),
-            _oracleIsland,
-            _stablecoinIsToken0,
-            address(this),
-            address(_stablecoin)
-        );
-    }
-    
-    /**
-     * @notice Get oracle configuration
-     * @return island Kodiak Island address
-     * @return stablecoinIsToken0 True if token0 is stablecoin
-     * @return maxDeviationBps Max allowed deviation
-     * @return validationEnabled Oracle validation enabled status
-     * @return useCalculatedValue Whether vaultValue() returns calculated or stored value
-     */
-    function getOracleConfig() external view returns (
-        address island,
-        bool stablecoinIsToken0,
-        uint256 maxDeviationBps,
-        bool validationEnabled,
-        bool useCalculatedValue
-    ) {
-        return (_oracleIsland, _stablecoinIsToken0, _maxDeviationBps, _oracleEnabled, _useCalculatedValue);
-    }
-    
-    /**
-     * @notice Get stored vault value (always returns admin-updated value)
-     * @dev Use this to see the stored value regardless of useCalculatedValue flag
-     * @return storedValue The vault value stored by admin
-     */
-    function getStoredVaultValue() external view returns (uint256) {
-        return _vaultValue;
-    }
-    
-    // ============================================
     // ERC20 Implementation (Rebasing)
     // ============================================
     
@@ -890,25 +803,10 @@ abstract contract UnifiedSeniorVault is ISeniorVault, IERC20, AdminControlled, P
     
     /**
      * @notice Get current vault value
-     * @dev Returns either calculated value (from oracle) or stored value (from admin) based on flag
+     * @dev Returns stored value set by admin
      * @return value Current vault value in USD (18 decimals)
      */
     function vaultValue() public view virtual returns (uint256 value) {
-        // If flag enabled and oracle configured, return calculated value
-        if (_useCalculatedValue && _oracleIsland != address(0) && address(kodiakHook) != address(0)) {
-            uint256 calculatedValue = LPPriceOracle.calculateTotalVaultValue(
-                address(kodiakHook),
-                _oracleIsland,
-                _stablecoinIsToken0,
-                address(this),
-                address(_stablecoin)
-            );
-            
-            // Fallback to stored value if calculated is 0
-            return calculatedValue > 0 ? calculatedValue : _vaultValue;
-        }
-        
-        // Otherwise return stored value (admin-updated)
         return _vaultValue;
     }
     
@@ -935,7 +833,6 @@ abstract contract UnifiedSeniorVault is ISeniorVault, IERC20, AdminControlled, P
     /**
      * @notice Update vault value based on off-chain calculation
      * @dev Reference: Instructions - Monthly Rebase Flow
-     *      Includes oracle validation if enabled
      */
     function updateVaultValue(int256 profitBps) public virtual onlyAdmin {
         if (profitBps < MIN_PROFIT_BPS || profitBps > MAX_PROFIT_BPS) {
@@ -944,9 +841,6 @@ abstract contract UnifiedSeniorVault is ISeniorVault, IERC20, AdminControlled, P
         
         uint256 oldValue = _vaultValue;
         uint256 newValue = MathLib.applyPercentage(oldValue, profitBps);
-        
-        // Validate with oracle if enabled
-        _validateVaultValue(newValue);
         
         _vaultValue = newValue;
         _lastUpdateTime = block.timestamp;
@@ -957,13 +851,9 @@ abstract contract UnifiedSeniorVault is ISeniorVault, IERC20, AdminControlled, P
     /**
      * @notice Directly set vault value (no BPS calculation)
      * @dev Simple admin function to set exact vault value
-     *      Includes oracle validation if enabled
      * @param newValue New vault value in wei
      */
     function setVaultValue(uint256 newValue) public virtual onlyAdmin {
-        // Validate with oracle if enabled
-        _validateVaultValue(newValue);
-        
         uint256 oldValue = _vaultValue;
         _vaultValue = newValue;
         _lastUpdateTime = block.timestamp;
@@ -975,47 +865,6 @@ abstract contract UnifiedSeniorVault is ISeniorVault, IERC20, AdminControlled, P
         }
         
         emit VaultValueUpdated(oldValue, _vaultValue, bps);
-    }
-    
-    /**
-     * @notice Validate vault value against on-chain oracle calculation
-     * @dev Internal function to check deviation between provided and calculated values
-     * @param providedValue The vault value being set by admin
-     */
-    function _validateVaultValue(uint256 providedValue) internal {
-        // Skip validation if oracle not enabled or not configured
-        if (!_oracleEnabled || _oracleIsland == address(0) || address(kodiakHook) == address(0)) {
-            return;
-        }
-        
-        // Calculate on-chain vault value
-        uint256 calculatedValue = LPPriceOracle.calculateTotalVaultValue(
-            address(kodiakHook),
-            _oracleIsland,
-            _stablecoinIsToken0,
-            address(this),
-            address(_stablecoin)
-        );
-        
-        // Allow if calculated value is 0 (no LP deployed yet)
-        if (calculatedValue == 0) {
-            return;
-        }
-        
-        // Calculate deviation in basis points
-        uint256 diff = providedValue > calculatedValue 
-            ? providedValue - calculatedValue 
-            : calculatedValue - providedValue;
-        
-        uint256 deviationBps = (diff * 10000) / calculatedValue;
-        
-        // Emit validation event
-        emit VaultValueValidated(providedValue, calculatedValue, deviationBps);
-        
-        // Revert if deviation exceeds max allowed
-        if (deviationBps > _maxDeviationBps) {
-            revert VaultValueDeviationTooHigh(providedValue, calculatedValue, deviationBps);
-        }
     }
     
     /**
@@ -1068,6 +917,52 @@ abstract contract UnifiedSeniorVault is ISeniorVault, IERC20, AdminControlled, P
         
         // Calculate withdrawal penalty
         (uint256 penalty, uint256 netAssets) = calculateWithdrawalPenalty(owner, amount);
+        
+        // Iterative approach: Try up to 3 times to free up liquidity
+        uint256 maxAttempts = 3;
+        uint256 totalFreed = 0;
+        
+        for (uint256 i = 0; i < maxAttempts; i++) {
+            uint256 vaultBalance = _stablecoin.balanceOf(address(this));
+            
+            if (vaultBalance >= netAssets) {
+                break; // We have enough!
+            }
+            
+            if (address(kodiakHook) == address(0)) {
+                revert InsufficientLiquidity();
+            }
+            
+            // Calculate how much more we need
+            uint256 needed = netAssets - vaultBalance;
+            uint256 balanceBefore = vaultBalance;
+            
+            // Call hook to liquidate LP with smart estimation
+            try kodiakHook.liquidateLPForAmount(needed) {
+                uint256 balanceAfter = _stablecoin.balanceOf(address(this));
+                uint256 freedThisRound = balanceAfter > balanceBefore ? balanceAfter - balanceBefore : 0;
+                totalFreed += freedThisRound;
+                
+                // If we didn't get any more funds, stop trying
+                if (freedThisRound == 0) {
+                    break;
+                }
+            } catch {
+                // If hook call fails, stop trying
+                break;
+            }
+        }
+        
+        // Final check: do we have enough now?
+        uint256 finalBalance = _stablecoin.balanceOf(address(this));
+        if (finalBalance < netAssets) {
+            revert InsufficientLiquidity();
+        }
+        
+        // Emit event if we had to free up liquidity
+        if (totalFreed > 0) {
+            emit LiquidityFreedForWithdrawal(netAssets, totalFreed);
+        }
         
         // Burn snrUSD
         _burn(owner, amount);
@@ -1213,17 +1108,8 @@ abstract contract UnifiedSeniorVault is ISeniorVault, IERC20, AdminControlled, P
      * @dev Reference: Rebase Algorithm (all steps) - MATH SPEC PRESERVED
      */
     /**
-     * @notice Execute rebase with automatic LP price calculation (if flag enabled)
-     * @dev Uses _useCalculatedValue flag to determine LP price source
-     */
-    function rebase() public virtual onlyAdmin {
-        uint256 lpPrice = _getLPPrice();
-        rebase(lpPrice);
-    }
-    
-    /**
      * @notice Execute rebase with manual LP price for spillover/backstop transfers
-     * @param lpPrice Current LP token price in USD (18 decimals)
+     * @param lpPrice Current LP token price in USD (18 decimals) - must be provided by admin
      */
     function rebase(uint256 lpPrice) public virtual onlyAdmin {
         if (block.timestamp < _lastRebaseTime + _minRebaseInterval) {
@@ -1402,38 +1288,6 @@ abstract contract UnifiedSeniorVault is ISeniorVault, IERC20, AdminControlled, P
     // ============================================
     // Abstract Transfer Functions (Must implement in concrete contract)
     // ============================================
-    
-    /**
-     * @notice Get LP price based on configuration flag
-     * @dev Uses _useCalculatedValue flag to determine LP price source
-     * @return lpPrice LP token price in USD (18 decimals)
-     */
-    function _getLPPrice() internal view virtual returns (uint256 lpPrice) {
-        // If flag enabled and oracle configured, calculate on-chain
-        if (_useCalculatedValue && _oracleIsland != address(0) && address(kodiakHook) != address(0)) {
-            lpPrice = LPPriceOracle.calculateLPPrice(_oracleIsland, _stablecoinIsToken0);
-            
-            // Fallback to 1:1 if calculation fails
-            if (lpPrice == 0) {
-                lpPrice = 1e18;
-            }
-        } else {
-            // Manual mode: revert so admin must provide price
-            revert("Oracle not configured - use rebase(lpPrice)");
-        }
-    }
-    
-    /**
-     * @notice Get LP price for external queries
-     * @dev Public version of _getLPPrice for transparency
-     * @return lpPrice LP token price in USD (18 decimals)
-     */
-    function getCalculatedLPPrice() external view virtual returns (uint256 lpPrice) {
-        if (_oracleIsland != address(0) && address(kodiakHook) != address(0)) {
-            return LPPriceOracle.calculateLPPrice(_oracleIsland, _stablecoinIsToken0);
-        }
-        return 0;
-    }
     
     /**
      * @notice Transfer LP tokens to Junior vault

@@ -18,6 +18,10 @@ interface IWETH {
     function balanceOf(address) external view returns (uint256);
 }
 
+interface IVault {
+    function vaultValue() external view returns (uint256);
+}
+
 /**
  * @title KodiakVaultHook
  * @notice Default implementation that routes deposits to a Kodiak Island and
@@ -38,6 +42,9 @@ contract KodiakVaultHook is AccessControl, IKodiakVaultHook {
     uint256 public minSharesPerAssetBps = 0;     // 0 = no min
     uint256 public minAssetOutBps = 0;           // 0 = no min
     
+    // LP liquidation parameters (for smart withdrawal)
+    uint256 public safetyMultiplier = 250;       // 250 = 2.5x buffer (in basis points / 100)
+    
     // Native BERA placeholder
     address public constant NATIVE_BERA = 0x6969696969696969696969696969696969696969;
 
@@ -45,6 +52,8 @@ contract KodiakVaultHook is AccessControl, IKodiakVaultHook {
     event IslandUpdated(address island);
     event SlippageUpdated(uint256 minSharesPerAssetBps, uint256 minAssetOutBps);
     event WBERAUpdated(address wbera);
+    event LPParametersUpdated(uint256 safetyMultiplier);
+    event LPLiquidated(uint256 requested, uint256 lpBurned, uint256 honeyReceived, uint256 wbtcKept);
     // Aggregator control/events
     mapping(address => bool) public whitelistedAggregators; // kX router targets (methodParameters.to)
     event AggregatorWhitelisted(address indexed target, bool status);
@@ -93,6 +102,16 @@ contract KodiakVaultHook is AccessControl, IKodiakVaultHook {
         emit SlippageUpdated(_minSharesPerAssetBps, _minAssetOutBps);
     }
 
+    /**
+     * @notice Update LP liquidation safety multiplier
+     * @param _safetyMultiplier Safety buffer multiplier in basis points / 100 (e.g., 250 = 2.5x)
+     */
+    function setSafetyMultiplier(uint256 _safetyMultiplier) external onlyRole(ADMIN_ROLE) {
+        require(_safetyMultiplier >= 100 && _safetyMultiplier <= 500, "multiplier must be 1x-5x");
+        safetyMultiplier = _safetyMultiplier;
+        emit LPParametersUpdated(_safetyMultiplier);
+    }
+
     function _estimateBurnForAsset(uint256 amount) internal view returns (uint256 requiredBurn, bool ok) {
         IERC20 token0 = island.token0();
         IERC20 token1 = island.token1();
@@ -132,8 +151,8 @@ contract KodiakVaultHook is AccessControl, IKodiakVaultHook {
     function onAfterDeposit(uint256 assets) external override onlyVault {
         if (address(island) == address(0) || assets == 0) return;
 
-        // Pull funds from the vault into this hook
-        assetToken.safeTransferFrom(vault, address(this), assets);
+        // Vault already sent funds via safeTransfer before calling this function
+        // No need to pull - funds are already here!
 
         // Beefy-style: balance asset to token0/token1 using pool price, then island.mint
         _swapToBalancedLp(assets);
@@ -214,8 +233,8 @@ contract KodiakVaultHook is AccessControl, IKodiakVaultHook {
     ) external override onlyVault {
         if (address(island) == address(0) || assets == 0) return;
 
-        // Pull funds from vault
-        assetToken.safeTransferFrom(vault, address(this), assets);
+        // Vault already sent funds via safeTransfer before calling this function
+        // No need to pull - funds are already here!
 
         IERC20 token0 = island.token0();
         IERC20 token1 = island.token1();
@@ -309,63 +328,92 @@ contract KodiakVaultHook is AccessControl, IKodiakVaultHook {
         }
     }
 
-    function ensureFundsAvailable(uint256 amount) external override onlyVault {
-        if (amount == 0) return;
-        if (address(router) == address(0) || address(island) == address(0)) return;
-
-        // If we already have enough assets on the vault (from previous operations), nothing to do.
-        // This hook only manages its own balances, so we just ensure we can send assets back to the vault.
-        uint256 currentAssetBal = assetToken.balanceOf(address(this));
-        if (currentAssetBal >= amount) {
-            assetToken.safeTransfer(vault, amount);
-            return;
+    /**
+     * @notice Smart LP liquidation using Island pool data
+     * @dev Called by vault during withdrawal. Queries Island directly for accurate HONEY/LP ratio.
+     * @param unstake_usd USD value user wants to withdraw (in stablecoin wei)
+     *
+     * Algorithm:
+     * 1. Query Island for actual HONEY balance in pool
+     * 2. Calculate HONEY per LP = honeyInPool / totalLPSupply
+     * 3. Calculate LP needed = unstake_usd / honeyPerLP
+     * 4. Apply safety buffer: lpToBurn = lpNeeded * safetyMultiplier (e.g., 2.5x)
+     * 5. Burn LP, send ONLY stablecoin to vault, keep WBTC in hook
+     */
+    function liquidateLPForAmount(uint256 unstake_usd) public onlyVault {
+        if (unstake_usd == 0) return;
+        if (address(island) == address(0)) return;
+        
+        // Get LP balance in hook
+        uint256 lpBalance = island.balanceOf(address(this));
+        if (lpBalance == 0) return; // No LP to liquidate
+        
+        // Query Island pool directly for actual balances
+        (, uint256 honeyInPool) = island.getUnderlyingBalances();
+        uint256 totalLPSupply = island.totalSupply();
+        
+        if (totalLPSupply == 0 || honeyInPool == 0) return;
+        
+        // Calculate HONEY per LP (this is what we actually get back as stablecoin)
+        // honeyPerLP is in 1e18 precision
+        uint256 honeyPerLP = (honeyInPool * 1e18) / totalLPSupply;
+        
+        // Calculate LP needed to get unstake_usd worth of HONEY
+        uint256 lpNeeded = (unstake_usd * 1e18) / honeyPerLP;
+        
+        // Apply safety buffer: safetyMultiplier is in basis points / 100 (e.g., 250 = 2.5x)
+        uint256 unstake_send_to_hook = (lpNeeded * safetyMultiplier) / 100;
+        
+        // Cap at available LP balance
+        if (unstake_send_to_hook > lpBalance) {
+            unstake_send_to_hook = lpBalance;
         }
-
-        // Determine LP burn amount
-        (uint256 requiredBurn, bool okBurn) = _estimateBurnForAsset(amount);
-        if (!okBurn) return;
-        uint256 lpBal = island.balanceOf(address(this));
-        if (requiredBurn > lpBal) {
-            requiredBurn = lpBal;
-        }
-        if (requiredBurn == 0) return;
-
-        // Compute min amounts with slippage protection for the asset leg only
-        (uint256 amount0Min, uint256 amount1Min, bool okMin) = _minAmountsForRemove(amount);
-        if (!okMin) return;
-
-        // Burn Island LP directly (Beefy-style) or via router
-        try island.burn(requiredBurn, address(this)) returns (uint256, uint256) {
-            // After burn, we have both token0 and token1
-            // Auto-rescue non-stablecoin tokens to vault for vault to swap
-            _autoRescueNonStablecoinToVault();
-            
-            // Send back all stablecoin we have
-            uint256 balAfter = assetToken.balanceOf(address(this));
-            if (balAfter > 0) {
-                assetToken.safeTransfer(vault, balAfter);
-            }
+        
+        if (unstake_send_to_hook == 0) return;
+        
+        // Burn LP tokens
+        uint256 wbtcBefore = island.token0().balanceOf(address(this));
+        uint256 honeyBefore = island.token1().balanceOf(address(this));
+        
+        try island.burn(unstake_send_to_hook, address(this)) returns (uint256, uint256) {
+            // Successfully burned LP
         } catch {
-            // Fallback to router.removeLiquidity
-            try router.removeLiquidity(island, requiredBurn, amount0Min, amount1Min, address(this)) returns (uint256, uint256, uint128) {
-                // Auto-rescue non-stablecoin tokens
-                _autoRescueNonStablecoinToVault();
-                
-                // Send back stablecoin
-                uint256 balAfter = assetToken.balanceOf(address(this));
-                if (balAfter > 0) {
-                    assetToken.safeTransfer(vault, balAfter);
-                }
+            // If burn fails, try via router
+            try router.removeLiquidity(island, unstake_send_to_hook, 0, 0, address(this)) returns (uint256, uint256, uint128) {
+                // Successfully removed liquidity
             } catch {
-                // If both fail, do nothing to avoid reverts
+                // If both fail, return without reverting
+                return;
             }
         }
+        
+        // Calculate what we received
+        uint256 wbtcAfter = island.token0().balanceOf(address(this));
+        uint256 honeyAfter = island.token1().balanceOf(address(this));
+        
+        uint256 wbtcReceived = wbtcAfter - wbtcBefore;
+        uint256 honeyReceived = honeyAfter - honeyBefore;
+        
+        // Send ONLY stablecoin (HONEY) to vault
+        if (honeyReceived > 0) {
+            island.token1().safeTransfer(vault, honeyReceived);
+        }
+        
+        // WBTC stays in hook for admin to batch swap later
+        // Emit event for monitoring
+        emit LPLiquidated(unstake_usd, unstake_send_to_hook, honeyReceived, wbtcReceived);
+    }
+
+    function ensureFundsAvailable(uint256 amount) external override onlyVault {
+        // Deprecated: Use liquidateLPForAmount() instead
+        // Kept for backward compatibility
+        liquidateLPForAmount(amount);
     }
 
     /**
-     * @dev Auto-rescue non-stablecoin tokens to vault
-     * After burning LP, send HONEY (or other non-stablecoin) to vault
-     * Vault can then use swapTokensViaKodiak() to convert it
+     * @dev Auto-rescue ONLY stablecoin to vault (keep WBTC in hook)
+     * @dev After burning LP, send ONLY HONEY to vault
+     * @dev WBTC accumulates in hook for admin to batch swap later
      */
     function _autoRescueNonStablecoinToVault() internal {
         if (address(island) == address(0)) return;
@@ -373,20 +421,22 @@ contract KodiakVaultHook is AccessControl, IKodiakVaultHook {
         IERC20 token0 = island.token0();
         IERC20 token1 = island.token1();
         
-        // Send non-stablecoin token to vault
-        if (address(token0) != address(assetToken)) {
+        // Only send stablecoin (HONEY/token1) to vault
+        // WBTC (token0) stays in hook
+        if (address(token1) == address(assetToken)) {
+            uint256 bal1 = token1.balanceOf(address(this));
+            if (bal1 > 0) {
+                token1.safeTransfer(vault, bal1);
+            }
+        } else if (address(token0) == address(assetToken)) {
             uint256 bal0 = token0.balanceOf(address(this));
             if (bal0 > 0) {
                 token0.safeTransfer(vault, bal0);
             }
         }
         
-        if (address(token1) != address(assetToken)) {
-            uint256 bal1 = token1.balanceOf(address(this));
-            if (bal1 > 0) {
-                token1.safeTransfer(vault, bal1);
-            }
-        }
+        // Note: Non-stablecoin tokens (WBTC) remain in hook
+        // Admin can batch swap them later via adminSwapAndReturnToVault()
     }
 
     /**
