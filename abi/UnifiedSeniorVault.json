@@ -1,10 +1,5 @@
 [
   {
-    "type": "constructor",
-    "inputs": [],
-    "stateMutability": "nonpayable"
-  },
-  {
     "type": "function",
     "name": "UPGRADE_INTERFACE_VERSION",
     "inputs": [],
@@ -482,49 +477,6 @@
       }
     ],
     "stateMutability": "view"
-  },
-  {
-    "type": "function",
-    "name": "initialize",
-    "inputs": [
-      {
-        "name": "stablecoin_",
-        "type": "address",
-        "internalType": "address"
-      },
-      {
-        "name": "tokenName_",
-        "type": "string",
-        "internalType": "string"
-      },
-      {
-        "name": "tokenSymbol_",
-        "type": "string",
-        "internalType": "string"
-      },
-      {
-        "name": "juniorVault_",
-        "type": "address",
-        "internalType": "address"
-      },
-      {
-        "name": "reserveVault_",
-        "type": "address",
-        "internalType": "address"
-      },
-      {
-        "name": "treasury_",
-        "type": "address",
-        "internalType": "address"
-      },
-      {
-        "name": "initialValue_",
-        "type": "uint256",
-        "internalType": "uint256"
-      }
-    ],
-    "outputs": [],
-    "stateMutability": "nonpayable"
   },
   {
     "type": "function",

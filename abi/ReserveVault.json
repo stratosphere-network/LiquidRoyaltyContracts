@@ -1,10 +1,5 @@
 [
   {
-    "type": "constructor",
-    "inputs": [],
-    "stateMutability": "nonpayable"
-  },
-  {
     "type": "function",
     "name": "UPGRADE_INTERFACE_VERSION",
     "inputs": [],
@@ -71,6 +66,24 @@
   },
   {
     "type": "function",
+    "name": "adminBurn",
+    "inputs": [
+      {
+        "name": "account",
+        "type": "address",
+        "internalType": "address"
+      },
+      {
+        "name": "amount",
+        "type": "uint256",
+        "internalType": "uint256"
+      }
+    ],
+    "outputs": [],
+    "stateMutability": "nonpayable"
+  },
+  {
+    "type": "function",
     "name": "allowance",
     "inputs": [
       {
@@ -103,7 +116,7 @@
         "internalType": "address"
       },
       {
-        "name": "amount",
+        "name": "value",
         "type": "uint256",
         "internalType": "uint256"
       }
@@ -119,7 +132,20 @@
   },
   {
     "type": "function",
-    "name": "backingRatio",
+    "name": "asset",
+    "inputs": [],
+    "outputs": [
+      {
+        "name": "",
+        "type": "address",
+        "internalType": "address"
+      }
+    ],
+    "stateMutability": "view"
+  },
+  {
+    "type": "function",
+    "name": "backstopCapacity",
     "inputs": [],
     "outputs": [
       {
@@ -151,10 +177,23 @@
   },
   {
     "type": "function",
-    "name": "calculateWithdrawalPenalty",
+    "name": "burn",
     "inputs": [
       {
-        "name": "user",
+        "name": "amount",
+        "type": "uint256",
+        "internalType": "uint256"
+      }
+    ],
+    "outputs": [],
+    "stateMutability": "nonpayable"
+  },
+  {
+    "type": "function",
+    "name": "burnFrom",
+    "inputs": [
+      {
+        "name": "account",
         "type": "address",
         "internalType": "address"
       },
@@ -164,28 +203,17 @@
         "internalType": "uint256"
       }
     ],
-    "outputs": [
-      {
-        "name": "penalty",
-        "type": "uint256",
-        "internalType": "uint256"
-      },
-      {
-        "name": "netAmount",
-        "type": "uint256",
-        "internalType": "uint256"
-      }
-    ],
-    "stateMutability": "view"
+    "outputs": [],
+    "stateMutability": "nonpayable"
   },
   {
     "type": "function",
-    "name": "canWithdrawWithoutPenalty",
+    "name": "canProvideFullBackstop",
     "inputs": [
       {
-        "name": "user",
-        "type": "address",
-        "internalType": "address"
+        "name": "amount",
+        "type": "uint256",
+        "internalType": "uint256"
       }
     ],
     "outputs": [
@@ -199,12 +227,12 @@
   },
   {
     "type": "function",
-    "name": "cooldownStart",
+    "name": "convertToAssets",
     "inputs": [
       {
-        "name": "user",
-        "type": "address",
-        "internalType": "address"
+        "name": "shares",
+        "type": "uint256",
+        "internalType": "uint256"
       }
     ],
     "outputs": [
@@ -218,13 +246,32 @@
   },
   {
     "type": "function",
-    "name": "currentZone",
+    "name": "convertToShares",
+    "inputs": [
+      {
+        "name": "assets",
+        "type": "uint256",
+        "internalType": "uint256"
+      }
+    ],
+    "outputs": [
+      {
+        "name": "",
+        "type": "uint256",
+        "internalType": "uint256"
+      }
+    ],
+    "stateMutability": "view"
+  },
+  {
+    "type": "function",
+    "name": "currentDepositCap",
     "inputs": [],
     "outputs": [
       {
         "name": "",
-        "type": "uint8",
-        "internalType": "enum SpilloverLib.Zone"
+        "type": "uint256",
+        "internalType": "uint256"
       }
     ],
     "stateMutability": "view"
@@ -240,7 +287,7 @@
         "internalType": "uint8"
       }
     ],
-    "stateMutability": "pure"
+    "stateMutability": "view"
   },
   {
     "type": "function",
@@ -319,19 +366,6 @@
   },
   {
     "type": "function",
-    "name": "depositCap",
-    "inputs": [],
-    "outputs": [
-      {
-        "name": "",
-        "type": "uint256",
-        "internalType": "uint256"
-      }
-    ],
-    "stateMutability": "view"
-  },
-  {
-    "type": "function",
     "name": "depositToken",
     "inputs": [],
     "outputs": [
@@ -345,26 +379,13 @@
   },
   {
     "type": "function",
-    "name": "emergencyWithdraw",
-    "inputs": [
-      {
-        "name": "amount",
-        "type": "uint256",
-        "internalType": "uint256"
-      }
-    ],
-    "outputs": [],
-    "stateMutability": "nonpayable"
-  },
-  {
-    "type": "function",
-    "name": "epoch",
+    "name": "effectiveMonthlyReturn",
     "inputs": [],
     "outputs": [
       {
         "name": "",
-        "type": "uint256",
-        "internalType": "uint256"
+        "type": "int256",
+        "internalType": "int256"
       }
     ],
     "stateMutability": "view"
@@ -396,51 +417,7 @@
       {
         "name": "holdings",
         "type": "tuple[]",
-        "internalType": "struct UnifiedSeniorVault.LPHolding[]",
-        "components": [
-          {
-            "name": "lpToken",
-            "type": "address",
-            "internalType": "address"
-          },
-          {
-            "name": "amount",
-            "type": "uint256",
-            "internalType": "uint256"
-          }
-        ]
-      }
-    ],
-    "stateMutability": "view"
-  },
-  {
-    "type": "function",
-    "name": "getLPTokenBalance",
-    "inputs": [
-      {
-        "name": "lpToken",
-        "type": "address",
-        "internalType": "address"
-      }
-    ],
-    "outputs": [
-      {
-        "name": "",
-        "type": "uint256",
-        "internalType": "uint256"
-      }
-    ],
-    "stateMutability": "view"
-  },
-  {
-    "type": "function",
-    "name": "getLPTokenHoldings",
-    "inputs": [],
-    "outputs": [
-      {
-        "name": "holdings",
-        "type": "tuple[]",
-        "internalType": "struct UnifiedSeniorVault.LPHolding[]",
+        "internalType": "struct BaseVault.LPHolding[]",
         "components": [
           {
             "name": "lpToken",
@@ -485,56 +462,6 @@
   },
   {
     "type": "function",
-    "name": "initialize",
-    "inputs": [
-      {
-        "name": "stablecoin_",
-        "type": "address",
-        "internalType": "address"
-      },
-      {
-        "name": "tokenName_",
-        "type": "string",
-        "internalType": "string"
-      },
-      {
-        "name": "tokenSymbol_",
-        "type": "string",
-        "internalType": "string"
-      },
-      {
-        "name": "juniorVault_",
-        "type": "address",
-        "internalType": "address"
-      },
-      {
-        "name": "reserveVault_",
-        "type": "address",
-        "internalType": "address"
-      },
-      {
-        "name": "treasury_",
-        "type": "address",
-        "internalType": "address"
-      },
-      {
-        "name": "initialValue_",
-        "type": "uint256",
-        "internalType": "uint256"
-      }
-    ],
-    "outputs": [],
-    "stateMutability": "nonpayable"
-  },
-  {
-    "type": "function",
-    "name": "initiateCooldown",
-    "inputs": [],
-    "outputs": [],
-    "stateMutability": "nonpayable"
-  },
-  {
-    "type": "function",
     "name": "investInLP",
     "inputs": [
       {
@@ -572,7 +499,7 @@
   },
   {
     "type": "function",
-    "name": "isDepositCapReached",
+    "name": "isDepleted",
     "inputs": [],
     "outputs": [
       {
@@ -642,19 +569,6 @@
   },
   {
     "type": "function",
-    "name": "juniorVault",
-    "inputs": [],
-    "outputs": [
-      {
-        "name": "",
-        "type": "address",
-        "internalType": "address"
-      }
-    ],
-    "stateMutability": "view"
-  },
-  {
-    "type": "function",
     "name": "kodiakHook",
     "inputs": [],
     "outputs": [
@@ -662,19 +576,6 @@
         "name": "",
         "type": "address",
         "internalType": "contract IKodiakVaultHook"
-      }
-    ],
-    "stateMutability": "view"
-  },
-  {
-    "type": "function",
-    "name": "lastRebaseTime",
-    "inputs": [],
-    "outputs": [
-      {
-        "name": "",
-        "type": "uint256",
-        "internalType": "uint256"
       }
     ],
     "stateMutability": "view"
@@ -694,8 +595,14 @@
   },
   {
     "type": "function",
-    "name": "minRebaseInterval",
-    "inputs": [],
+    "name": "maxDeposit",
+    "inputs": [
+      {
+        "name": "",
+        "type": "address",
+        "internalType": "address"
+      }
+    ],
     "outputs": [
       {
         "name": "",
@@ -707,6 +614,87 @@
   },
   {
     "type": "function",
+    "name": "maxMint",
+    "inputs": [
+      {
+        "name": "",
+        "type": "address",
+        "internalType": "address"
+      }
+    ],
+    "outputs": [
+      {
+        "name": "",
+        "type": "uint256",
+        "internalType": "uint256"
+      }
+    ],
+    "stateMutability": "view"
+  },
+  {
+    "type": "function",
+    "name": "maxRedeem",
+    "inputs": [
+      {
+        "name": "owner",
+        "type": "address",
+        "internalType": "address"
+      }
+    ],
+    "outputs": [
+      {
+        "name": "",
+        "type": "uint256",
+        "internalType": "uint256"
+      }
+    ],
+    "stateMutability": "view"
+  },
+  {
+    "type": "function",
+    "name": "maxWithdraw",
+    "inputs": [
+      {
+        "name": "owner",
+        "type": "address",
+        "internalType": "address"
+      }
+    ],
+    "outputs": [
+      {
+        "name": "",
+        "type": "uint256",
+        "internalType": "uint256"
+      }
+    ],
+    "stateMutability": "view"
+  },
+  {
+    "type": "function",
+    "name": "mint",
+    "inputs": [
+      {
+        "name": "shares",
+        "type": "uint256",
+        "internalType": "uint256"
+      },
+      {
+        "name": "receiver",
+        "type": "address",
+        "internalType": "address"
+      }
+    ],
+    "outputs": [
+      {
+        "name": "assets",
+        "type": "uint256",
+        "internalType": "uint256"
+      }
+    ],
+    "stateMutability": "nonpayable"
+  },
+  {
+    "type": "function",
     "name": "name",
     "inputs": [],
     "outputs": [
@@ -714,26 +702,6 @@
         "name": "",
         "type": "string",
         "internalType": "string"
-      }
-    ],
-    "stateMutability": "view"
-  },
-  {
-    "type": "function",
-    "name": "pause",
-    "inputs": [],
-    "outputs": [],
-    "stateMutability": "nonpayable"
-  },
-  {
-    "type": "function",
-    "name": "paused",
-    "inputs": [],
-    "outputs": [
-      {
-        "name": "",
-        "type": "bool",
-        "internalType": "bool"
       }
     ],
     "stateMutability": "view"
@@ -759,10 +727,10 @@
   },
   {
     "type": "function",
-    "name": "previewWithdraw",
+    "name": "previewMint",
     "inputs": [
       {
-        "name": "amount",
+        "name": "shares",
         "type": "uint256",
         "internalType": "uint256"
       }
@@ -775,6 +743,68 @@
       }
     ],
     "stateMutability": "view"
+  },
+  {
+    "type": "function",
+    "name": "previewRedeem",
+    "inputs": [
+      {
+        "name": "shares",
+        "type": "uint256",
+        "internalType": "uint256"
+      }
+    ],
+    "outputs": [
+      {
+        "name": "",
+        "type": "uint256",
+        "internalType": "uint256"
+      }
+    ],
+    "stateMutability": "view"
+  },
+  {
+    "type": "function",
+    "name": "previewWithdraw",
+    "inputs": [
+      {
+        "name": "assets",
+        "type": "uint256",
+        "internalType": "uint256"
+      }
+    ],
+    "outputs": [
+      {
+        "name": "",
+        "type": "uint256",
+        "internalType": "uint256"
+      }
+    ],
+    "stateMutability": "view"
+  },
+  {
+    "type": "function",
+    "name": "provideBackstop",
+    "inputs": [
+      {
+        "name": "amountUSD",
+        "type": "uint256",
+        "internalType": "uint256"
+      },
+      {
+        "name": "lpPrice",
+        "type": "uint256",
+        "internalType": "uint256"
+      }
+    ],
+    "outputs": [
+      {
+        "name": "actualAmount",
+        "type": "uint256",
+        "internalType": "uint256"
+      }
+    ],
+    "stateMutability": "nonpayable"
   },
   {
     "type": "function",
@@ -791,10 +821,10 @@
   },
   {
     "type": "function",
-    "name": "rebase",
+    "name": "receiveSpillover",
     "inputs": [
       {
-        "name": "lpPrice",
+        "name": "amount",
         "type": "uint256",
         "internalType": "uint256"
       }
@@ -804,8 +834,24 @@
   },
   {
     "type": "function",
-    "name": "rebaseIndex",
-    "inputs": [],
+    "name": "redeem",
+    "inputs": [
+      {
+        "name": "shares",
+        "type": "uint256",
+        "internalType": "uint256"
+      },
+      {
+        "name": "receiver",
+        "type": "address",
+        "internalType": "address"
+      },
+      {
+        "name": "owner",
+        "type": "address",
+        "internalType": "address"
+      }
+    ],
     "outputs": [
       {
         "name": "",
@@ -813,7 +859,7 @@
         "internalType": "uint256"
       }
     ],
-    "stateMutability": "view"
+    "stateMutability": "nonpayable"
   },
   {
     "type": "function",
@@ -856,19 +902,6 @@
   },
   {
     "type": "function",
-    "name": "reserveVault",
-    "inputs": [],
-    "outputs": [
-      {
-        "name": "",
-        "type": "address",
-        "internalType": "address"
-      }
-    ],
-    "stateMutability": "view"
-  },
-  {
-    "type": "function",
     "name": "seniorVault",
     "inputs": [],
     "outputs": [
@@ -895,24 +928,6 @@
   },
   {
     "type": "function",
-    "name": "setJuniorReserve",
-    "inputs": [
-      {
-        "name": "juniorVault_",
-        "type": "address",
-        "internalType": "address"
-      },
-      {
-        "name": "reserveVault_",
-        "type": "address",
-        "internalType": "address"
-      }
-    ],
-    "outputs": [],
-    "stateMutability": "nonpayable"
-  },
-  {
-    "type": "function",
     "name": "setKodiakHook",
     "inputs": [
       {
@@ -926,12 +941,12 @@
   },
   {
     "type": "function",
-    "name": "setMinRebaseInterval",
+    "name": "setSeniorVault",
     "inputs": [
       {
-        "name": "newInterval",
-        "type": "uint256",
-        "internalType": "uint256"
+        "name": "seniorVault_",
+        "type": "address",
+        "internalType": "address"
       }
     ],
     "outputs": [],
@@ -949,80 +964,6 @@
     ],
     "outputs": [],
     "stateMutability": "nonpayable"
-  },
-  {
-    "type": "function",
-    "name": "sharesOf",
-    "inputs": [
-      {
-        "name": "account",
-        "type": "address",
-        "internalType": "address"
-      }
-    ],
-    "outputs": [
-      {
-        "name": "",
-        "type": "uint256",
-        "internalType": "uint256"
-      }
-    ],
-    "stateMutability": "view"
-  },
-  {
-    "type": "function",
-    "name": "simulateRebase",
-    "inputs": [],
-    "outputs": [
-      {
-        "name": "selection",
-        "type": "tuple",
-        "internalType": "struct RebaseLib.APYSelection",
-        "components": [
-          {
-            "name": "selectedRate",
-            "type": "uint256",
-            "internalType": "uint256"
-          },
-          {
-            "name": "newSupply",
-            "type": "uint256",
-            "internalType": "uint256"
-          },
-          {
-            "name": "userTokens",
-            "type": "uint256",
-            "internalType": "uint256"
-          },
-          {
-            "name": "feeTokens",
-            "type": "uint256",
-            "internalType": "uint256"
-          },
-          {
-            "name": "apyTier",
-            "type": "uint8",
-            "internalType": "uint8"
-          },
-          {
-            "name": "backstopNeeded",
-            "type": "bool",
-            "internalType": "bool"
-          }
-        ]
-      },
-      {
-        "name": "zone",
-        "type": "uint8",
-        "internalType": "enum SpilloverLib.Zone"
-      },
-      {
-        "name": "newBackingRatio",
-        "type": "uint256",
-        "internalType": "uint256"
-      }
-    ],
-    "stateMutability": "view"
   },
   {
     "type": "function",
@@ -1098,7 +1039,20 @@
   },
   {
     "type": "function",
-    "name": "totalShares",
+    "name": "totalBackstopProvided",
+    "inputs": [],
+    "outputs": [
+      {
+        "name": "",
+        "type": "uint256",
+        "internalType": "uint256"
+      }
+    ],
+    "stateMutability": "view"
+  },
+  {
+    "type": "function",
+    "name": "totalSpilloverReceived",
     "inputs": [],
     "outputs": [
       {
@@ -1132,7 +1086,7 @@
         "internalType": "address"
       },
       {
-        "name": "amount",
+        "name": "value",
         "type": "uint256",
         "internalType": "uint256"
       }
@@ -1174,7 +1128,7 @@
         "internalType": "address"
       },
       {
-        "name": "amount",
+        "name": "value",
         "type": "uint256",
         "internalType": "uint256"
       }
@@ -1190,35 +1144,23 @@
   },
   {
     "type": "function",
-    "name": "treasury",
-    "inputs": [],
-    "outputs": [
+    "name": "transferToSenior",
+    "inputs": [
       {
-        "name": "",
-        "type": "address",
-        "internalType": "address"
+        "name": "amount",
+        "type": "uint256",
+        "internalType": "uint256"
       }
     ],
-    "stateMutability": "view"
-  },
-  {
-    "type": "function",
-    "name": "unpause",
-    "inputs": [],
     "outputs": [],
     "stateMutability": "nonpayable"
   },
   {
     "type": "function",
-    "name": "updateJuniorReserve",
+    "name": "updateSeniorVault",
     "inputs": [
       {
-        "name": "juniorVault_",
-        "type": "address",
-        "internalType": "address"
-      },
-      {
-        "name": "reserveVault_",
+        "name": "seniorVault_",
         "type": "address",
         "internalType": "address"
       }
@@ -1259,6 +1201,19 @@
   },
   {
     "type": "function",
+    "name": "utilizationRate",
+    "inputs": [],
+    "outputs": [
+      {
+        "name": "",
+        "type": "uint256",
+        "internalType": "uint256"
+      }
+    ],
+    "stateMutability": "view"
+  },
+  {
+    "type": "function",
     "name": "vaultValue",
     "inputs": [],
     "outputs": [
@@ -1275,7 +1230,7 @@
     "name": "withdraw",
     "inputs": [
       {
-        "name": "amount",
+        "name": "assets",
         "type": "uint256",
         "internalType": "uint256"
       },
@@ -1292,7 +1247,7 @@
     ],
     "outputs": [
       {
-        "name": "assets",
+        "name": "",
         "type": "uint256",
         "internalType": "uint256"
       }
@@ -1387,47 +1342,47 @@
   },
   {
     "type": "event",
-    "name": "BackstopTriggered",
+    "name": "BackstopProvided",
     "inputs": [
       {
-        "name": "deficitAmount",
+        "name": "amount",
         "type": "uint256",
         "indexed": false,
         "internalType": "uint256"
       },
       {
-        "name": "fromReserve",
-        "type": "uint256",
+        "name": "toSenior",
+        "type": "address",
         "indexed": false,
-        "internalType": "uint256"
-      },
-      {
-        "name": "fromJunior",
-        "type": "uint256",
-        "indexed": false,
-        "internalType": "uint256"
-      },
-      {
-        "name": "fullyRestored",
-        "type": "bool",
-        "indexed": false,
-        "internalType": "bool"
+        "internalType": "address"
       }
     ],
     "anonymous": false
   },
   {
     "type": "event",
-    "name": "CooldownInitiated",
+    "name": "Deposit",
     "inputs": [
       {
-        "name": "user",
+        "name": "sender",
         "type": "address",
         "indexed": true,
         "internalType": "address"
       },
       {
-        "name": "timestamp",
+        "name": "owner",
+        "type": "address",
+        "indexed": true,
+        "internalType": "address"
+      },
+      {
+        "name": "assets",
+        "type": "uint256",
+        "indexed": false,
+        "internalType": "uint256"
+      },
+      {
+        "name": "shares",
         "type": "uint256",
         "indexed": false,
         "internalType": "uint256"
@@ -1462,6 +1417,25 @@
   },
   {
     "type": "event",
+    "name": "DepositCapUpdated",
+    "inputs": [
+      {
+        "name": "oldCap",
+        "type": "uint256",
+        "indexed": false,
+        "internalType": "uint256"
+      },
+      {
+        "name": "newCap",
+        "type": "uint256",
+        "indexed": false,
+        "internalType": "uint256"
+      }
+    ],
+    "anonymous": false
+  },
+  {
+    "type": "event",
     "name": "DepositorRemoved",
     "inputs": [
       {
@@ -1482,25 +1456,6 @@
         "type": "address",
         "indexed": true,
         "internalType": "address"
-      }
-    ],
-    "anonymous": false
-  },
-  {
-    "type": "event",
-    "name": "EmergencyWithdraw",
-    "inputs": [
-      {
-        "name": "to",
-        "type": "address",
-        "indexed": true,
-        "internalType": "address"
-      },
-      {
-        "name": "amount",
-        "type": "uint256",
-        "indexed": false,
-        "internalType": "uint256"
       }
     ],
     "anonymous": false
@@ -1627,131 +1582,44 @@
   },
   {
     "type": "event",
-    "name": "MinRebaseIntervalUpdated",
+    "name": "ReserveBelowThreshold",
+    "inputs": [],
+    "anonymous": false
+  },
+  {
+    "type": "event",
+    "name": "ReserveRebaseExecuted",
     "inputs": [
       {
-        "name": "oldInterval",
+        "name": "newValue",
         "type": "uint256",
         "indexed": false,
         "internalType": "uint256"
       },
       {
-        "name": "newInterval",
-        "type": "uint256",
+        "name": "effectiveReturn",
+        "type": "int256",
         "indexed": false,
-        "internalType": "uint256"
+        "internalType": "int256"
       }
     ],
     "anonymous": false
   },
   {
     "type": "event",
-    "name": "Paused",
+    "name": "SpilloverReceived",
     "inputs": [
       {
-        "name": "account",
+        "name": "amount",
+        "type": "uint256",
+        "indexed": false,
+        "internalType": "uint256"
+      },
+      {
+        "name": "fromSenior",
         "type": "address",
         "indexed": false,
         "internalType": "address"
-      }
-    ],
-    "anonymous": false
-  },
-  {
-    "type": "event",
-    "name": "ProfitSpillover",
-    "inputs": [
-      {
-        "name": "excessAmount",
-        "type": "uint256",
-        "indexed": false,
-        "internalType": "uint256"
-      },
-      {
-        "name": "toJunior",
-        "type": "uint256",
-        "indexed": false,
-        "internalType": "uint256"
-      },
-      {
-        "name": "toReserve",
-        "type": "uint256",
-        "indexed": false,
-        "internalType": "uint256"
-      }
-    ],
-    "anonymous": false
-  },
-  {
-    "type": "event",
-    "name": "Rebase",
-    "inputs": [
-      {
-        "name": "epoch",
-        "type": "uint256",
-        "indexed": true,
-        "internalType": "uint256"
-      },
-      {
-        "name": "oldIndex",
-        "type": "uint256",
-        "indexed": false,
-        "internalType": "uint256"
-      },
-      {
-        "name": "newIndex",
-        "type": "uint256",
-        "indexed": false,
-        "internalType": "uint256"
-      },
-      {
-        "name": "newTotalSupply",
-        "type": "uint256",
-        "indexed": false,
-        "internalType": "uint256"
-      }
-    ],
-    "anonymous": false
-  },
-  {
-    "type": "event",
-    "name": "RebaseExecuted",
-    "inputs": [
-      {
-        "name": "epoch",
-        "type": "uint256",
-        "indexed": true,
-        "internalType": "uint256"
-      },
-      {
-        "name": "apyTier",
-        "type": "uint8",
-        "indexed": false,
-        "internalType": "uint8"
-      },
-      {
-        "name": "oldIndex",
-        "type": "uint256",
-        "indexed": false,
-        "internalType": "uint256"
-      },
-      {
-        "name": "newIndex",
-        "type": "uint256",
-        "indexed": false,
-        "internalType": "uint256"
-      },
-      {
-        "name": "newSupply",
-        "type": "uint256",
-        "indexed": false,
-        "internalType": "uint256"
-      },
-      {
-        "name": "zone",
-        "type": "uint8",
-        "indexed": false,
-        "internalType": "enum SpilloverLib.Zone"
       }
     ],
     "anonymous": false
@@ -1777,19 +1645,6 @@
         "type": "uint256",
         "indexed": false,
         "internalType": "uint256"
-      }
-    ],
-    "anonymous": false
-  },
-  {
-    "type": "event",
-    "name": "Unpaused",
-    "inputs": [
-      {
-        "name": "account",
-        "type": "address",
-        "indexed": false,
-        "internalType": "address"
       }
     ],
     "anonymous": false
@@ -1889,7 +1744,19 @@
     "name": "Withdraw",
     "inputs": [
       {
-        "name": "user",
+        "name": "sender",
+        "type": "address",
+        "indexed": true,
+        "internalType": "address"
+      },
+      {
+        "name": "receiver",
+        "type": "address",
+        "indexed": true,
+        "internalType": "address"
+      },
+      {
+        "name": "owner",
         "type": "address",
         "indexed": true,
         "internalType": "address"
@@ -1911,7 +1778,7 @@
   },
   {
     "type": "event",
-    "name": "WithdrawalPenaltyCharged",
+    "name": "Withdraw",
     "inputs": [
       {
         "name": "user",
@@ -1920,7 +1787,13 @@
         "internalType": "address"
       },
       {
-        "name": "penalty",
+        "name": "assets",
+        "type": "uint256",
+        "indexed": false,
+        "internalType": "uint256"
+      },
+      {
+        "name": "shares",
         "type": "uint256",
         "indexed": false,
         "internalType": "uint256"
@@ -1957,17 +1830,7 @@
   },
   {
     "type": "error",
-    "name": "CooldownNotMet",
-    "inputs": []
-  },
-  {
-    "type": "error",
     "name": "DepositCapExceeded",
-    "inputs": []
-  },
-  {
-    "type": "error",
-    "name": "DivisionByZero",
     "inputs": []
   },
   {
@@ -1988,13 +1851,173 @@
   },
   {
     "type": "error",
-    "name": "EnforcedPause",
-    "inputs": []
+    "name": "ERC20InsufficientAllowance",
+    "inputs": [
+      {
+        "name": "spender",
+        "type": "address",
+        "internalType": "address"
+      },
+      {
+        "name": "allowance",
+        "type": "uint256",
+        "internalType": "uint256"
+      },
+      {
+        "name": "needed",
+        "type": "uint256",
+        "internalType": "uint256"
+      }
+    ]
   },
   {
     "type": "error",
-    "name": "ExpectedPause",
-    "inputs": []
+    "name": "ERC20InsufficientBalance",
+    "inputs": [
+      {
+        "name": "sender",
+        "type": "address",
+        "internalType": "address"
+      },
+      {
+        "name": "balance",
+        "type": "uint256",
+        "internalType": "uint256"
+      },
+      {
+        "name": "needed",
+        "type": "uint256",
+        "internalType": "uint256"
+      }
+    ]
+  },
+  {
+    "type": "error",
+    "name": "ERC20InvalidApprover",
+    "inputs": [
+      {
+        "name": "approver",
+        "type": "address",
+        "internalType": "address"
+      }
+    ]
+  },
+  {
+    "type": "error",
+    "name": "ERC20InvalidReceiver",
+    "inputs": [
+      {
+        "name": "receiver",
+        "type": "address",
+        "internalType": "address"
+      }
+    ]
+  },
+  {
+    "type": "error",
+    "name": "ERC20InvalidSender",
+    "inputs": [
+      {
+        "name": "sender",
+        "type": "address",
+        "internalType": "address"
+      }
+    ]
+  },
+  {
+    "type": "error",
+    "name": "ERC20InvalidSpender",
+    "inputs": [
+      {
+        "name": "spender",
+        "type": "address",
+        "internalType": "address"
+      }
+    ]
+  },
+  {
+    "type": "error",
+    "name": "ERC4626ExceededMaxDeposit",
+    "inputs": [
+      {
+        "name": "receiver",
+        "type": "address",
+        "internalType": "address"
+      },
+      {
+        "name": "assets",
+        "type": "uint256",
+        "internalType": "uint256"
+      },
+      {
+        "name": "max",
+        "type": "uint256",
+        "internalType": "uint256"
+      }
+    ]
+  },
+  {
+    "type": "error",
+    "name": "ERC4626ExceededMaxMint",
+    "inputs": [
+      {
+        "name": "receiver",
+        "type": "address",
+        "internalType": "address"
+      },
+      {
+        "name": "shares",
+        "type": "uint256",
+        "internalType": "uint256"
+      },
+      {
+        "name": "max",
+        "type": "uint256",
+        "internalType": "uint256"
+      }
+    ]
+  },
+  {
+    "type": "error",
+    "name": "ERC4626ExceededMaxRedeem",
+    "inputs": [
+      {
+        "name": "owner",
+        "type": "address",
+        "internalType": "address"
+      },
+      {
+        "name": "shares",
+        "type": "uint256",
+        "internalType": "uint256"
+      },
+      {
+        "name": "max",
+        "type": "uint256",
+        "internalType": "uint256"
+      }
+    ]
+  },
+  {
+    "type": "error",
+    "name": "ERC4626ExceededMaxWithdraw",
+    "inputs": [
+      {
+        "name": "owner",
+        "type": "address",
+        "internalType": "address"
+      },
+      {
+        "name": "assets",
+        "type": "uint256",
+        "internalType": "uint256"
+      },
+      {
+        "name": "max",
+        "type": "uint256",
+        "internalType": "uint256"
+      }
+    ]
   },
   {
     "type": "error",
@@ -2003,7 +2026,7 @@
   },
   {
     "type": "error",
-    "name": "InsufficientAllowance",
+    "name": "InsufficientBackstopFunds",
     "inputs": []
   },
   {
@@ -2014,11 +2037,6 @@
   {
     "type": "error",
     "name": "InsufficientLiquidity",
-    "inputs": []
-  },
-  {
-    "type": "error",
-    "name": "InvalidAPYTier",
     "inputs": []
   },
   {
@@ -2038,37 +2056,17 @@
   },
   {
     "type": "error",
-    "name": "InvalidRecipient",
-    "inputs": []
-  },
-  {
-    "type": "error",
-    "name": "InvalidSupply",
-    "inputs": []
-  },
-  {
-    "type": "error",
-    "name": "InvalidVaultValue",
-    "inputs": []
-  },
-  {
-    "type": "error",
-    "name": "InvalidWithdrawalAmount",
-    "inputs": []
-  },
-  {
-    "type": "error",
-    "name": "JuniorReserveAlreadySet",
-    "inputs": []
-  },
-  {
-    "type": "error",
     "name": "KodiakHookNotSet",
     "inputs": []
   },
   {
     "type": "error",
     "name": "LPAlreadyWhitelisted",
+    "inputs": []
+  },
+  {
+    "type": "error",
+    "name": "MathOverflowedMulDiv",
     "inputs": []
   },
   {
@@ -2088,6 +2086,11 @@
   },
   {
     "type": "error",
+    "name": "OnlySeniorVault",
+    "inputs": []
+  },
+  {
+    "type": "error",
     "name": "OnlyWhitelistedDepositor",
     "inputs": []
   },
@@ -2098,7 +2101,7 @@
   },
   {
     "type": "error",
-    "name": "RebaseTooSoon",
+    "name": "ReserveDepleted",
     "inputs": []
   },
   {
@@ -2111,6 +2114,11 @@
         "internalType": "address"
       }
     ]
+  },
+  {
+    "type": "error",
+    "name": "SeniorVaultAlreadySet",
+    "inputs": []
   },
   {
     "type": "error",
