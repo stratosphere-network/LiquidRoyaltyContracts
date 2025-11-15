@@ -1,0 +1,15 @@
+[
+  {
+    "type": "function",
+    "name": "setKodiakHook",
+    "inputs": [
+      {
+        "name": "hook",
+        "type": "address",
+        "internalType": "address"
+      }
+    ],
+    "outputs": [],
+    "stateMutability": "nonpayable"
+  }
+]
