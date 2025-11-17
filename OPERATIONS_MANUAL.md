@@ -1,10 +1,10 @@
 # 🔧 Operations Manual - Senior Tranche Protocol
 
-## Daily Operations Reference Table
+## Operations Reference Table
 
 | Operation | Role | Frequency | Command | Notes |
 |-----------|------|-----------|---------|-------|
-| **Rebase Senior Vault** | Admin | Daily/Weekly | `cast send $SENIOR_VAULT "rebase(uint256)" $LP_PRICE_USD --private-key $PRIVATE_KEY --rpc-url $RPC_URL --gas-limit 3000000 --legacy` | Get LP price from Enso API. Triggers spillover/backstop. Critical for system health. |
+| **Rebase Senior Vault** | Admin | Monthly | `cast send $SENIOR_VAULT "rebase(uint256)" $LP_PRICE_USD --private-key $PRIVATE_KEY --rpc-url $RPC_URL --gas-limit 3000000 --legacy` | Get LP price from Enso API. Triggers spillover/backstop. Critical for system health. |
 | **Update Junior Vault Value** | Admin | As needed | `cast send $JUNIOR_VAULT "updateValue(uint256)" $NEW_VALUE_USD --private-key $PRIVATE_KEY --rpc-url $RPC_URL --legacy` | Update after significant market moves or LP price changes. Affects unstaking ratio. |
 | **Update Reserve Vault Value** | Admin | As needed | `cast send $RESERVE_VAULT "updateValue(uint256)" $NEW_VALUE_USD --private-key $PRIVATE_KEY --rpc-url $RPC_URL --legacy` | Update after significant market moves or LP price changes. Affects unstaking ratio. |
 | **Deploy HONEY to Kodiak** | Admin | After deposits | `cast send $SENIOR_VAULT "deployToKodiak(uint256,uint256,address,bytes,address,bytes)" $HONEY_AMOUNT $MIN_LP $ENSO_ROUTER $SWAP_DATA0 $ENSO_ROUTER $SWAP_DATA1 --private-key $PRIVATE_KEY --rpc-url $RPC_URL --gas-limit 2000000 --legacy` | Get swap data from Enso API. Converts HONEY to LP. Increases yield. |
@@ -29,7 +29,7 @@
 
 ## Quick Operation Workflows
 
-### 🔄 Daily Rebase Workflow
+### 🔄 Monthly Rebase Workflow
 
 ```bash
 # 1. Get LP price from Enso
@@ -161,7 +161,7 @@ cast call $JUNIOR_VAULT "unstakingRatio()(uint256)" --rpc-url $RPC_URL
 
 ## Monitoring & Health Checks
 
-### Daily Health Check Commands
+### Health Check Commands
 
 ```bash
 # Source deployment addresses
@@ -228,7 +228,7 @@ cast send $RESERVE_VAULT "unpause()" --private-key $PRIVATE_KEY --rpc-url $RPC_U
 
 | Operation | Frequency | Recommended Time | Priority |
 |-----------|-----------|-----------------|----------|
-| Rebase Senior Vault | Daily | 12:00 UTC | 🔴 Critical |
+| Rebase Senior Vault | Monthly | 1st of month, 12:00 UTC | 🔴 Critical |
 | Update Junior/Reserve Values | Weekly | Monday 08:00 UTC | 🟡 Important |
 | Deploy Capital to Kodiak | As needed | After large deposits | 🟢 Normal |
 | Dust Recovery | Weekly | Friday 16:00 UTC | 🟢 Normal |
@@ -257,8 +257,8 @@ cast send $RESERVE_VAULT "unpause()" --private-key $PRIVATE_KEY --rpc-url $RPC_U
 ```bash
 # Add to crontab: crontab -e
 
-# Daily rebase at 12:00 UTC
-0 12 * * * /path/to/scripts/daily_rebase.sh >> /var/log/senior_rebase.log 2>&1
+# Monthly rebase on 1st of month at 12:00 UTC
+0 12 1 * * /path/to/scripts/monthly_rebase.sh >> /var/log/senior_rebase.log 2>&1
 
 # Weekly value update on Mondays at 08:00 UTC
 0 8 * * 1 /path/to/scripts/update_values.sh >> /var/log/senior_values.log 2>&1
