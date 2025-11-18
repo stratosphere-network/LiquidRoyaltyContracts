@@ -572,6 +572,80 @@ cast call $SENIOR_VAULT "isWhitelistedLP(address)(bool)" $SENIOR_HOOK --rpc-url 
 # Should return: true
 ```
 
+#### 4.4 Set Treasury Address
+
+⚠️ **CRITICAL:** Configure treasury to receive fees!
+
+```bash
+# Set treasury on all vaults (use your treasury wallet)
+export TREASURY_ADDRESS=0x...  # Your treasury address
+
+# Senior vault
+cast send $SENIOR_VAULT \
+  "setTreasury(address)" \
+  $TREASURY_ADDRESS \
+  --private-key $PRIVATE_KEY \
+  --rpc-url $RPC_URL \
+  --legacy
+
+# Junior vault
+cast send $JUNIOR_VAULT \
+  "setTreasury(address)" \
+  $TREASURY_ADDRESS \
+  --private-key $PRIVATE_KEY \
+  --rpc-url $RPC_URL \
+  --legacy
+
+# Reserve vault
+cast send $RESERVE_VAULT \
+  "setTreasury(address)" \
+  $TREASURY_ADDRESS \
+  --private-key $PRIVATE_KEY \
+  --rpc-url $RPC_URL \
+  --legacy
+```
+
+**Verification:**
+```bash
+cast call $SENIOR_VAULT "treasury()(address)" --rpc-url $RPC_URL
+cast call $JUNIOR_VAULT "treasury()(address)" --rpc-url $RPC_URL
+cast call $RESERVE_VAULT "treasury()(address)" --rpc-url $RPC_URL
+# All should return: $TREASURY_ADDRESS
+```
+
+#### 4.5 Configure Performance Fee Schedule (Junior/Reserve Only)
+
+```bash
+# Set fee schedule for Junior vault (example: 30 days = 2592000 seconds)
+cast send $JUNIOR_VAULT \
+  "setMgmtFeeSchedule(uint256)" \
+  2592000 \
+  --private-key $PRIVATE_KEY \
+  --rpc-url $RPC_URL \
+  --legacy
+
+# Set fee schedule for Reserve vault (example: 30 days)
+cast send $RESERVE_VAULT \
+  "setMgmtFeeSchedule(uint256)" \
+  2592000 \
+  --private-key $PRIVATE_KEY \
+  --rpc-url $RPC_URL \
+  --legacy
+```
+
+**Common Fee Schedules:**
+- 1 day: `86400`
+- 7 days: `604800`
+- 30 days: `2592000`
+- 90 days: `7776000`
+
+**Verification:**
+```bash
+cast call $JUNIOR_VAULT "getMgmtFeeSchedule()(uint256)" --rpc-url $RPC_URL
+cast call $RESERVE_VAULT "getMgmtFeeSchedule()(uint256)" --rpc-url $RPC_URL
+# Should return: 2592000 (or your chosen schedule)
+```
+
 ---
 
 ## Bootstrap & Seeding
@@ -617,6 +691,48 @@ forge script script/BootstrapLiquidity.s.sol \
   --broadcast \
   --legacy \
   --slow
+```
+
+#### Option C: Seed Vault with Existing LP Tokens (Recommended)
+
+If you or another address already holds LP tokens from Kodiak:
+
+```bash
+# 1. Get current LP price
+LP_PRICE=$(curl -s "https://api.enso.finance/api/v1/price?chainId=80094&address=$KODIAK_ISLAND_ADDRESS" | jq -r '.price')
+LP_PRICE_WEI=$(echo "$LP_PRICE * 10^18" | bc)
+
+# 2. Set seed provider and amount
+SEED_PROVIDER=0x...  # Address that holds LP tokens
+LP_AMOUNT=1000000000000000000  # 1 LP token (18 decimals)
+
+# 3. Approve vault to transfer LP tokens (from seed provider wallet)
+cast send $KODIAK_ISLAND_ADDRESS \
+  "approve(address,uint256)" \
+  $SENIOR_VAULT \
+  $LP_AMOUNT \
+  --private-key $SEED_PROVIDER_KEY \
+  --rpc-url $RPC_URL \
+  --legacy
+
+# 4. Seed the vault (from admin wallet)
+cast send $SENIOR_VAULT \
+  "seedVault(address,uint256,address,uint256)" \
+  $KODIAK_ISLAND_ADDRESS \
+  $LP_AMOUNT \
+  $SEED_PROVIDER \
+  $LP_PRICE_WEI \
+  --private-key $PRIVATE_KEY \
+  --rpc-url $RPC_URL \
+  --legacy
+
+# 5. Verify LP tokens transferred to hook
+cast call $KODIAK_ISLAND_ADDRESS "balanceOf(address)(uint256)" $SENIOR_HOOK --rpc-url $RPC_URL
+
+# 6. Verify shares minted to seed provider
+cast call $SENIOR_VAULT "balanceOf(address)(uint256)" $SEED_PROVIDER --rpc-url $RPC_URL
+
+# 7. Repeat for Junior and Reserve vaults if needed
 ```
 
 ### Phase 6: Deploy Initial Liquidity to Kodiak
@@ -686,15 +802,23 @@ cast call $SENIOR_VAULT "backingRatio()(uint256)" --rpc-url $RPC_URL
 
 # Check Junior vault configuration
 cast call $JUNIOR_VAULT "seniorVault()(address)" --rpc-url $RPC_URL
+cast call $JUNIOR_VAULT "treasury()(address)" --rpc-url $RPC_URL
 cast call $JUNIOR_VAULT "kodiakHook()(address)" --rpc-url $RPC_URL
 cast call $JUNIOR_VAULT "vaultValue()(uint256)" --rpc-url $RPC_URL
 cast call $JUNIOR_VAULT "totalSupply()(uint256)" --rpc-url $RPC_URL
+cast call $JUNIOR_VAULT "getMgmtFeeSchedule()(uint256)" --rpc-url $RPC_URL
+cast call $JUNIOR_VAULT "getLastMintTime()(uint256)" --rpc-url $RPC_URL
+cast call $JUNIOR_VAULT "canMintPerformanceFee()(bool)" --rpc-url $RPC_URL
 
 # Check Reserve vault configuration
 cast call $RESERVE_VAULT "seniorVault()(address)" --rpc-url $RPC_URL
+cast call $RESERVE_VAULT "treasury()(address)" --rpc-url $RPC_URL
 cast call $RESERVE_VAULT "kodiakHook()(address)" --rpc-url $RPC_URL
 cast call $RESERVE_VAULT "vaultValue()(uint256)" --rpc-url $RPC_URL
 cast call $RESERVE_VAULT "totalSupply()(uint256)" --rpc-url $RPC_URL
+cast call $RESERVE_VAULT "getMgmtFeeSchedule()(uint256)" --rpc-url $RPC_URL
+cast call $RESERVE_VAULT "getLastMintTime()(uint256)" --rpc-url $RPC_URL
+cast call $RESERVE_VAULT "canMintPerformanceFee()(bool)" --rpc-url $RPC_URL
 ```
 
 #### 7.3 Verify Hook Configuration
@@ -893,6 +1017,96 @@ cast call $SENIOR_VAULT "backingRatio()(uint256)" --rpc-url $RPC_URL
 
 ---
 
+## Fee Structure Overview
+
+### Understanding Vault Fees
+
+The protocol implements a comprehensive fee structure to ensure sustainability and proper treasury management:
+
+#### Senior Vault Fees
+
+1. **Management Fee (1% annually)**
+   - Charged during monthly rebase
+   - Minted as additional snrUSD to treasury
+   - Does NOT reduce user balances
+
+2. **Performance Fee (~2% of yield)**
+   - Charged during monthly rebase
+   - Minted as additional snrUSD to treasury
+   - Based on yield generated
+
+3. **Withdrawal Fee (1%)**
+   - Charged on all withdrawals
+   - Deducted from withdrawn amount
+   - Sent to treasury in HONEY
+
+4. **Early Withdrawal Penalty (20%)**
+   - Charged if withdrawing before 7-day cooldown
+   - Deducted from withdrawn amount
+   - Sent to treasury in HONEY
+
+**Example Senior Withdrawal:**
+- User withdraws 1000 snrUSD before cooldown
+- Early penalty: 1000 × 20% = 200 HONEY
+- After penalty: 800 HONEY
+- Withdrawal fee: 800 × 1% = 8 HONEY
+- User receives: 792 HONEY
+- Treasury receives: 208 HONEY total
+
+#### Junior & Reserve Vault Fees
+
+1. **Performance Fee (1% of supply)**
+   - Minted on configurable schedule (e.g., monthly)
+   - Admin calls `mintPerformanceFee()`
+   - Mints 1% of current supply to treasury
+   - Schedule enforced on-chain
+
+2. **Withdrawal Fee (1%)**
+   - Charged on all withdrawals
+   - Deducted from withdrawn amount
+   - Sent to treasury in HONEY
+
+**Example Junior Withdrawal:**
+- User withdraws 1000 jnrHONEY
+- Current unstaking ratio: 1.2 (user gets 1200 HONEY)
+- Withdrawal fee: 1200 × 1% = 12 HONEY
+- User receives: 1188 HONEY
+- Treasury receives: 12 HONEY
+
+### Fee Schedule Recommendations
+
+| Vault Type | Fee Type | Frequency | Recommended |
+|------------|----------|-----------|-------------|
+| Senior | Management | Monthly (automatic) | Non-configurable |
+| Senior | Performance | Monthly (automatic) | Non-configurable |
+| Senior | Withdrawal | Per withdrawal | Non-configurable |
+| Senior | Early Penalty | Per early withdrawal | Non-configurable (20%) |
+| Junior | Performance | Configurable | 30 days (2592000 sec) |
+| Reserve | Performance | Configurable | 30 days (2592000 sec) |
+| Junior | Withdrawal | Per withdrawal | Non-configurable |
+| Reserve | Withdrawal | Per withdrawal | Non-configurable |
+
+### Monitoring Fee Collection
+
+```bash
+# Check treasury balance
+TREASURY=$(cast call $SENIOR_VAULT "treasury()(address)" --rpc-url $RPC_URL)
+
+# Check snrUSD balance (from management/performance fees)
+cast call $SENIOR_VAULT "balanceOf(address)(uint256)" $TREASURY --rpc-url $RPC_URL
+
+# Check HONEY balance (from withdrawal fees)
+cast call $HONEY_ADDRESS "balanceOf(address)(uint256)" $TREASURY --rpc-url $RPC_URL
+
+# Check if Junior can mint performance fee
+cast call $JUNIOR_VAULT "canMintPerformanceFee()(bool)" --rpc-url $RPC_URL
+
+# Check time until next Junior fee mint
+cast call $JUNIOR_VAULT "getTimeUntilNextMint()(uint256)" --rpc-url $RPC_URL
+```
+
+---
+
 ## Troubleshooting
 
 ### Common Issues and Solutions
@@ -994,6 +1208,39 @@ cast call $KODIAK_ISLAND_ADDRESS "balanceOf(address)(uint256)" $SENIOR_HOOK --rp
 --slow
 ```
 
+#### Issue 8: "ZeroAddress" when minting performance fee
+
+**Problem:** Treasury not configured on vault.
+
+**Solution:**
+```bash
+# Set treasury address
+cast send $JUNIOR_VAULT \
+  "setTreasury(address)" \
+  $TREASURY_ADDRESS \
+  --private-key $PRIVATE_KEY \
+  --rpc-url $RPC_URL \
+  --legacy
+```
+
+#### Issue 9: "FeeScheduleNotMet" when minting performance fee
+
+**Problem:** Not enough time elapsed since last mint.
+
+**Solution:**
+```bash
+# Check how much time until next mint
+cast call $JUNIOR_VAULT "getTimeUntilNextMint()(uint256)" --rpc-url $RPC_URL
+
+# Wait until schedule is met, or adjust schedule (if really needed)
+cast send $JUNIOR_VAULT \
+  "setMgmtFeeSchedule(uint256)" \
+  86400 \
+  --private-key $PRIVATE_KEY \
+  --rpc-url $RPC_URL \
+  --legacy
+```
+
 ---
 
 ## Final Checklist
@@ -1009,6 +1256,9 @@ cast call $KODIAK_ISLAND_ADDRESS "balanceOf(address)(uint256)" $SENIOR_HOOK --rp
 - [ ] Aggregators whitelisted on hooks
 - [ ] LP tokens whitelisted on vaults
 - [ ] Hooks whitelisted as LPs on vaults
+- [ ] Treasury address set on all 3 vaults
+- [ ] Performance fee schedule set on Junior vault
+- [ ] Performance fee schedule set on Reserve vault
 
 ### Initial State
 - [ ] Vault values set correctly
@@ -1089,4 +1339,36 @@ Remember to:
 5. Communicate with users about cooldown periods
 
 Good luck! 💪
+
+---
+
+## Appendix: Recent Upgrades
+
+### November 18, 2025 - Fee & Performance Upgrade
+
+**What Changed:**
+- Added `seedVault()` function to bootstrap vaults with LP tokens
+- Added `setTreasury()` and `treasury()` to configure fee recipient
+- Increased early withdrawal penalty from 5% to 20%
+- Added 1% withdrawal fee on all vaults (sent to treasury)
+- Changed Senior management fee: now mints snrUSD instead of reducing vault value
+- Added performance fee minting for Junior/Reserve:
+  - `mintPerformanceFee()` - Mint 1% of supply to treasury
+  - `setMgmtFeeSchedule()` - Configure minting schedule
+  - `getMgmtFeeSchedule()` - View schedule
+  - `getLastMintTime()` - Last mint timestamp
+  - `canMintPerformanceFee()` - Check if eligible to mint
+  - `getTimeUntilNextMint()` - Time remaining
+
+**Migration Steps:**
+If you deployed vaults before this upgrade:
+1. Deploy new implementations (Senior, Junior, Reserve)
+2. Call `upgradeToAndCall()` on each proxy
+3. Call `setTreasury()` on all 3 vaults
+4. Call `setMgmtFeeSchedule()` on Junior and Reserve
+
+**New ABIs:**
+Make sure to regenerate ABIs and update frontend after this upgrade!
+
+---
 

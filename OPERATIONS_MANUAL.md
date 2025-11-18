@@ -4,7 +4,8 @@
 
 | Operation | Role | Frequency | Command | Notes |
 |-----------|------|-----------|---------|-------|
-| **Rebase Senior Vault** | Admin | Monthly | `cast send $SENIOR_VAULT "rebase(uint256)" $LP_PRICE_USD --private-key $PRIVATE_KEY --rpc-url $RPC_URL --gas-limit 3000000 --legacy` | Get LP price from Enso API. Triggers spillover/backstop. Critical for system health. |
+| **Rebase Senior Vault** | Admin | Monthly | `cast send $SENIOR_VAULT "rebase(uint256)" $LP_PRICE_USD --private-key $PRIVATE_KEY --rpc-url $RPC_URL --gas-limit 3000000 --legacy` | Get LP price from Enso API. Triggers spillover/backstop. Mints 1% management fee to treasury. Critical for system health. |
+| **Mint Performance Fee (Junior/Reserve)** | Admin | Per schedule | `cast send $JUNIOR_VAULT "mintPerformanceFee()" --private-key $PRIVATE_KEY --rpc-url $RPC_URL --legacy` | Mints 1% of circulating supply to treasury. Only works if schedule elapsed since last mint. |
 | **Update Junior Vault Value** | Admin | As needed | `cast send $JUNIOR_VAULT "updateValue(uint256)" $NEW_VALUE_USD --private-key $PRIVATE_KEY --rpc-url $RPC_URL --legacy` | Update after significant market moves or LP price changes. Affects unstaking ratio. |
 | **Update Reserve Vault Value** | Admin | As needed | `cast send $RESERVE_VAULT "updateValue(uint256)" $NEW_VALUE_USD --private-key $PRIVATE_KEY --rpc-url $RPC_URL --legacy` | Update after significant market moves or LP price changes. Affects unstaking ratio. |
 | **Deploy HONEY to Kodiak** | Admin | After deposits | `cast send $SENIOR_VAULT "deployToKodiak(uint256,uint256,address,bytes,address,bytes)" $HONEY_AMOUNT $MIN_LP $ENSO_ROUTER $SWAP_DATA0 $ENSO_ROUTER $SWAP_DATA1 --private-key $PRIVATE_KEY --rpc-url $RPC_URL --gas-limit 2000000 --legacy` | Get swap data from Enso API. Converts HONEY to LP. Increases yield. |
@@ -18,7 +19,9 @@
 | **Pause Vault** | Admin | Emergency | `cast send $VAULT_ADDRESS "pause()" --private-key $PRIVATE_KEY --rpc-url $RPC_URL --legacy` | Stops all deposits/withdrawals. Use for emergencies only. |
 | **Unpause Vault** | Admin | After fix | `cast send $VAULT_ADDRESS "unpause()" --private-key $PRIVATE_KEY --rpc-url $RPC_URL --legacy` | Resumes normal operations after emergency. |
 | **Change Admin** | Admin | Rare | `cast send $VAULT_ADDRESS "changeAdmin(address)" $NEW_ADMIN --private-key $PRIVATE_KEY --rpc-url $RPC_URL --legacy` | Transfer admin control. Use multisig recommended. |
-| **Update Treasury** | Admin | Rare | `cast send $VAULT_ADDRESS "setTreasury(address)" $NEW_TREASURY --private-key $PRIVATE_KEY --rpc-url $RPC_URL --legacy` | Change treasury address for fees. |
+| **Update Treasury** | Admin | Rare | `cast send $VAULT_ADDRESS "setTreasury(address)" $NEW_TREASURY --private-key $PRIVATE_KEY --rpc-url $RPC_URL --legacy` | Change treasury address for withdrawal fees and performance fees. Required for fee collection. |
+| **Set Fee Schedule (Junior/Reserve)** | Admin | Once or rare | `cast send $JUNIOR_VAULT "setMgmtFeeSchedule(uint256)" $SECONDS --private-key $PRIVATE_KEY --rpc-url $RPC_URL --legacy` | Configure how often performance fees can be minted. Examples: 86400 (1 day), 604800 (7 days), 2592000 (30 days). |
+| **Seed Vault with LP Tokens** | Admin | Initial setup | `cast send $VAULT_ADDRESS "seedVault(address,uint256,address,uint256)" $LP_TOKEN $AMOUNT $PROVIDER $LP_PRICE --private-key $PRIVATE_KEY --rpc-url $RPC_URL --legacy` | Bootstrap vaults with pre-deployed LP. Provider must approve LP transfer first. Calculates value and mints shares. |
 | **Upgrade Vault Implementation** | Admin | When needed | `cast send $PROXY "upgradeToAndCall(address,bytes)" $NEW_IMPL "0x" --private-key $PRIVATE_KEY --rpc-url $RPC_URL --legacy` | Deploy new implementation first. UUPS upgrade. Test thoroughly! |
 | **Deposit (User)** | User | Anytime | `vault.deposit(amount, receiver)` via frontend or cast | Requires HONEY approval first. 7-day cooldown starts. |
 | **Withdraw (User)** | User | After cooldown | `vault.withdraw(amount, receiver, owner)` via frontend | Requires 7-day cooldown completed. May liquidate LP. |
@@ -159,6 +162,143 @@ cast call $JUNIOR_VAULT "unstakingRatio()(uint256)" --rpc-url $RPC_URL
 
 ---
 
+### 💸 Performance Fee Minting Workflow (Junior/Reserve)
+
+```bash
+# 1. Check if fee can be minted
+CAN_MINT=$(cast call $JUNIOR_VAULT "canMintPerformanceFee()(bool)" --rpc-url $RPC_URL)
+
+if [ "$CAN_MINT" = "true" ]; then
+  echo "✅ Fee schedule elapsed, can mint"
+  
+  # 2. Check time since last mint
+  LAST_MINT=$(cast call $JUNIOR_VAULT "getLastMintTime()(uint256)" --rpc-url $RPC_URL)
+  echo "Last minted at: $LAST_MINT"
+  
+  # 3. Mint performance fee (1% of supply)
+  cast send $JUNIOR_VAULT "mintPerformanceFee()" \
+    --private-key $PRIVATE_KEY \
+    --rpc-url $RPC_URL \
+    --legacy
+  
+  # 4. Verify treasury received tokens
+  TREASURY=$(cast call $JUNIOR_VAULT "treasury()(address)" --rpc-url $RPC_URL)
+  TREASURY_BAL=$(cast call $JUNIOR_VAULT "balanceOf(address)(uint256)" $TREASURY --rpc-url $RPC_URL)
+  echo "Treasury balance: $TREASURY_BAL"
+else
+  # Check time until next mint
+  TIME_UNTIL=$(cast call $JUNIOR_VAULT "getTimeUntilNextMint()(uint256)" --rpc-url $RPC_URL)
+  echo "⏳ Cannot mint yet. Time remaining: $TIME_UNTIL seconds"
+fi
+
+# 5. Repeat for Reserve vault
+```
+
+---
+
+### 🏦 Initial Treasury & Fee Setup Workflow
+
+```bash
+# IMPORTANT: Run this ONCE after deployment or upgrade
+
+# 1. Set treasury address on all vaults
+TREASURY_ADDRESS=0x...  # Your treasury wallet
+
+cast send $SENIOR_VAULT "setTreasury(address)" $TREASURY_ADDRESS \
+  --private-key $PRIVATE_KEY \
+  --rpc-url $RPC_URL \
+  --legacy
+
+cast send $JUNIOR_VAULT "setTreasury(address)" $TREASURY_ADDRESS \
+  --private-key $PRIVATE_KEY \
+  --rpc-url $RPC_URL \
+  --legacy
+
+cast send $RESERVE_VAULT "setTreasury(address)" $TREASURY_ADDRESS \
+  --private-key $PRIVATE_KEY \
+  --rpc-url $RPC_URL \
+  --legacy
+
+# 2. Configure performance fee schedule for Junior (e.g., 30 days)
+cast send $JUNIOR_VAULT "setMgmtFeeSchedule(uint256)" 2592000 \
+  --private-key $PRIVATE_KEY \
+  --rpc-url $RPC_URL \
+  --legacy
+
+# 3. Configure performance fee schedule for Reserve (e.g., 30 days)
+cast send $RESERVE_VAULT "setMgmtFeeSchedule(uint256)" 2592000 \
+  --private-key $PRIVATE_KEY \
+  --rpc-url $RPC_URL \
+  --legacy
+
+# 4. Verify configuration
+echo "Senior Treasury: $(cast call $SENIOR_VAULT "treasury()(address)" --rpc-url $RPC_URL)"
+echo "Junior Fee Schedule: $(cast call $JUNIOR_VAULT "getMgmtFeeSchedule()(uint256)" --rpc-url $RPC_URL)"
+echo "Reserve Fee Schedule: $(cast call $RESERVE_VAULT "getMgmtFeeSchedule()(uint256)" --rpc-url $RPC_URL)"
+```
+
+---
+
+### 🌱 Seed Vault with LP Tokens Workflow
+
+```bash
+# Use this to bootstrap vaults with pre-deployed LP tokens
+
+# 1. Get LP price from Enso or DEX
+LP_PRICE=$(curl -s "https://api.enso.finance/api/v1/price?chainId=80094&address=$KODIAK_ISLAND_ADDRESS" | jq -r '.price')
+LP_PRICE_WEI=$(echo "$LP_PRICE * 10^18" | bc)
+
+# 2. Approve LP token transfer (from seed provider wallet)
+SEED_PROVIDER=0x...  # Address that holds the LP tokens
+LP_AMOUNT=1000000000000000000  # Amount of LP tokens (18 decimals)
+
+cast send $KODIAK_ISLAND_ADDRESS \
+  "approve(address,uint256)" \
+  $SENIOR_VAULT \
+  $LP_AMOUNT \
+  --private-key $SEED_PROVIDER_KEY \
+  --rpc-url $RPC_URL \
+  --legacy
+
+# 3. Seed the vault
+cast send $SENIOR_VAULT \
+  "seedVault(address,uint256,address,uint256)" \
+  $KODIAK_ISLAND_ADDRESS \
+  $LP_AMOUNT \
+  $SEED_PROVIDER \
+  $LP_PRICE_WEI \
+  --private-key $PRIVATE_KEY \
+  --rpc-url $RPC_URL \
+  --legacy
+
+# 4. Verify shares were minted
+cast call $SENIOR_VAULT "balanceOf(address)(uint256)" $SEED_PROVIDER --rpc-url $RPC_URL
+
+# 5. Verify LP in hook
+cast call $KODIAK_ISLAND_ADDRESS "balanceOf(address)(uint256)" $SENIOR_HOOK --rpc-url $RPC_URL
+
+# 6. Repeat for Junior and Reserve if needed
+```
+
+---
+
+## Fee Structure Summary
+
+### Senior Vault Fees
+- **Management Fee**: 1% annually, minted as snrUSD to treasury during monthly rebase
+- **Performance Fee**: ~2% of yield, minted as snrUSD to treasury during monthly rebase  
+- **Withdrawal Fee**: 1% of withdrawn amount (sent to treasury in HONEY)
+- **Early Withdrawal Penalty**: 20% if withdrawn before cooldown (sent to treasury in HONEY)
+
+### Junior & Reserve Vault Fees
+- **Performance Fee**: 1% of circulating supply, minted on configurable schedule (e.g., monthly, quarterly)
+- **Withdrawal Fee**: 1% of withdrawn amount (sent to treasury in HONEY)
+
+### Fee Collection
+All fees are automatically sent to the configured treasury address. Make sure to set treasury using `setTreasury()` after deployment!
+
+---
+
 ## Monitoring & Health Checks
 
 ### Health Check Commands
@@ -229,6 +369,7 @@ cast send $RESERVE_VAULT "unpause()" --private-key $PRIVATE_KEY --rpc-url $RPC_U
 | Operation | Frequency | Recommended Time | Priority |
 |-----------|-----------|-----------------|----------|
 | Rebase Senior Vault | Monthly | 1st of month, 12:00 UTC | 🔴 Critical |
+| Mint Performance Fee (Junior/Reserve) | Per schedule | Based on fee schedule | 🟡 Important |
 | Update Junior/Reserve Values | Weekly | Monday 08:00 UTC | 🟡 Important |
 | Deploy Capital to Kodiak | As needed | After large deposits | 🟢 Normal |
 | Dust Recovery | Weekly | Friday 16:00 UTC | 🟢 Normal |
