@@ -114,9 +114,12 @@ abstract contract UnifiedSeniorVault is ISeniorVault, IERC20, AdminControlled, P
     event WhitelistedLPTokenRemoved(address indexed lpToken);
     event KodiakDeployment(uint256 amount, uint256 lpReceived, uint256 timestamp);
     event LiquidityFreedForWithdrawal(uint256 requested, uint256 freedFromLP);
-    
-    /// @dev Errors (ZeroAddress inherited from AdminControlled, InsufficientBalance from IVault)
+    event WithdrawalFeeCharged(address indexed user, uint256 fee, uint256 netAmount);
+    event VaultSeeded(address indexed lpToken, address indexed seedProvider, uint256 amount, uint256 lpPrice, uint256 valueAdded, uint256 sharesMinted);
+
+    /// @dev Errors (ZeroAddress inherited from AdminControlled, InsufficientBalance and InvalidAmount from IVault)
     error InvalidProfitRange();
+    error InvalidLPPrice();
     error InvalidRecipient();
     error InsufficientAllowance();
     error JuniorReserveAlreadySet();
@@ -620,6 +623,57 @@ abstract contract UnifiedSeniorVault is ISeniorVault, IERC20, AdminControlled, P
         emit MinRebaseIntervalUpdated(oldInterval, newInterval);
     }
     
+    /**
+     * @notice Set treasury address for fee collection
+     * @param treasury_ New treasury address
+     */
+    function setTreasury(address treasury_) external onlyAdmin {
+        if (treasury_ == address(0)) revert AdminControlled.ZeroAddress();
+        _treasury = treasury_;
+    }
+    
+    /**
+     * @notice Seed vault with LP tokens from an external provider
+     * @param lpToken Address of the LP token
+     * @param amount Amount of LP tokens to seed
+     * @param seedProvider Address providing the LP tokens
+     * @param lpPrice Current LP token price (18 decimals)
+     * @dev Provider must approve this vault to transfer LP tokens first
+     * @dev Transfers LP to hook, calculates value, mints shares to provider
+     */
+    function seedVault(
+        address lpToken,
+        uint256 amount,
+        address seedProvider,
+        uint256 lpPrice
+    ) external onlyAdmin {
+        if (lpToken == address(0) || seedProvider == address(0)) revert AdminControlled.ZeroAddress();
+        if (amount == 0) revert InvalidAmount();
+        if (lpPrice == 0) revert InvalidLPPrice();
+        if (address(kodiakHook) == address(0)) revert KodiakHookNotSet();
+        
+        // Transfer LP tokens from provider to this vault
+        IERC20(lpToken).safeTransferFrom(seedProvider, address(this), amount);
+        
+        // Transfer LP tokens to hook
+        IERC20(lpToken).safeTransfer(address(kodiakHook), amount);
+        
+        // Calculate value added (LP amount * LP price)
+        uint256 valueAdded = (amount * lpPrice) / 1e18;
+        
+        // For Senior: mint 1:1 (snrUSD is 1:1 with USD value)
+        uint256 sharesToMint = valueAdded;
+        
+        // Mint shares to provider
+        _mint(seedProvider, sharesToMint);
+        
+        // Update vault value
+        _vaultValue += valueAdded;
+        _lastUpdateTime = block.timestamp;
+        
+        emit VaultSeeded(lpToken, seedProvider, amount, lpPrice, valueAdded, sharesToMint);
+    }
+    
     // ============================================
     // ERC20 Implementation (Rebasing)
     // ============================================
@@ -899,7 +953,7 @@ abstract contract UnifiedSeniorVault is ISeniorVault, IERC20, AdminControlled, P
      * @param amount Amount of snrUSD to burn
      * @param receiver Address to receive stablecoin tokens
      * @param owner Owner of snrUSD
-     * @return assets Amount of stablecoin tokens withdrawn (after penalty if applicable)
+     * @return assets Amount of stablecoin tokens withdrawn (after penalty + 1% withdrawal fee)
      */
     function withdraw(uint256 amount, address receiver, address owner) public virtual whenNotPausedOrAdmin returns (uint256 assets) {
         if (amount == 0) revert InvalidAmount();
@@ -914,8 +968,15 @@ abstract contract UnifiedSeniorVault is ISeniorVault, IERC20, AdminControlled, P
             }
         }
         
-        // Calculate withdrawal penalty
-        (uint256 penalty, uint256 netAssets) = calculateWithdrawalPenalty(owner, amount);
+        // Calculate early withdrawal penalty (20% if cooldown not met)
+        (uint256 earlyPenalty, uint256 amountAfterEarlyPenalty) = calculateWithdrawalPenalty(owner, amount);
+        
+        // Calculate 1% withdrawal fee (applied to amount after early penalty)
+        uint256 withdrawalFee = (amountAfterEarlyPenalty * MathLib.WITHDRAWAL_FEE) / MathLib.PRECISION;
+        uint256 netAssets = amountAfterEarlyPenalty - withdrawalFee;
+        
+        // Total needed = netAssets + withdrawalFee (we need enough for both receiver and treasury)
+        uint256 totalNeeded = amountAfterEarlyPenalty;
         
         // Iterative approach: Try up to 3 times to free up liquidity
         uint256 maxAttempts = 3;
@@ -924,7 +985,7 @@ abstract contract UnifiedSeniorVault is ISeniorVault, IERC20, AdminControlled, P
         for (uint256 i = 0; i < maxAttempts; i++) {
             uint256 vaultBalance = _stablecoin.balanceOf(address(this));
             
-            if (vaultBalance >= netAssets) {
+            if (vaultBalance >= totalNeeded) {
                 break; // We have enough!
             }
             
@@ -933,7 +994,7 @@ abstract contract UnifiedSeniorVault is ISeniorVault, IERC20, AdminControlled, P
             }
             
             // Calculate how much more we need
-            uint256 needed = netAssets - vaultBalance;
+            uint256 needed = totalNeeded - vaultBalance;
             uint256 balanceBefore = vaultBalance;
             
             // Call hook to liquidate LP with smart estimation
@@ -954,26 +1015,32 @@ abstract contract UnifiedSeniorVault is ISeniorVault, IERC20, AdminControlled, P
         
         // Final check: do we have enough now?
         uint256 finalBalance = _stablecoin.balanceOf(address(this));
-        if (finalBalance < netAssets) {
+        if (finalBalance < totalNeeded) {
             revert InsufficientLiquidity();
         }
         
         // Emit event if we had to free up liquidity
         if (totalFreed > 0) {
-            emit LiquidityFreedForWithdrawal(netAssets, totalFreed);
+            emit LiquidityFreedForWithdrawal(totalNeeded, totalFreed);
         }
         
         // Burn snrUSD
         _burn(owner, amount);
         
-        // Transfer stablecoin to receiver (net of penalty)
+        // Transfer net amount to receiver (after both early penalty and withdrawal fee)
         _stablecoin.transfer(receiver, netAssets);
         
-        // Track capital outflow: decrease vault value by actual assets withdrawn
-        _vaultValue -= netAssets;
+        // Transfer withdrawal fee to treasury
+        if (_treasury != address(0) && withdrawalFee > 0) {
+            _stablecoin.transfer(_treasury, withdrawalFee);
+            emit WithdrawalFeeCharged(owner, withdrawalFee, netAssets);
+        }
         
-        if (penalty > 0) {
-            emit WithdrawalPenaltyCharged(owner, penalty);
+        // Track capital outflow: decrease vault value by amount after early penalty
+        _vaultValue -= amountAfterEarlyPenalty;
+        
+        if (earlyPenalty > 0) {
+            emit WithdrawalPenaltyCharged(owner, earlyPenalty);
         }
         
         emit Withdraw(owner, netAssets, amount);
@@ -1119,23 +1186,23 @@ abstract contract UnifiedSeniorVault is ISeniorVault, IERC20, AdminControlled, P
         uint256 currentSupply = totalSupply();
         if (currentSupply == 0) revert InvalidAmount();
         
-        // Step 1: Deduct management fee
-        (uint256 netValue, uint256 mgmtFee) = FeeLib.deductManagementFee(_vaultValue);
+        // Step 1: Calculate management fee tokens to mint (1% annual / 12 months)
+        uint256 mgmtFeeTokens = FeeLib.calculateManagementFeeTokens(_vaultValue);
         
-        // Step 2 & 3: Dynamic APY selection
+        // Step 2 & 3: Dynamic APY selection (using full vault value, not reduced)
         RebaseLib.APYSelection memory selection = RebaseLib.selectDynamicAPY(
             currentSupply,
-            netValue
+            _vaultValue  // Use full vault value now!
         );
         
         // Step 4: Determine zone and execute spillover/backstop (with LP price)
-        uint256 finalBackingRatio = MathLib.calculateBackingRatio(netValue, selection.newSupply);
+        uint256 finalBackingRatio = MathLib.calculateBackingRatio(_vaultValue, selection.newSupply);
         SpilloverLib.Zone zone = SpilloverLib.determineZone(finalBackingRatio);
         
         if (zone == SpilloverLib.Zone.SPILLOVER) {
-            _executeProfitSpillover(netValue, selection.newSupply, lpPrice);
+            _executeProfitSpillover(_vaultValue, selection.newSupply, lpPrice);
         } else if (zone == SpilloverLib.Zone.BACKSTOP || selection.backstopNeeded) {
-            _executeBackstop(netValue, selection.newSupply, lpPrice);
+            _executeBackstop(_vaultValue, selection.newSupply, lpPrice);
         }
         
         // Step 5: Update rebase index
@@ -1143,16 +1210,17 @@ abstract contract UnifiedSeniorVault is ISeniorVault, IERC20, AdminControlled, P
         _rebaseIndex = FeeLib.calculateNewRebaseIndex(oldIndex, selection.selectedRate);
         _epoch++;
         
-        // Mint performance fee tokens to treasury
-        if (selection.feeTokens > 0) {
-            _mint(_treasury, selection.feeTokens);
+        // Step 6: Mint ALL fee tokens to treasury (management + performance)
+        uint256 totalFeeTokens = mgmtFeeTokens + selection.feeTokens;
+        if (totalFeeTokens > 0) {
+            _mint(_treasury, totalFeeTokens);
         }
         
         _lastRebaseTime = block.timestamp;
         
         emit Rebase(_epoch, oldIndex, _rebaseIndex, totalSupply());
         emit RebaseExecuted(_epoch, selection.apyTier, oldIndex, _rebaseIndex, selection.newSupply, zone);
-        emit FeesCollected(mgmtFee, selection.feeTokens);
+        emit FeesCollected(mgmtFeeTokens, selection.feeTokens);  // Now shows both fees
     }
     
     /**
@@ -1169,9 +1237,9 @@ abstract contract UnifiedSeniorVault is ISeniorVault, IERC20, AdminControlled, P
             return (selection, SpilloverLib.Zone.HEALTHY, MathLib.PRECISION);
         }
         
-        (uint256 netValue,) = FeeLib.deductManagementFee(_vaultValue);
-        selection = RebaseLib.selectDynamicAPY(currentSupply, netValue);
-        newBackingRatio = MathLib.calculateBackingRatio(netValue, selection.newSupply);
+        // Use full vault value (management fee now minted, not deducted)
+        selection = RebaseLib.selectDynamicAPY(currentSupply, _vaultValue);
+        newBackingRatio = MathLib.calculateBackingRatio(_vaultValue, selection.newSupply);
         zone = SpilloverLib.determineZone(newBackingRatio);
         
         return (selection, zone, newBackingRatio);

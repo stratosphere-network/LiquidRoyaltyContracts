@@ -72,7 +72,7 @@ library FeeLib {
             // No penalty: P = 0, w_net = w
             return (0, withdrawalAmount);
         } else {
-            // Apply penalty: P = w × 0.05
+            // Apply penalty: P = w × 0.20
             penalty = (withdrawalAmount * MathLib.EARLY_WITHDRAWAL_PENALTY) / MathLib.PRECISION;
             netAmount = withdrawalAmount - penalty;
             return (penalty, netAmount);
@@ -80,19 +80,19 @@ library FeeLib {
     }
     
     /**
-     * @notice Calculate net vault value after management fee deduction
-     * @dev Reference: Section - Rebase Algorithm (Step 2)
-     * Formula: V_s^net = V_s - F_mgmt
-     * @param grossValue Vault value before fees (V_s)
-     * @return netValue Value after management fee (V_s^net)
-     * @return feeAmount Management fee deducted (F_mgmt)
+     * @notice Calculate management fee tokens to mint
+     * @dev Reference: Section - Rebase Algorithm (Step 2) - UPDATED
+     * Formula: mgmtFeeTokens = vaultValue × (1% / 12)
+     * Management fee is now collected by minting snrUSD, not reducing vault value
+     * @param vaultValue Current vault value (V_s)
+     * @return managementFeeTokens snrUSD tokens to mint for management fee
      */
-    function deductManagementFee(
-        uint256 grossValue
-    ) internal pure returns (uint256 netValue, uint256 feeAmount) {
-        feeAmount = calculateManagementFee(grossValue);
-        netValue = grossValue - feeAmount;
-        return (netValue, feeAmount);
+    function calculateManagementFeeTokens(
+        uint256 vaultValue
+    ) internal pure returns (uint256 managementFeeTokens) {
+        // F_mgmt_tokens = vaultValue × (0.01 / 12)
+        // Since snrUSD is 1:1 with vault value, this is the token amount to mint
+        return calculateManagementFee(vaultValue);
     }
     
     /**

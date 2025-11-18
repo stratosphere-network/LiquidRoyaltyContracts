@@ -57,6 +57,13 @@ abstract contract BaseVault is ERC4626Upgradeable, IVault, AdminControlled, UUPS
     /// @dev Kodiak integration
     IKodiakVaultHook public kodiakHook;
     
+    /// @dev Treasury address for fees
+    address internal _treasury;
+    
+    /// @dev Performance fee minting for Junior/Reserve vaults
+    uint256 internal _lastMintTime;        // Last time performance fee was minted
+    uint256 internal _mgmtFeeSchedule;     // Time interval between mints (e.g., 7 days, 30 days)
+    
     /// @dev Constants
     int256 internal constant MIN_PROFIT_BPS = -5000;  // -50% minimum
     int256 internal constant MAX_PROFIT_BPS = 10000;  // +100% maximum
@@ -72,8 +79,19 @@ abstract contract BaseVault is ERC4626Upgradeable, IVault, AdminControlled, UUPS
     event LPTokensWithdrawn(address indexed lpToken, address indexed lp, uint256 amount);
     event KodiakDeployment(uint256 amount, uint256 lpReceived, uint256 timestamp);
     event LiquidityFreedForWithdrawal(uint256 requested, uint256 freedFromLP);
+    event VaultSeeded(
+        address indexed lpToken,
+        address indexed seedProvider,
+        uint256 lpAmount,
+        uint256 lpPrice,
+        uint256 valueAdded,
+        uint256 sharesMinted
+    );
+    event WithdrawalFeeCharged(address indexed user, uint256 fee, uint256 netAmount);
+    event PerformanceFeeMinted(address indexed treasury, uint256 amount, uint256 timestamp);
+    event MgmtFeeScheduleUpdated(uint256 oldSchedule, uint256 newSchedule);
     
-    /// @dev Errors (ZeroAddress inherited from AdminControlled)
+    /// @dev Errors (ZeroAddress inherited from AdminControlled, InvalidAmount inherited from IVault)
     error InvalidProfitRange();
     error SeniorVaultAlreadySet();
     error OnlySeniorVault();
@@ -84,6 +102,9 @@ abstract contract BaseVault is ERC4626Upgradeable, IVault, AdminControlled, UUPS
     error SlippageTooHigh();
     error WrongVault();
     error InsufficientLiquidity();
+    error InvalidLPPrice();
+    error FeeScheduleNotMet();
+    error InvalidSchedule();
     
     /// @dev Modifiers
     modifier onlySeniorVault() {
@@ -121,6 +142,10 @@ abstract contract BaseVault is ERC4626Upgradeable, IVault, AdminControlled, UUPS
         _seniorVault = seniorVault_; // Can be placeholder initially
         _vaultValue = initialValue_;
         _lastUpdateTime = block.timestamp;
+        
+        // Initialize performance fee minting variables
+        _lastMintTime = block.timestamp;
+        _mgmtFeeSchedule = 30 days; // Default: 30 days
     }
     
 
@@ -563,6 +588,110 @@ abstract contract BaseVault is ERC4626Upgradeable, IVault, AdminControlled, UUPS
         return _seniorVault;
     }
     
+    /**
+     * @notice Get treasury address
+     */
+    function treasury() public view virtual returns (address) {
+        return _treasury;
+    }
+    
+    /**
+     * @notice Set treasury address
+     * @dev Only admin can set treasury
+     * @param treasury_ New treasury address
+     */
+    function setTreasury(address treasury_) external onlyAdmin {
+        if (treasury_ == address(0)) revert AdminControlled.ZeroAddress();
+        _treasury = treasury_;
+    }
+    
+    // ============================================
+    // Performance Fee Minting (Junior/Reserve)
+    // ============================================
+    
+    /**
+     * @notice Mint performance fee to treasury (1% of total supply)
+     * @dev Only admin can call this. Can only be called after mgmtFeeSchedule has passed
+     * 
+     * Flow:
+     * 1. Check if enough time has passed since last mint
+     * 2. Calculate 1% of current total supply
+     * 3. Mint to treasury
+     * 4. Update last mint time
+     */
+    function mintPerformanceFee() external onlyAdmin {
+        if (_treasury == address(0)) revert AdminControlled.ZeroAddress();
+        
+        // Check if enough time has passed
+        if (block.timestamp < _lastMintTime + _mgmtFeeSchedule) {
+            revert FeeScheduleNotMet();
+        }
+        
+        uint256 currentSupply = totalSupply();
+        if (currentSupply == 0) revert InvalidAmount();
+        
+        // Calculate 1% of total supply
+        uint256 feeAmount = (currentSupply * 1e16) / 1e18; // 1% = 0.01 = 1e16/1e18
+        
+        // Mint to treasury
+        _mint(_treasury, feeAmount);
+        
+        // Update last mint time
+        _lastMintTime = block.timestamp;
+        
+        emit PerformanceFeeMinted(_treasury, feeAmount, block.timestamp);
+    }
+    
+    /**
+     * @notice Set management fee schedule (time between performance fee mints)
+     * @dev Only admin can update the schedule
+     * @param newSchedule New schedule in seconds (e.g., 7 days, 30 days)
+     */
+    function setMgmtFeeSchedule(uint256 newSchedule) external onlyAdmin {
+        if (newSchedule == 0) revert InvalidSchedule();
+        
+        uint256 oldSchedule = _mgmtFeeSchedule;
+        _mgmtFeeSchedule = newSchedule;
+        
+        emit MgmtFeeScheduleUpdated(oldSchedule, newSchedule);
+    }
+    
+    /**
+     * @notice Get current management fee schedule
+     * @return schedule Time in seconds between performance fee mints
+     */
+    function getMgmtFeeSchedule() external view returns (uint256) {
+        return _mgmtFeeSchedule;
+    }
+    
+    /**
+     * @notice Get last time performance fee was minted
+     * @return timestamp Last mint timestamp
+     */
+    function getLastMintTime() external view returns (uint256) {
+        return _lastMintTime;
+    }
+    
+    /**
+     * @notice Check if performance fee can be minted now
+     * @return canMint True if enough time has passed
+     */
+    function canMintPerformanceFee() external view returns (bool) {
+        return block.timestamp >= _lastMintTime + _mgmtFeeSchedule;
+    }
+    
+    /**
+     * @notice Get time remaining until next performance fee can be minted
+     * @return timeRemaining Seconds until next mint (0 if can mint now)
+     */
+    function getTimeUntilNextMint() external view returns (uint256) {
+        uint256 nextMintTime = _lastMintTime + _mgmtFeeSchedule;
+        if (block.timestamp >= nextMintTime) {
+            return 0;
+        }
+        return nextMintTime - block.timestamp;
+    }
+    
     // ============================================
     // ERC4626 Overrides
     // ============================================
@@ -670,6 +799,71 @@ abstract contract BaseVault is ERC4626Upgradeable, IVault, AdminControlled, UUPS
     }
     
     /**
+     * @notice Seed vault with LP tokens from external source
+     * @dev Admin function to bootstrap vault with LP positions
+     * @param lpToken Address of the LP token to seed
+     * @param amount Amount of LP tokens to seed
+     * @param seedProvider Address providing the LP tokens (must have approved this vault)
+     * @param lpPrice Price of LP token in stablecoin terms (18 decimals)
+     * 
+     * Flow:
+     * 1. Transfer LP tokens from seedProvider to vault (requires approval)
+     * 2. Transfer LP tokens from vault to hook
+     * 3. Calculate value = amount * lpPrice
+     * 4. Mint shares to seedProvider (1:1 for senior, share-price-based for junior/reserve)
+     * 5. Update vault value to include new LP value
+     * 6. Emit VaultSeeded event
+     */
+    function seedVault(
+        address lpToken,
+        uint256 amount,
+        address seedProvider,
+        uint256 lpPrice
+    ) external onlyAdmin {
+        // Validation
+        if (lpToken == address(0) || seedProvider == address(0)) revert AdminControlled.ZeroAddress();
+        if (amount == 0) revert InvalidAmount();
+        if (lpPrice == 0) revert InvalidLPPrice();
+        if (address(kodiakHook) == address(0)) revert KodiakHookNotSet();
+        
+        // Step 1: Transfer LP tokens from seedProvider to vault
+        IERC20(lpToken).safeTransferFrom(seedProvider, address(this), amount);
+        
+        // Step 2: Transfer LP tokens from vault to hook
+        IERC20(lpToken).safeTransfer(address(kodiakHook), amount);
+        
+        // Step 3: Calculate value = amount * lpPrice / 1e18
+        // lpPrice is in 18 decimals, representing how much stablecoin per LP token
+        uint256 valueAdded = (amount * lpPrice) / 1e18;
+        
+        // Step 4: Mint shares to seedProvider
+        // Get current share price (how many assets per share)
+        uint256 sharePrice = totalSupply() > 0 ? (totalAssets() * 1e18) / totalSupply() : 1e18;
+        
+        // Calculate shares to mint based on vault type
+        // For senior: 1:1 ratio (valueAdded == shares)
+        // For junior/reserve: based on share price
+        uint256 sharesToMint;
+        if (sharePrice == 1e18 || totalSupply() == 0) {
+            // First deposit or 1:1 ratio
+            sharesToMint = valueAdded;
+        } else {
+            // Calculate shares based on current share price
+            sharesToMint = (valueAdded * 1e18) / sharePrice;
+        }
+        
+        // Mint shares directly (bypass normal deposit flow)
+        _mint(seedProvider, sharesToMint);
+        
+        // Step 5: Update vault value to include new LP value
+        _vaultValue += valueAdded;
+        _lastUpdateTime = block.timestamp;
+        
+        // Step 6: Emit event
+        emit VaultSeeded(lpToken, seedProvider, amount, lpPrice, valueAdded, sharesToMint);
+    }
+    
+    /**
      * @notice Transfer Stablecoins to Senior vault (fixes asset transfer issue)
      * @dev Called by Senior vault during backstop
      * @param amount Amount of Stablecoins to transfer
@@ -731,12 +925,12 @@ abstract contract BaseVault is ERC4626Upgradeable, IVault, AdminControlled, UUPS
     // ============================================
     
     /**
-     * @notice Override ERC4626 internal withdraw to ensure liquidity
+     * @notice Override ERC4626 internal withdraw to ensure liquidity and charge 1% withdrawal fee
      * @dev Automatically frees up liquidity from Kodiak LP if needed using iterative approach
      * @param caller Address calling the withdrawal
      * @param receiver Address receiving the assets
      * @param owner Owner of the shares
-     * @param assets Amount of assets to withdraw
+     * @param assets Amount of assets to withdraw (BEFORE fee)
      * @param shares Amount of shares to burn
      */
     function _withdraw(
@@ -746,6 +940,10 @@ abstract contract BaseVault is ERC4626Upgradeable, IVault, AdminControlled, UUPS
         uint256 assets,
         uint256 shares
     ) internal virtual override {
+        // Calculate 1% withdrawal fee
+        uint256 withdrawalFee = (assets * MathLib.WITHDRAWAL_FEE) / MathLib.PRECISION;
+        uint256 netAssets = assets - withdrawalFee;
+        
         // Iterative approach: Try up to 3 times to free up liquidity
         uint256 maxAttempts = 3;
         uint256 totalFreed = 0;
@@ -792,11 +990,22 @@ abstract contract BaseVault is ERC4626Upgradeable, IVault, AdminControlled, UUPS
             emit LiquidityFreedForWithdrawal(assets, totalFreed);
         }
         
-        // Call parent implementation to handle actual withdrawal
-        super._withdraw(caller, receiver, owner, assets, shares);
+        // Burn shares from owner
+        _burn(owner, shares);
         
-        // Track capital outflow: decrease vault value by actual assets withdrawn
+        // Transfer net assets to receiver (after 1% fee)
+        _stablecoin.safeTransfer(receiver, netAssets);
+        
+        // Transfer fee to treasury (if treasury is set)
+        if (_treasury != address(0) && withdrawalFee > 0) {
+            _stablecoin.safeTransfer(_treasury, withdrawalFee);
+            emit WithdrawalFeeCharged(owner, withdrawalFee, netAssets);
+        }
+        
+        // Track capital outflow: decrease vault value by actual assets withdrawn (full amount including fee)
         _vaultValue -= assets;
+        
+        emit Withdraw(caller, receiver, owner, assets, shares);
     }
     
     // ============================================
