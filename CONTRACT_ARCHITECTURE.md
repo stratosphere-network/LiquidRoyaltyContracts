@@ -1089,6 +1089,309 @@ uint256 constant PRECISION = 1e18;                // 18 decimals
 
 ---
 
+## Reserve Vault - Unique Features
+
+### Overview
+
+The **Reserve vault** has exclusive capabilities for managing non-stablecoin assets (like WBTC) that Senior and Junior vaults don't have. This provides additional flexibility in bootstrapping and asset management.
+
+### Reserve-Specific Functions
+
+#### 1. `seedReserveWithToken()` - Seed with Non-Stablecoin
+
+**File**: `src/abstract/BaseVault.sol` (lines 912-954)
+
+**Purpose**: Bootstrap Reserve vault with volatile assets (WBTC) that stay in the vault initially.
+
+**Flow**:
+```solidity
+function seedReserveWithToken(
+    address token,           // e.g., WBTC
+    uint256 amount,          // Amount in token decimals (e.g., 8 for WBTC)
+    address seedProvider,    // Who provides the tokens
+    uint256 tokenPrice       // Price in USD (18 decimals)
+) external onlyAdmin {
+    // 1. Transfer tokens from provider to vault (stays in vault!)
+    IERC20(token).safeTransferFrom(seedProvider, address(this), amount);
+    
+    // 2. Calculate value: amount × price / 1e18
+    uint256 valueAdded = (amount * tokenPrice) / 1e18;
+    
+    // 3. Calculate shares to mint
+    uint256 sharePrice = totalSupply() > 0 ? (totalAssets() * 1e18) / totalSupply() : 1e18;
+    uint256 sharesToMint = (valueAdded * 1e18) / sharePrice;
+    
+    // 4. Mint shares to provider
+    _mint(seedProvider, sharesToMint);
+    
+    // 5. Update vault value
+    _vaultValue += valueAdded;
+    
+    emit ReserveSeededWithToken(token, seedProvider, amount, tokenPrice, valueAdded, sharesToMint);
+}
+```
+
+**Key Difference**: Token stays IN vault (not transferred to hook like `seedVault()`).
+
+#### 2. `investInKodiak()` - Convert Assets to LP
+
+**File**: `src/abstract/BaseVault.sol` (lines 969-1010)
+
+**Purpose**: Convert non-stablecoin tokens held in Reserve vault to Kodiak LP tokens.
+
+**Flow**:
+```solidity
+function investInKodiak(
+    address island,                      // Kodiak Island (pool)
+    address token,                       // Token to invest (e.g., WBTC)
+    uint256 amount,                      // Amount to invest
+    uint256 minLPTokens,                 // Slippage protection
+    address swapToToken0Aggregator,      // DEX aggregator
+    bytes calldata swapToToken0Data,     // Swap calldata
+    address swapToToken1Aggregator,      // DEX aggregator
+    bytes calldata swapToToken1Data      // Swap calldata
+) external onlyAdmin {
+    // 1. Check vault has token
+    require(IERC20(token).balanceOf(address(this)) >= amount);
+    
+    // 2. Record LP before
+    uint256 lpBefore = kodiakHook.getIslandLPBalance();
+    
+    // 3. Transfer token to hook
+    IERC20(token).safeTransfer(address(kodiakHook), amount);
+    
+    // 4. Hook swaps and adds liquidity (same as deployToKodiak)
+    kodiakHook.onAfterDepositWithSwaps(
+        amount, swapToToken0Aggregator, swapToToken0Data,
+        swapToToken1Aggregator, swapToToken1Data
+    );
+    
+    // 5. Verify LP received
+    uint256 lpAfter = kodiakHook.getIslandLPBalance();
+    uint256 lpReceived = lpAfter - lpBefore;
+    require(lpReceived >= minLPTokens, "SlippageTooHigh");
+    
+    emit KodiakInvestment(island, token, amount, lpReceived, block.timestamp);
+}
+```
+
+**Key Difference**: Takes WBTC/token as input (vs HONEY in `deployToKodiak()`).
+
+#### 3. Router Management
+
+**Functions**:
+```solidity
+function setKodiakRouter(address router) external onlyAdmin;
+function kodiakRouter() external view returns (address);
+```
+
+**Purpose**: Configure Kodiak Island Router (required for `investInKodiak()` swaps).
+
+### Reserve Workflow Example
+
+```
+User has 1 WBTC → seedReserveWithToken() → WBTC stays in Reserve vault
+                                              ↓
+                                        Vault value: $50k (from WBTC)
+                                        Shares minted: 50,000 resUSD
+                                              ↓
+Admin calls investInKodiak() → WBTC transferred to hook
+                                     ↓
+                        Hook swaps: WBTC → balanced WBTC/HONEY
+                                     ↓
+                        Hook adds liquidity → LP tokens minted
+                                     ↓
+                        LP tokens stay in hook, earning yield
+```
+
+### Comparison: Reserve vs Senior/Junior
+
+| Feature | Senior/Junior | Reserve |
+|---------|---------------|---------|
+| **Standard LP Seeding** | ✅ `seedVault()` | ✅ `seedVault()` |
+| **Token Seeding** | ❌ Not available | ✅ `seedReserveWithToken()` |
+| **Deploy HONEY** | ✅ `deployToKodiak()` | ✅ `deployToKodiak()` |
+| **Invest Other Tokens** | ❌ Not available | ✅ `investInKodiak()` |
+| **Router Required** | ❌ No | ✅ Yes (`setKodiakRouter()`) |
+| **Withdrawal Fee** | ✅ 1% | ✅ 1% |
+| **Performance Fee** | ✅ Configurable | ✅ Configurable |
+
+---
+
+## Fee Structure - Complete Reference
+
+### Fee Types by Vault
+
+#### Senior Vault Fees
+
+| Fee Type | Rate | When | How Collected | Recipient |
+|----------|------|------|---------------|-----------|
+| **Management Fee** | 1% annual | Monthly rebase | Mints snrUSD to treasury | Treasury |
+| **Performance Fee** | ~2% of yield | Monthly rebase | Mints snrUSD to treasury | Treasury |
+| **Withdrawal Fee** | 1% | Every withdrawal | Deducted from HONEY | Treasury |
+| **Early Withdrawal Penalty** | 20% | Before 7-day cooldown | Deducted from HONEY | Treasury |
+
+**Code Reference**:
+- Management fee: `src/libraries/FeeLib.sol` - `calculateManagementFeeTokens()`
+- Performance fee: `src/abstract/UnifiedSeniorVault.sol` - `rebase()` (1.02x multiplier)
+- Withdrawal fee: `src/abstract/UnifiedSeniorVault.sol` - `withdraw()` (MathLib.WITHDRAWAL_FEE)
+- Early penalty: `src/abstract/UnifiedSeniorVault.sol` - `withdraw()` (MathLib.EARLY_WITHDRAWAL_PENALTY)
+
+#### Junior & Reserve Vault Fees
+
+| Fee Type | Rate | When | How Collected | Recipient |
+|----------|------|------|---------------|-----------|
+| **Performance Fee** | 1% of supply | Configurable schedule | Mints vault tokens to treasury | Treasury |
+| **Withdrawal Fee** | 1% | Every withdrawal | Deducted from HONEY | Treasury |
+
+**Code Reference**:
+- Performance fee: `src/abstract/BaseVault.sol` - `mintPerformanceFee()`
+- Withdrawal fee: `src/abstract/BaseVault.sol` - `_withdraw()` (MathLib.WITHDRAWAL_FEE)
+
+### Fee Constants
+
+**File**: `src/libraries/MathLib.sol`
+
+```solidity
+// Fee constants (basis points, 1e18 precision)
+uint256 constant MANAGEMENT_FEE = 1e16;           // 1% = 0.01 = 1e16 / 1e18
+uint256 constant PERFORMANCE_FEE = 2e16;          // 2% = 0.02 = 2e16 / 1e18
+uint256 constant WITHDRAWAL_FEE = 1e16;           // 1% = 0.01 = 1e16 / 1e18
+uint256 constant EARLY_WITHDRAWAL_PENALTY = 2e17; // 20% = 0.20 = 2e17 / 1e18
+uint256 constant PRECISION = 1e18;
+```
+
+### Fee Calculation Examples
+
+#### Senior Vault - Early Withdrawal
+```
+Input: User withdraws 1000 snrUSD before cooldown
+
+Step 1: Apply early penalty
+  Amount: 1000 HONEY
+  Penalty: 1000 × 0.20 = 200 HONEY
+  Remaining: 800 HONEY
+
+Step 2: Apply withdrawal fee
+  Amount: 800 HONEY
+  Fee: 800 × 0.01 = 8 HONEY
+  Net: 792 HONEY
+
+Output:
+  Treasury receives: 208 HONEY (200 + 8)
+  User receives: 792 HONEY
+  Effective fee: 20.8%
+```
+
+#### Senior Vault - Normal Withdrawal (After Cooldown)
+```
+Input: User withdraws 1000 snrUSD after 7-day cooldown
+
+Step 1: No penalty
+  Amount: 1000 HONEY
+  Penalty: 0 HONEY
+
+Step 2: Apply withdrawal fee
+  Amount: 1000 HONEY
+  Fee: 1000 × 0.01 = 10 HONEY
+  Net: 990 HONEY
+
+Output:
+  Treasury receives: 10 HONEY
+  User receives: 990 HONEY
+  Effective fee: 1%
+```
+
+#### Junior/Reserve - Withdrawal
+```
+Input: User redeems 1000 jnrUSD at 1.2 unstaking ratio
+
+Step 1: Calculate gross HONEY
+  Shares: 1000 jnrUSD
+  Ratio: 1.2
+  Gross: 1000 × 1.2 = 1200 HONEY
+
+Step 2: Apply withdrawal fee
+  Amount: 1200 HONEY
+  Fee: 1200 × 0.01 = 12 HONEY
+  Net: 1188 HONEY
+
+Output:
+  Treasury receives: 12 HONEY
+  User receives: 1188 HONEY
+  Effective fee: 1%
+```
+
+#### Performance Fee Minting (Junior/Reserve)
+```
+Input: 30 days elapsed, 100,000 jnrUSD supply
+
+Calculation:
+  Current supply: 100,000 jnrUSD
+  Fee rate: 1%
+  Mint amount: 100,000 × 0.01 = 1,000 jnrUSD
+
+Output:
+  Treasury receives: 1,000 newly minted jnrUSD
+  New supply: 101,000 jnrUSD
+  Dilution: 1% to all holders
+
+Annual Impact (if monthly):
+  12 months × 1% = 12.68% dilution (compounded)
+```
+
+### Fee Configuration Functions
+
+#### Treasury Management (All Vaults)
+```solidity
+function setTreasury(address treasury_) external onlyAdmin;
+function treasury() public view returns (address);
+```
+
+#### Performance Fee Schedule (Junior/Reserve Only)
+```solidity
+function setMgmtFeeSchedule(uint256 newSchedule) external onlyAdmin;  // Time in seconds
+function getMgmtFeeSchedule() external view returns (uint256);
+function getLastMintTime() external view returns (uint256);
+function canMintPerformanceFee() external view returns (bool);
+function getTimeUntilNextMint() external view returns (uint256);
+function mintPerformanceFee() external onlyAdmin;  // Mints 1% to treasury
+```
+
+**Common Schedules**:
+- Daily: 86400 seconds
+- Weekly: 604800 seconds
+- Monthly: 2592000 seconds
+- Quarterly: 7776000 seconds
+
+### Fee Events
+
+All fees emit events for tracking:
+
+```solidity
+// Senior vault
+event WithdrawalFeeCharged(address indexed user, uint256 fee, uint256 netAmount);
+
+// Junior/Reserve vaults
+event PerformanceFeeMinted(address indexed treasury, uint256 amount, uint256 timestamp);
+event MgmtFeeScheduleUpdated(uint256 oldSchedule, uint256 newSchedule);
+```
+
+### Fee Revenue Projections
+
+Based on realistic TVL:
+
+| Vault | TVL | Monthly Revenue | Annual Revenue |
+|-------|-----|-----------------|----------------|
+| **Senior** | $1M | ~$1,000 (mgmt + perf) + withdrawal fees | ~$12,000 + withdrawals |
+| **Junior** | $500k | ~$5,000 (perf) + withdrawal fees | ~$60,000 + withdrawals |
+| **Reserve** | $100k | ~$1,000 (perf) + withdrawal fees | ~$12,000 + withdrawals |
+| **Total** | $1.6M | ~$7,000 + withdrawal fees | ~$84,000 + withdrawals |
+
+**Note**: Withdrawal fees depend on user activity and are variable.
+
+---
+
 ## Summary
 
 The **Senior Tranche Protocol** implements a sophisticated three-vault structured finance system with:
@@ -1097,6 +1400,8 @@ The **Senior Tranche Protocol** implements a sophisticated three-vault structure
 - ✅ **Dynamic APY Selection** (11-13% waterfall)
 - ✅ **Three-Zone Spillover System** (profit sharing + backstop)
 - ✅ **Kodiak LP Integration** (automated yield deployment)
+- ✅ **Reserve Unique Features** (WBTC seeding + investInKodiak)
+- ✅ **Comprehensive Fee Structure** (8 different fee types across vaults)
 - ✅ **Smart Withdrawal Liquidation** (on-chain pool data, not estimates)
 - ✅ **Gas-Optimized Rebase** (O(1) balance updates)
 - ✅ **Comprehensive Security** (pausable, upgradeable, access-controlled)
@@ -1108,13 +1413,17 @@ The **Senior Tranche Protocol** implements a sophisticated three-vault structure
 3. **Wide Buffer Zone**: 10% healthy range (100-110%) prevents constant spillover
 4. **Fair Backstop**: Reserve first, Junior second (no caps, can be wiped out)
 5. **Accurate LP Pricing**: Uses actual pool data (not inflated estimates)
+6. **Reserve Flexibility**: Unique ability to handle non-stablecoin assets (WBTC)
+7. **Sustainable Fees**: Multiple fee mechanisms ensure protocol sustainability
 
 ---
 
 **Documentation Status**: ✅ Complete  
-**Last Updated**: November 14, 2025  
-**Version**: 1.0.0  
+**Last Updated**: November 19, 2025  
+**Version**: 1.1.0  
 **Author**: AI Assistant
 
-For mathematical specifications, see: `math_spec.md`
+For mathematical specifications, see: `math_spec.md`  
+For operational procedures, see: `OPERATIONS_MANUAL.md`  
+For deployment instructions, see: `DEPLOYMENT_GUIDE.md`
 

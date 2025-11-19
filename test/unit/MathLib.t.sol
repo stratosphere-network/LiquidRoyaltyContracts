@@ -29,7 +29,8 @@ contract MathLibTest is Test {
         // Fee constants
         assertEq(MathLib.MGMT_FEE_ANNUAL, 1e16, "MGMT_FEE_ANNUAL should be 1%");
         assertEq(MathLib.PERF_FEE, 2e16, "PERF_FEE should be 2%");
-        assertEq(MathLib.EARLY_WITHDRAWAL_PENALTY, 5e16, "EARLY_WITHDRAWAL_PENALTY should be 5%");
+        assertEq(MathLib.EARLY_WITHDRAWAL_PENALTY, 2e17, "EARLY_WITHDRAWAL_PENALTY should be 20%");
+        assertEq(MathLib.WITHDRAWAL_FEE, 1e16, "WITHDRAWAL_FEE should be 1%");
         
         // Backing ratios
         assertEq(MathLib.SENIOR_TARGET_BACKING, 110e16, "SENIOR_TARGET_BACKING should be 110%");

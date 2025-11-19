@@ -57,10 +57,10 @@ contract BootstrapLiquidity is Script {
                 senior.deposit(1000e18, admin);
                 console.log("   Minted shares for 1000 HONEY");
             } else {
-                console.log("   ⚠️  Insufficient HONEY for initial deposit");
+                console.log("   WARNING: Insufficient HONEY for initial deposit");
             }
         } else {
-            console.log("   ⚠️  No LP tokens in Senior hook. Deploy LP first!");
+            console.log("   WARNING: No LP tokens in Senior hook. Deploy LP first!");
         }
         
         // Repeat for Junior
@@ -84,7 +84,7 @@ contract BootstrapLiquidity is Script {
                 console.log("   Minted shares for 1000 HONEY");
             }
         } else {
-            console.log("   ⚠️  No LP tokens in Junior hook. Deploy LP first!");
+            console.log("   WARNING: No LP tokens in Junior hook. Deploy LP first!");
         }
         
         // Repeat for Reserve
@@ -108,7 +108,7 @@ contract BootstrapLiquidity is Script {
                 console.log("   Minted shares for 1000 HONEY");
             }
         } else {
-            console.log("   ⚠️  No LP tokens in Reserve hook. Deploy LP first!");
+            console.log("   WARNING: No LP tokens in Reserve hook. Deploy LP first!");
         }
         
         vm.stopBroadcast();

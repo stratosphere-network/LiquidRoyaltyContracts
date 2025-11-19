@@ -42,11 +42,15 @@ export STABLECOIN_ADDRESS=0xFCBD14DC51f0A4d49d5E53C2E0950e0bC26d0Dce
 export KODIAK_ISLAND_ADDRESS=0xf6b16E73d3b0e2784AAe8C4cd06099BE65d092Bf
 export KODIAK_ROUTER_ADDRESS=0x679a7C63FC83b6A4D9C1F931891d705483d4791F
 
-# Vault Implementation Addresses (UPGRADED - Complete Features - Nov 18, 2025):
-# Senior now has: seedVault(), setTreasury(), 1% withdrawal fee, 20% early penalty
+# Vault Implementation Addresses (UPGRADED - Complete Features - Nov 19, 2025):
+# All vaults now have: seedVault(), setTreasury(), 1% withdrawal fee, 20% early penalty
+# Reserve additionally has: seedReserveWithToken(), investInKodiak(), setKodiakRouter()
 export SENIOR_IMPL=0xd748881505d295B2Ffc756B5940ADd162489Cbb4
 export JUNIOR_IMPL=0xBFF4b00D964691D37c268593125806264221b34e
-export RESERVE_IMPL=0x90A512d8d6E16f086C431616b30D7409742F71cB
+export RESERVE_IMPL=0x57C12378C55beA4aB8FF0ca817942b037589e13D
+
+# Previous Reserve Implementation (Missing seedReserveWithToken + investInKodiak):
+# export RESERVE_IMPL=0x90A512d8d6E16f086C431616b30D7409742F71cB
 
 # Previous Senior Implementation (Missing seedVault + setTreasury):
 # export SENIOR_IMPL=0xA3043f42D61C45Cff8CCEdb2838e0c68971F86D6

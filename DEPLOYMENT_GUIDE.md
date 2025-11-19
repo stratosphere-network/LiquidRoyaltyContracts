@@ -712,7 +712,7 @@ cast send $KODIAK_ISLAND_ADDRESS \
   $SENIOR_VAULT \
   $LP_AMOUNT \
   --private-key $SEED_PROVIDER_KEY \
-  --rpc-url $RPC_URL \
+    --rpc-url $RPC_URL \
   --legacy
 
 # 4. Seed the vault (from admin wallet)
@@ -1342,15 +1342,371 @@ Good luck! 💪
 
 ---
 
-## Appendix: Recent Upgrades
+## Appendix A: Reserve Vault Unique Features
+
+### Overview
+
+The **Reserve vault** has unique capabilities that Senior and Junior vaults don't have. It can accept non-stablecoin assets (like WBTC) and manage them separately before converting to LP tokens.
+
+### Reserve-Specific Functions
+
+#### 1. `seedReserveWithToken()` - Seed with Non-Stablecoin Assets
+
+**Purpose**: Bootstrap Reserve vault with non-stablecoin tokens (e.g., WBTC) that stay in the vault initially.
+
+**Flow**:
+1. Token holder approves Reserve vault
+2. Admin calls `seedReserveWithToken()` with token amount and price
+3. Tokens transferred to Reserve vault (NOT to hook!)
+4. Value calculated: `valueAdded = amount × tokenPrice / 1e18`
+5. Shares minted to provider based on current share price
+6. Vault value updated to include token value
+
+**When to Use**: When you want to bootstrap Reserve with volatile assets that can later be converted to LP.
+
+**Example**:
+```bash
+# Seed Reserve with 1 WBTC at $50,000
+SEED_PROVIDER=0x...  # Address with WBTC
+WBTC_AMOUNT=100000000  # 1 WBTC (8 decimals)
+WBTC_PRICE=50000000000000000000000  # $50k in 18 decimals
+
+# Step 1: Provider approves
+cast send $WBTC_ADDRESS "approve(address,uint256)" $RESERVE_VAULT $WBTC_AMOUNT \
+  --private-key $SEED_PROVIDER_KEY --rpc-url $RPC_URL --legacy
+
+# Step 2: Admin seeds
+cast send $RESERVE_VAULT \
+  "seedReserveWithToken(address,uint256,address,uint256)" \
+  $WBTC_ADDRESS $WBTC_AMOUNT $SEED_PROVIDER $WBTC_PRICE \
+  --private-key $PRIVATE_KEY --rpc-url $RPC_URL --legacy
+
+# Step 3: Verify
+cast call $WBTC_ADDRESS "balanceOf(address)(uint256)" $RESERVE_VAULT --rpc-url $RPC_URL
+cast call $RESERVE_VAULT "balanceOf(address)(uint256)" $SEED_PROVIDER --rpc-url $RPC_URL
+```
+
+#### 2. `investInKodiak()` - Convert Assets to LP Tokens
+
+**Purpose**: Take non-stablecoin tokens from Reserve vault and convert them to Kodiak LP tokens.
+
+**Flow**:
+1. Admin gets swap calldata from Enso API
+2. Admin calls `investInKodiak()` with token, amount, and swap parameters
+3. Reserve vault transfers tokens to hook
+4. Hook executes swaps: Token → balanced pool tokens
+5. Hook adds liquidity to Kodiak Island
+6. LP tokens stay in hook
+
+**Difference from `deployToKodiak()`**:
+- `deployToKodiak()`: HONEY → LP (all vaults have this)
+- `investInKodiak()`: WBTC/other → LP (Reserve ONLY)
+- Same swap pattern, different input token
+
+**Example**:
+```bash
+# Invest 0.5 WBTC into Kodiak LP
+INVEST_AMOUNT=50000000  # 0.5 WBTC
+
+# Step 1: Get Enso swap route
+curl -X GET "https://api.enso.finance/api/v1/shortcuts/route" \
+  -H "Authorization: Bearer $ENSO_API_KEY" \
+  -d "chainId=80094" \
+  -d "tokenIn=$WBTC_ADDRESS" \
+  -d "tokenOut=$KODIAK_ISLAND_ADDRESS" \
+  -d "amountIn=$INVEST_AMOUNT" \
+  > enso_route.json
+
+SWAP_DATA=$(jq -r '.tx.data' enso_route.json)
+AGGREGATOR=$(jq -r '.tx.to' enso_route.json)
+MIN_LP=$(jq -r '.amountOut' enso_route.json | xargs -I{} echo "{} * 0.98" | bc)
+
+# Step 2: Invest
+cast send $RESERVE_VAULT \
+  "investInKodiak(address,address,uint256,uint256,address,bytes,address,bytes)" \
+  $KODIAK_ISLAND_ADDRESS \
+  $WBTC_ADDRESS \
+  $INVEST_AMOUNT \
+  $MIN_LP \
+  $AGGREGATOR \
+  $SWAP_DATA \
+  $AGGREGATOR \
+  "0x" \
+  --private-key $PRIVATE_KEY \
+  --rpc-url $RPC_URL \
+  --gas-limit 2000000 \
+  --legacy
+
+# Step 3: Verify LP received
+cast call $KODIAK_ISLAND_ADDRESS "balanceOf(address)(uint256)" $RESERVE_HOOK --rpc-url $RPC_URL
+```
+
+#### 3. `setKodiakRouter()` / `kodiakRouter()` - Router Management
+
+**Purpose**: Configure Kodiak Island Router address (required for `investInKodiak()`).
+
+**Example**:
+```bash
+# Set router
+cast send $RESERVE_VAULT "setKodiakRouter(address)" $KODIAK_ROUTER_ADDRESS \
+  --private-key $PRIVATE_KEY --rpc-url $RPC_URL --legacy
+
+# Verify
+cast call $RESERVE_VAULT "kodiakRouter()(address)" --rpc-url $RPC_URL
+```
+
+### Complete Reserve Workflow
+
+```bash
+# Full lifecycle: WBTC → Reserve → LP → Yield
+
+# 1. Set treasury (for fees)
+cast send $RESERVE_VAULT "setTreasury(address)" $TREASURY_ADDRESS \
+  --private-key $PRIVATE_KEY --rpc-url $RPC_URL --legacy
+
+# 2. Set Kodiak router (for investInKodiak)
+cast send $RESERVE_VAULT "setKodiakRouter(address)" $KODIAK_ROUTER_ADDRESS \
+  --private-key $PRIVATE_KEY --rpc-url $RPC_URL --legacy
+
+# 3. Set performance fee schedule (30 days)
+cast send $RESERVE_VAULT "setMgmtFeeSchedule(uint256)" 2592000 \
+  --private-key $PRIVATE_KEY --rpc-url $RPC_URL --legacy
+
+# 4. Seed with WBTC (tokens stay in vault)
+# Provider approves first
+cast send $WBTC_ADDRESS "approve(address,uint256)" $RESERVE_VAULT $WBTC_AMOUNT \
+  --private-key $SEED_PROVIDER_KEY --rpc-url $RPC_URL --legacy
+
+# Admin seeds
+cast send $RESERVE_VAULT \
+  "seedReserveWithToken(address,uint256,address,uint256)" \
+  $WBTC_ADDRESS $WBTC_AMOUNT $SEED_PROVIDER $WBTC_PRICE_WEI \
+  --private-key $PRIVATE_KEY --rpc-url $RPC_URL --legacy
+
+# 5. Invest WBTC into Kodiak LP (swaps + adds liquidity)
+# Get swap data from Enso first
+cast send $RESERVE_VAULT \
+  "investInKodiak(...)" \
+  --private-key $PRIVATE_KEY --rpc-url $RPC_URL --gas-limit 2000000 --legacy
+
+# 6. Check final state
+echo "Reserve WBTC: $(cast call $WBTC_ADDRESS "balanceOf(address)(uint256)" $RESERVE_VAULT --rpc-url $RPC_URL)"
+echo "Reserve hook LP: $(cast call $KODIAK_ISLAND_ADDRESS "balanceOf(address)(uint256)" $RESERVE_HOOK --rpc-url $RPC_URL)"
+echo "Seed provider resUSD: $(cast call $RESERVE_VAULT "balanceOf(address)(uint256)" $SEED_PROVIDER --rpc-url $RPC_URL)"
+```
+
+### Comparison: Reserve vs Senior/Junior
+
+| Feature | Senior/Junior | Reserve |
+|---------|---------------|---------|
+| **Standard Deposits** | ✅ HONEY deposits | ✅ HONEY deposits |
+| **Standard LP Seeding** | ✅ `seedVault()` with LP | ✅ `seedVault()` with LP |
+| **Token Seeding** | ❌ Not available | ✅ `seedReserveWithToken()` with WBTC/others |
+| **Deploy to Kodiak** | ✅ `deployToKodiak()` (HONEY→LP) | ✅ `deployToKodiak()` (HONEY→LP) |
+| **Invest Assets** | ❌ Not available | ✅ `investInKodiak()` (WBTC/other→LP) |
+| **Kodiak Router** | ❌ Not needed | ✅ Required (via `setKodiakRouter()`) |
+| **Withdrawal Fee** | ✅ 1% | ✅ 1% |
+| **Performance Fee** | ✅ 1% of supply (configurable) | ✅ 1% of supply (configurable) |
+| **Early Penalty** | ❌ No (Senior only) | ❌ No |
+
+### When to Use Each Reserve Function
+
+**Use `seedReserveWithToken()`**:
+- Initial bootstrap with non-stablecoin assets
+- You have WBTC but want to delay LP conversion
+- Want to hold volatile assets temporarily
+
+**Use `investInKodiak()`**:
+- Convert held WBTC/tokens to productive LP
+- Similar to `deployToKodiak()` but for non-stablecoin
+- After seeding with `seedReserveWithToken()`
+
+**Use `seedVault()` (standard)**:
+- You already have Kodiak LP tokens
+- Quickest way to bootstrap with yield-bearing assets
+
+**Use `deployToKodiak()` (standard)**:
+- You have HONEY stablecoins in vault
+- Convert idle HONEY to productive LP
+
+---
+
+## Appendix B: Complete Fee Structure
+
+### Fee Overview
+
+All protocol fees are sent to the configured **treasury address**. The treasury receives:
+- **Token-denominated fees** (snrUSD, jnrUSD, resUSD) via minting
+- **Stablecoin fees** (HONEY) via withdrawal deductions
+
+### Fee Comparison Table
+
+| Vault | Fee Type | Rate | When Charged | Collection Method | Recipient |
+|-------|----------|------|--------------|-------------------|-----------|
+| **Senior** | Management Fee | 1% annual | Monthly rebase | Mints snrUSD to treasury | Treasury |
+| **Senior** | Performance Fee | ~2% of yield | Monthly rebase | Mints snrUSD to treasury | Treasury |
+| **Senior** | Withdrawal Fee | 1% | Every withdrawal | Deducted from HONEY | Treasury |
+| **Senior** | Early Penalty | 20% | Withdrawal before 7-day cooldown | Deducted from HONEY | Treasury |
+| **Junior** | Performance Fee | 1% of supply | Configurable schedule | Mints jnrUSD to treasury | Treasury |
+| **Junior** | Withdrawal Fee | 1% | Every withdrawal | Deducted from HONEY | Treasury |
+| **Reserve** | Performance Fee | 1% of supply | Configurable schedule | Mints resUSD to treasury | Treasury |
+| **Reserve** | Withdrawal Fee | 1% | Every withdrawal | Deducted from HONEY | Treasury |
+
+### Fee Calculation Examples
+
+#### Senior Vault - Early Withdrawal (Worst Case)
+```
+User withdraws 1000 snrUSD BEFORE cooldown:
+
+Step 1: Early Withdrawal Penalty (20%)
+  Gross: 1000 HONEY
+  Penalty: 200 HONEY
+  After penalty: 800 HONEY
+
+Step 2: Withdrawal Fee (1%)
+  Before fee: 800 HONEY
+  Fee: 8 HONEY
+  Net: 792 HONEY
+
+Result:
+  Treasury receives: 208 HONEY (20.8%)
+  User receives: 792 HONEY (79.2%)
+```
+
+#### Senior Vault - Normal Withdrawal (After Cooldown)
+```
+User withdraws 1000 snrUSD AFTER 7-day cooldown:
+
+Step 1: No Penalty (cooldown complete)
+  Gross: 1000 HONEY
+  Penalty: 0 HONEY
+
+Step 2: Withdrawal Fee (1%)
+  Before fee: 1000 HONEY
+  Fee: 10 HONEY
+  Net: 990 HONEY
+
+Result:
+  Treasury receives: 10 HONEY (1%)
+  User receives: 990 HONEY (99%)
+```
+
+#### Junior/Reserve Vault - Withdrawal
+```
+User redeems 1000 jnrUSD at 1.2 unstaking ratio:
+
+Gross HONEY: 1000 × 1.2 = 1200 HONEY
+
+Withdrawal Fee (1%):
+  Fee: 12 HONEY
+  Net: 1188 HONEY
+
+Result:
+  Treasury receives: 12 HONEY (1%)
+  User receives: 1188 HONEY (99%)
+
+Note: No early withdrawal penalty for Junior/Reserve
+```
+
+#### Performance Fee Minting (Junior/Reserve)
+```
+Current supply: 100,000 jnrUSD
+Time elapsed: 30 days (schedule met)
+
+Mint Calculation:
+  Fee rate: 1%
+  Mint amount: 1,000 jnrUSD
+
+Result:
+  Treasury receives: 1,000 newly minted jnrUSD
+  New total supply: 101,000 jnrUSD
+  Dilution: 1% (all holders)
+
+If minted monthly for 1 year:
+  Annual dilution: ~12.68% (compounded)
+```
+
+### Fee Configuration Checklist
+
+**Initial Setup (Required)**:
+```bash
+# 1. Set treasury on ALL vaults (CRITICAL!)
+cast send $SENIOR_VAULT "setTreasury(address)" $TREASURY_ADDRESS --private-key $PRIVATE_KEY --rpc-url $RPC_URL --legacy
+cast send $JUNIOR_VAULT "setTreasury(address)" $TREASURY_ADDRESS --private-key $PRIVATE_KEY --rpc-url $RPC_URL --legacy
+cast send $RESERVE_VAULT "setTreasury(address)" $TREASURY_ADDRESS --private-key $PRIVATE_KEY --rpc-url $RPC_URL --legacy
+
+# 2. Set performance fee schedule for Junior/Reserve
+cast send $JUNIOR_VAULT "setMgmtFeeSchedule(uint256)" 2592000 --private-key $PRIVATE_KEY --rpc-url $RPC_URL --legacy  # 30 days
+cast send $RESERVE_VAULT "setMgmtFeeSchedule(uint256)" 2592000 --private-key $PRIVATE_KEY --rpc-url $RPC_URL --legacy  # 30 days
+```
+
+**Monitoring**:
+```bash
+# Check treasury balances
+TREASURY=$(cast call $SENIOR_VAULT "treasury()(address)" --rpc-url $RPC_URL)
+
+echo "Treasury snrUSD: $(cast call $SENIOR_VAULT "balanceOf(address)(uint256)" $TREASURY --rpc-url $RPC_URL)"
+echo "Treasury jnrUSD: $(cast call $JUNIOR_VAULT "balanceOf(address)(uint256)" $TREASURY --rpc-url $RPC_URL)"
+echo "Treasury resUSD: $(cast call $RESERVE_VAULT "balanceOf(address)(uint256)" $TREASURY --rpc-url $RPC_URL)"
+echo "Treasury HONEY: $(cast call $HONEY_ADDRESS "balanceOf(address)(uint256)" $TREASURY --rpc-url $RPC_URL)"
+
+# Check if performance fees can be minted
+echo "Junior can mint: $(cast call $JUNIOR_VAULT "canMintPerformanceFee()(bool)" --rpc-url $RPC_URL)"
+echo "Reserve can mint: $(cast call $RESERVE_VAULT "canMintPerformanceFee()(bool)" --rpc-url $RPC_URL)"
+```
+
+### Fee Revenue Projections
+
+Based on realistic vault sizes:
+
+**Senior Vault** ($1M TVL):
+- Management fee: ~$833/month (0.0833% of TVL)
+- Performance fee: ~$167/month (assuming 11% APY → 0.22% to treasury)
+- Withdrawal fees: Variable (depends on withdrawals)
+- **Total: ~$1,000/month + withdrawal fees**
+
+**Junior Vault** ($500k TVL):
+- Performance fee: $5,000/month (1% of supply monthly)
+- Withdrawal fees: Variable
+- **Total: $5,000/month + withdrawal fees**
+
+**Reserve Vault** ($100k TVL):
+- Performance fee: $1,000/month (1% of supply monthly)
+- Withdrawal fees: Variable
+- **Total: $1,000/month + withdrawal fees**
+
+**Combined**: ~$7,000/month + withdrawal fees from all vaults
+
+---
+
+## Appendix C: Recent Upgrades
+
+### November 19, 2025 - Reserve Vault Complete Upgrade
+
+**What Changed:**
+- Added `seedReserveWithToken()` - Seed Reserve with WBTC/other non-stablecoin
+- Added `investInKodiak()` - Convert Reserve's WBTC/tokens to LP
+- Added `setKodiakRouter()` / `kodiakRouter()` - Router management for Reserve
+
+**Why This Matters:**
+Reserve vault can now accept non-stablecoin assets (WBTC) and manage them separately before converting to yield-bearing LP tokens. This provides more flexibility in bootstrapping and asset management.
+
+**New Workflow Enabled:**
+```
+WBTC holder → seedReserveWithToken() → WBTC in Reserve vault
+                ↓
+Reserve admin → investInKodiak() → WBTC converted to LP
+                ↓
+           LP tokens earning yield in hook
+```
 
 ### November 18, 2025 - Fee & Performance Upgrade
 
 **What Changed:**
-- Added `seedVault()` function to bootstrap vaults with LP tokens
-- Added `setTreasury()` and `treasury()` to configure fee recipient
-- Increased early withdrawal penalty from 5% to 20%
-- Added 1% withdrawal fee on all vaults (sent to treasury)
+- Added `seedVault()` function to bootstrap vaults with LP tokens (all vaults)
+- Added `setTreasury()` and `treasury()` to configure fee recipient (all vaults)
+- Increased early withdrawal penalty from 5% to 20% (Senior only)
+- Added 1% withdrawal fee on all vaults (sent to treasury in HONEY)
 - Changed Senior management fee: now mints snrUSD instead of reducing vault value
 - Added performance fee minting for Junior/Reserve:
   - `mintPerformanceFee()` - Mint 1% of supply to treasury
@@ -1361,14 +1717,15 @@ Good luck! 💪
   - `getTimeUntilNextMint()` - Time remaining
 
 **Migration Steps:**
-If you deployed vaults before this upgrade:
+If you deployed vaults before these upgrades:
 1. Deploy new implementations (Senior, Junior, Reserve)
 2. Call `upgradeToAndCall()` on each proxy
 3. Call `setTreasury()` on all 3 vaults
 4. Call `setMgmtFeeSchedule()` on Junior and Reserve
+5. Call `setKodiakRouter()` on Reserve (if using `investInKodiak()`)
 
 **New ABIs:**
-Make sure to regenerate ABIs and update frontend after this upgrade!
+Make sure to regenerate ABIs and update frontend after these upgrades!
 
 ---
 

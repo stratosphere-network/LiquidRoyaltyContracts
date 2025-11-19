@@ -137,8 +137,8 @@ contract UnifiedSeniorVaultTest is Test {
         // Check balances
         assertEq(vault.balanceOf(user1), amount); // 1:1 at initial index
         assertEq(vault.totalSupply(), amount);
-        // Note: vaultValue is NOT auto-updated (keeper updates it via updateVaultValue)
-        assertEq(vault.vaultValue(), INITIAL_VALUE); // Unchanged until keeper updates
+        // Vault value increases by deposited amount
+        assertEq(vault.vaultValue(), INITIAL_VALUE + amount);
         assertGt(vault.sharesOf(user1), 0);
     }
     
@@ -317,7 +317,7 @@ contract UnifiedSeniorVaultTest is Test {
         vm.stopPrank();
         
         assertEq(vault.balanceOf(user1), 0);
-        assertEq(lpToken.balanceOf(user1) - balanceBefore, 100e18); // No penalty
+        assertEq(lpToken.balanceOf(user1) - balanceBefore, 99e18); // No penalty, but 1% withdrawal fee
     }
     
     function testWithdrawWithPenalty() public {
@@ -332,8 +332,9 @@ contract UnifiedSeniorVaultTest is Test {
         vm.stopPrank();
         
         assertEq(vault.balanceOf(user1), 0);
-        assertEq(netAssets, 95e18); // 5% penalty
-        assertEq(lpToken.balanceOf(user1) - balanceBefore, 95e18);
+        // 20% early penalty: 100 → 80, then 1% withdrawal fee: 80 - 0.8 = 79.2
+        assertEq(netAssets, 79.2e18);
+        assertEq(lpToken.balanceOf(user1) - balanceBefore, 79.2e18);
     }
     
     function testWithdrawWithAllowance() public {
@@ -363,16 +364,16 @@ contract UnifiedSeniorVaultTest is Test {
         lpToken.approve(address(vault), 100e18);
         vault.deposit(100e18, user1);
         
-        // Without cooldown, should show penalty
+        // Without cooldown, should show 20% penalty + 1% withdrawal fee
         uint256 netAssets = vault.previewWithdraw(100e18);
-        assertEq(netAssets, 95e18);
+        assertEq(netAssets, 79.2e18); // 100 → 80 (20% penalty) → 79.2 (1% fee)
         
         // With cooldown
         vault.initiateCooldown();
         vm.warp(block.timestamp + 7 days);
         
         netAssets = vault.previewWithdraw(100e18);
-        assertEq(netAssets, 100e18); // No penalty
+        assertEq(netAssets, 99e18); // No penalty, only 1% withdrawal fee
         vm.stopPrank();
     }
     
@@ -421,12 +422,12 @@ contract UnifiedSeniorVaultTest is Test {
         lpToken.approve(address(vault), 100e18);
         vault.deposit(100e18, user1);
         
-        // No cooldown
+        // No cooldown - 20% penalty
         (uint256 penalty, uint256 netAmount) = vault.calculateWithdrawalPenalty(user1, 100e18);
-        assertEq(penalty, 5e18);
-        assertEq(netAmount, 95e18);
+        assertEq(penalty, 20e18);
+        assertEq(netAmount, 80e18);
         
-        // With cooldown (after 7 days)
+        // With cooldown (after 7 days) - no penalty
         vault.initiateCooldown();
         vm.warp(block.timestamp + 7 days);
         
@@ -581,10 +582,9 @@ contract UnifiedSeniorVaultTest is Test {
         vault.deposit(100e18, user1);
         vm.stopPrank();
         
-        // Note: vaultValue doesn't auto-update, so ratio = INITIAL_VALUE / supply
-        // Ratio = 1000e18 / 100e18 = 10 = 1000%
+        // Vault value increases by deposit: (1000 + 100) / 100 = 11 = 1100%
         uint256 ratio = vault.backingRatio();
-        assertEq(ratio, INITIAL_VALUE * MathLib.PRECISION / 100e18);
+        assertEq(ratio, 11e18); // 1100% backing
     }
     
     function testCurrentZone() public {

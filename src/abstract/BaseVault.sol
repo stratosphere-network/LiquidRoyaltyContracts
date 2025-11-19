@@ -11,6 +11,8 @@ import {IVault} from "../interfaces/IVault.sol";
 import {MathLib} from "../libraries/MathLib.sol";
 import {AdminControlled} from "./AdminControlled.sol";
 import {IKodiakVaultHook} from "../integrations/IKodiakVaultHook.sol";
+import {IKodiakIslandRouter} from "../integrations/IKodiakIslandRouter.sol";
+import {IKodiakIsland} from "../integrations/IKodiakIsland.sol";
 
 /**
  * @title BaseVault
@@ -56,6 +58,7 @@ abstract contract BaseVault is ERC4626Upgradeable, IVault, AdminControlled, UUPS
     
     /// @dev Kodiak integration
     IKodiakVaultHook public kodiakHook;
+    address internal _kodiakRouter;  // Kodiak Island Router for swaps and liquidity
     
     /// @dev Treasury address for fees
     address internal _treasury;
@@ -90,6 +93,21 @@ abstract contract BaseVault is ERC4626Upgradeable, IVault, AdminControlled, UUPS
     event WithdrawalFeeCharged(address indexed user, uint256 fee, uint256 netAmount);
     event PerformanceFeeMinted(address indexed treasury, uint256 amount, uint256 timestamp);
     event MgmtFeeScheduleUpdated(uint256 oldSchedule, uint256 newSchedule);
+    event ReserveSeededWithToken(
+        address indexed token,
+        address indexed seedProvider,
+        uint256 tokenAmount,
+        uint256 tokenPrice,
+        uint256 valueAdded,
+        uint256 sharesMinted
+    );
+    event KodiakInvestment(
+        address indexed island,
+        address indexed tokenIn,
+        uint256 amountIn,
+        uint256 lpMinted,
+        uint256 timestamp
+    );
     
     /// @dev Errors (ZeroAddress inherited from AdminControlled, InvalidAmount inherited from IVault)
     error InvalidProfitRange();
@@ -105,6 +123,8 @@ abstract contract BaseVault is ERC4626Upgradeable, IVault, AdminControlled, UUPS
     error InvalidLPPrice();
     error FeeScheduleNotMet();
     error InvalidSchedule();
+    error KodiakRouterNotSet();
+    error InvalidTokenPrice();
     
     /// @dev Modifiers
     modifier onlySeniorVault() {
@@ -377,6 +397,23 @@ abstract contract BaseVault is ERC4626Upgradeable, IVault, AdminControlled, UUPS
         }
         
         kodiakHook = IKodiakVaultHook(hook);
+    }
+    
+    /**
+     * @notice Set Kodiak Island Router address
+     * @dev Used for swapping and adding liquidity to Kodiak pools
+     * @param router Address of Kodiak Island Router contract
+     */
+    function setKodiakRouter(address router) external onlyAdmin {
+        if (router == address(0)) revert ZeroAddress();
+        _kodiakRouter = router;
+    }
+    
+    /**
+     * @notice Get Kodiak Router address
+     */
+    function kodiakRouter() external view returns (address) {
+        return _kodiakRouter;
     }
     
     /**
@@ -864,6 +901,115 @@ abstract contract BaseVault is ERC4626Upgradeable, IVault, AdminControlled, UUPS
     }
     
     /**
+     * @notice Seed Reserve vault with non-stablecoin token (e.g., WBTC)
+     * @dev ONLY for Reserve vault - token stays in vault, not transferred to hook
+     * @dev Use investInKodiak() after seeding to convert token to LP
+     * @param token Non-stablecoin token address (e.g., WBTC)
+     * @param amount Amount of tokens to seed
+     * @param seedProvider Address providing the tokens
+     * @param tokenPrice Price of token in stablecoin terms (18 decimals)
+     */
+    function seedReserveWithToken(
+        address token,
+        uint256 amount,
+        address seedProvider,
+        uint256 tokenPrice
+    ) external onlyAdmin {
+        // Validation
+        if (token == address(0) || seedProvider == address(0)) revert ZeroAddress();
+        if (amount == 0) revert InvalidAmount();
+        if (tokenPrice == 0) revert InvalidTokenPrice();
+        
+        // Step 1: Transfer tokens from seedProvider to vault
+        // Token STAYS in vault (not transferred to hook like seedVault)
+        IERC20(token).safeTransferFrom(seedProvider, address(this), amount);
+        
+        // Step 2: Calculate value = amount * tokenPrice / 1e18
+        // tokenPrice is in 18 decimals, representing stablecoin value per token
+        uint256 valueAdded = (amount * tokenPrice) / 1e18;
+        
+        // Step 3: Mint shares to seedProvider
+        // Get current share price
+        uint256 sharePrice = totalSupply() > 0 ? (totalAssets() * 1e18) / totalSupply() : 1e18;
+        
+        // Calculate shares to mint
+        uint256 sharesToMint;
+        if (sharePrice == 1e18 || totalSupply() == 0) {
+            // First deposit or 1:1 ratio
+            sharesToMint = valueAdded;
+        } else {
+            // Calculate shares based on current share price
+            sharesToMint = (valueAdded * 1e18) / sharePrice;
+        }
+        
+        // Mint shares directly (bypass normal deposit flow)
+        _mint(seedProvider, sharesToMint);
+        
+        // Step 4: Update vault value to include new token value
+        _vaultValue += valueAdded;
+        _lastUpdateTime = block.timestamp;
+        
+        // Step 5: Emit event
+        emit ReserveSeededWithToken(token, seedProvider, amount, tokenPrice, valueAdded, sharesToMint);
+    }
+    
+    /**
+     * @notice Invest non-stablecoin token into Kodiak Island (Reserve vault only)
+     * @dev Takes token from vault, swaps to pool tokens, adds liquidity
+     * @dev Same pattern as deployToKodiak() but for non-stablecoin tokens
+     * @param island Kodiak Island (pool) address
+     * @param token Token to invest (e.g., WBTC)
+     * @param amount Amount of tokens to invest
+     * @param minLPTokens Minimum LP tokens to receive (slippage protection)
+     * @param swapToToken0Aggregator DEX aggregator for token0 swap
+     * @param swapToToken0Data Swap calldata for token0
+     * @param swapToToken1Aggregator DEX aggregator for token1 swap
+     * @param swapToToken1Data Swap calldata for token1
+     */
+    function investInKodiak(
+        address island,
+        address token,
+        uint256 amount,
+        uint256 minLPTokens,
+        address swapToToken0Aggregator,
+        bytes calldata swapToToken0Data,
+        address swapToToken1Aggregator,
+        bytes calldata swapToToken1Data
+    ) external onlyAdmin {
+        if (amount == 0) revert InvalidAmount();
+        if (address(kodiakHook) == address(0)) revert KodiakHookNotSet();
+        
+        // Check vault has enough of the token
+        uint256 vaultBalance = IERC20(token).balanceOf(address(this));
+        if (vaultBalance < amount) revert InsufficientBalance();
+        
+        // Record LP balance before
+        uint256 lpBefore = kodiakHook.getIslandLPBalance();
+        
+        // Transfer token to hook
+        IERC20(token).safeTransfer(address(kodiakHook), amount);
+        
+        // Call hook to deploy with swap parameters (same as deployToKodiak)
+        kodiakHook.onAfterDepositWithSwaps(
+            amount,
+            swapToToken0Aggregator,
+            swapToToken0Data,
+            swapToToken1Aggregator,
+            swapToToken1Data
+        );
+        
+        // Calculate LP received
+        uint256 lpAfter = kodiakHook.getIslandLPBalance();
+        uint256 lpReceived = lpAfter - lpBefore;
+        
+        // Check slippage
+        if (lpReceived < minLPTokens) revert SlippageTooHigh();
+        
+        // Emit event
+        emit KodiakInvestment(island, token, amount, lpReceived, block.timestamp);
+    }
+    
+    /**
      * @notice Transfer Stablecoins to Senior vault (fixes asset transfer issue)
      * @dev Called by Senior vault during backstop
      * @param amount Amount of Stablecoins to transfer
@@ -1007,7 +1153,7 @@ abstract contract BaseVault is ERC4626Upgradeable, IVault, AdminControlled, UUPS
         
         emit Withdraw(caller, receiver, owner, assets, shares);
     }
-    
+
     // ============================================
     // Internal Hooks
     // ============================================
