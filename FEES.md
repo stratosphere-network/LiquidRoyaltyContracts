@@ -326,7 +326,7 @@ Users can **completely avoid** the 20% early withdrawal penalty by:
 ### 6. Fee Transparency
 All fees emit on-chain events for tracking:
 - `WithdrawalFeeCharged(user, fee, netAmount)`
-- `PerformanceFeeMinted(treasury, amount, timestamp)`
+- `ManagementFeeMinted(treasury, amount, timestamp)`
 - `MgmtFeeScheduleUpdated(oldSchedule, newSchedule)`
 
 ---
@@ -350,8 +350,8 @@ echo "Treasury HONEY: $(cast call $HONEY_ADDRESS "balanceOf(address)(uint256)" $
 
 ```bash
 # Check if fees can be minted
-echo "Junior can mint: $(cast call $JUNIOR_VAULT "canMintPerformanceFee()(bool)" --rpc-url $RPC_URL)"
-echo "Reserve can mint: $(cast call $RESERVE_VAULT "canMintPerformanceFee()(bool)" --rpc-url $RPC_URL)"
+echo "Junior can mint: $(cast call $JUNIOR_VAULT "canMintManagementFee()(bool)" --rpc-url $RPC_URL)"
+echo "Reserve can mint: $(cast call $RESERVE_VAULT "canMintManagementFee()(bool)" --rpc-url $RPC_URL)"
 
 # Check time until next mint
 echo "Junior time until next: $(cast call $JUNIOR_VAULT "getTimeUntilNextMint()(uint256)" --rpc-url $RPC_URL) seconds"

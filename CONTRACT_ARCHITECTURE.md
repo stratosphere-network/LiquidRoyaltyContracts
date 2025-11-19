@@ -1245,7 +1245,7 @@ Admin calls investInKodiak() → WBTC transferred to hook
 | **Withdrawal Fee** | 1% | Every withdrawal | Deducted from HONEY | Treasury |
 
 **Code Reference**:
-- Performance fee: `src/abstract/BaseVault.sol` - `mintPerformanceFee()`
+- Management fee: `src/abstract/BaseVault.sol` - `mintManagementFee()`
 - Withdrawal fee: `src/abstract/BaseVault.sol` - `_withdraw()` (MathLib.WITHDRAWAL_FEE)
 
 ### Fee Constants
@@ -1353,9 +1353,9 @@ function treasury() public view returns (address);
 function setMgmtFeeSchedule(uint256 newSchedule) external onlyAdmin;  // Time in seconds
 function getMgmtFeeSchedule() external view returns (uint256);
 function getLastMintTime() external view returns (uint256);
-function canMintPerformanceFee() external view returns (bool);
+function canMintManagementFee() external view returns (bool);
 function getTimeUntilNextMint() external view returns (uint256);
-function mintPerformanceFee() external onlyAdmin;  // Mints 1% to treasury
+function mintManagementFee() external onlyAdmin;  // Mints 1% to treasury
 ```
 
 **Common Schedules**:
@@ -1373,7 +1373,7 @@ All fees emit events for tracking:
 event WithdrawalFeeCharged(address indexed user, uint256 fee, uint256 netAmount);
 
 // Junior/Reserve vaults
-event PerformanceFeeMinted(address indexed treasury, uint256 amount, uint256 timestamp);
+event ManagementFeeMinted(address indexed treasury, uint256 amount, uint256 timestamp);
 event MgmtFeeScheduleUpdated(uint256 oldSchedule, uint256 newSchedule);
 ```
 

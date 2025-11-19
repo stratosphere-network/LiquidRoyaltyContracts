@@ -5,7 +5,7 @@
 | Operation | Role | Frequency | Command | Notes |
 |-----------|------|-----------|---------|-------|
 | **Rebase Senior Vault** | Admin | Monthly | `cast send $SENIOR_VAULT "rebase(uint256)" $LP_PRICE_USD --private-key $PRIVATE_KEY --rpc-url $RPC_URL --gas-limit 3000000 --legacy` | Get LP price from Enso API. Triggers spillover/backstop. Mints 1% management fee to treasury. Critical for system health. |
-| **Mint Performance Fee (Junior/Reserve)** | Admin | Per schedule | `cast send $JUNIOR_VAULT "mintPerformanceFee()" --private-key $PRIVATE_KEY --rpc-url $RPC_URL --legacy` | Mints 1% of circulating supply to treasury. Only works if schedule elapsed since last mint. |
+| **Mint Management Fee (Junior/Reserve)** | Admin | Per schedule | `cast send $JUNIOR_VAULT "mintManagementFee()" --private-key $PRIVATE_KEY --rpc-url $RPC_URL --legacy` | Mints 1% of circulating supply to treasury. Only works if schedule elapsed since last mint. |
 | **Update Junior Vault Value** | Admin | As needed | `cast send $JUNIOR_VAULT "updateValue(uint256)" $NEW_VALUE_USD --private-key $PRIVATE_KEY --rpc-url $RPC_URL --legacy` | Update after significant market moves or LP price changes. Affects unstaking ratio. |
 | **Update Reserve Vault Value** | Admin | As needed | `cast send $RESERVE_VAULT "updateValue(uint256)" $NEW_VALUE_USD --private-key $PRIVATE_KEY --rpc-url $RPC_URL --legacy` | Update after significant market moves or LP price changes. Affects unstaking ratio. |
 | **Deploy HONEY to Kodiak** | Admin | After deposits | `cast send $SENIOR_VAULT "deployToKodiak(uint256,uint256,address,bytes,address,bytes)" $HONEY_AMOUNT $MIN_LP $ENSO_ROUTER $SWAP_DATA0 $ENSO_ROUTER $SWAP_DATA1 --private-key $PRIVATE_KEY --rpc-url $RPC_URL --gas-limit 2000000 --legacy` | Get swap data from Enso API. Converts HONEY to LP. Increases yield. |
@@ -169,7 +169,7 @@ cast call $JUNIOR_VAULT "unstakingRatio()(uint256)" --rpc-url $RPC_URL
 
 ```bash
 # 1. Check if fee can be minted
-CAN_MINT=$(cast call $JUNIOR_VAULT "canMintPerformanceFee()(bool)" --rpc-url $RPC_URL)
+CAN_MINT=$(cast call $JUNIOR_VAULT "canMintManagementFee()(bool)" --rpc-url $RPC_URL)
 
 if [ "$CAN_MINT" = "true" ]; then
   echo "✅ Fee schedule elapsed, can mint"
@@ -179,7 +179,7 @@ if [ "$CAN_MINT" = "true" ]; then
   echo "Last minted at: $LAST_MINT"
   
   # 3. Mint performance fee (1% of supply)
-  cast send $JUNIOR_VAULT "mintPerformanceFee()" \
+  cast send $JUNIOR_VAULT "mintManagementFee()" \
     --private-key $PRIVATE_KEY \
     --rpc-url $RPC_URL \
     --legacy
@@ -614,7 +614,7 @@ Annual Impact (if minted monthly):
 - **Formula**: `feeTokens = totalSupply × 1%`
 - **Impact**: All holders diluted by 1% per minting
 - **Schedule**: Configurable (1 day, 7 days, 30 days, 90 days, etc.)
-- **Check**: `canMintPerformanceFee()` returns true when ready
+- **Check**: `canMintManagementFee()` returns true when ready
 - **Example**: 100k jnrUSD supply → mint 1k jnrUSD to treasury
 
 #### 2. Withdrawal Fee (1%)
@@ -660,8 +660,8 @@ echo "Treasury resUSD: $(cast call $RESERVE_VAULT "balanceOf(address)(uint256)" 
 echo "Treasury HONEY: $(cast call $HONEY_ADDRESS "balanceOf(address)(uint256)" $TREASURY --rpc-url $RPC_URL)"
 
 # Check if performance fees can be minted
-echo "Junior can mint: $(cast call $JUNIOR_VAULT "canMintPerformanceFee()(bool)" --rpc-url $RPC_URL)"
-echo "Reserve can mint: $(cast call $RESERVE_VAULT "canMintPerformanceFee()(bool)" --rpc-url $RPC_URL)"
+echo "Junior can mint: $(cast call $JUNIOR_VAULT "canMintManagementFee()(bool)" --rpc-url $RPC_URL)"
+echo "Reserve can mint: $(cast call $RESERVE_VAULT "canMintManagementFee()(bool)" --rpc-url $RPC_URL)"
 
 # Check time until next mint
 echo "Junior time until next: $(cast call $JUNIOR_VAULT "getTimeUntilNextMint()(uint256)" --rpc-url $RPC_URL) seconds"

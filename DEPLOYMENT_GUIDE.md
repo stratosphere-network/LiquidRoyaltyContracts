@@ -808,7 +808,7 @@ cast call $JUNIOR_VAULT "vaultValue()(uint256)" --rpc-url $RPC_URL
 cast call $JUNIOR_VAULT "totalSupply()(uint256)" --rpc-url $RPC_URL
 cast call $JUNIOR_VAULT "getMgmtFeeSchedule()(uint256)" --rpc-url $RPC_URL
 cast call $JUNIOR_VAULT "getLastMintTime()(uint256)" --rpc-url $RPC_URL
-cast call $JUNIOR_VAULT "canMintPerformanceFee()(bool)" --rpc-url $RPC_URL
+cast call $JUNIOR_VAULT "canMintManagementFee()(bool)" --rpc-url $RPC_URL
 
 # Check Reserve vault configuration
 cast call $RESERVE_VAULT "seniorVault()(address)" --rpc-url $RPC_URL
@@ -818,7 +818,7 @@ cast call $RESERVE_VAULT "vaultValue()(uint256)" --rpc-url $RPC_URL
 cast call $RESERVE_VAULT "totalSupply()(uint256)" --rpc-url $RPC_URL
 cast call $RESERVE_VAULT "getMgmtFeeSchedule()(uint256)" --rpc-url $RPC_URL
 cast call $RESERVE_VAULT "getLastMintTime()(uint256)" --rpc-url $RPC_URL
-cast call $RESERVE_VAULT "canMintPerformanceFee()(bool)" --rpc-url $RPC_URL
+cast call $RESERVE_VAULT "canMintManagementFee()(bool)" --rpc-url $RPC_URL
 ```
 
 #### 7.3 Verify Hook Configuration
@@ -1057,7 +1057,7 @@ The protocol implements a comprehensive fee structure to ensure sustainability a
 
 1. **Performance Fee (1% of supply)**
    - Minted on configurable schedule (e.g., monthly)
-   - Admin calls `mintPerformanceFee()`
+   - Admin calls `mintManagementFee()`
    - Mints 1% of current supply to treasury
    - Schedule enforced on-chain
 
@@ -1099,7 +1099,7 @@ cast call $SENIOR_VAULT "balanceOf(address)(uint256)" $TREASURY --rpc-url $RPC_U
 cast call $HONEY_ADDRESS "balanceOf(address)(uint256)" $TREASURY --rpc-url $RPC_URL
 
 # Check if Junior can mint performance fee
-cast call $JUNIOR_VAULT "canMintPerformanceFee()(bool)" --rpc-url $RPC_URL
+cast call $JUNIOR_VAULT "canMintManagementFee()(bool)" --rpc-url $RPC_URL
 
 # Check time until next Junior fee mint
 cast call $JUNIOR_VAULT "getTimeUntilNextMint()(uint256)" --rpc-url $RPC_URL
@@ -1651,8 +1651,8 @@ echo "Treasury resUSD: $(cast call $RESERVE_VAULT "balanceOf(address)(uint256)" 
 echo "Treasury HONEY: $(cast call $HONEY_ADDRESS "balanceOf(address)(uint256)" $TREASURY --rpc-url $RPC_URL)"
 
 # Check if performance fees can be minted
-echo "Junior can mint: $(cast call $JUNIOR_VAULT "canMintPerformanceFee()(bool)" --rpc-url $RPC_URL)"
-echo "Reserve can mint: $(cast call $RESERVE_VAULT "canMintPerformanceFee()(bool)" --rpc-url $RPC_URL)"
+echo "Junior can mint: $(cast call $JUNIOR_VAULT "canMintManagementFee()(bool)" --rpc-url $RPC_URL)"
+echo "Reserve can mint: $(cast call $RESERVE_VAULT "canMintManagementFee()(bool)" --rpc-url $RPC_URL)"
 ```
 
 ### Fee Revenue Projections
@@ -1708,12 +1708,12 @@ Reserve admin → investInKodiak() → WBTC converted to LP
 - Increased early withdrawal penalty from 5% to 20% (Senior only)
 - Added 1% withdrawal fee on all vaults (sent to treasury in HONEY)
 - Changed Senior management fee: now mints snrUSD instead of reducing vault value
-- Added performance fee minting for Junior/Reserve:
-  - `mintPerformanceFee()` - Mint 1% of supply to treasury
+- Added management fee minting for Junior/Reserve:
+  - `mintManagementFee()` - Mint 1% of supply to treasury
   - `setMgmtFeeSchedule()` - Configure minting schedule
   - `getMgmtFeeSchedule()` - View schedule
   - `getLastMintTime()` - Last mint timestamp
-  - `canMintPerformanceFee()` - Check if eligible to mint
+  - `canMintManagementFee()` - Check if eligible to mint
   - `getTimeUntilNextMint()` - Time remaining
 
 **Migration Steps:**

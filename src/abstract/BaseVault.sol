@@ -63,8 +63,8 @@ abstract contract BaseVault is ERC4626Upgradeable, IVault, AdminControlled, UUPS
     /// @dev Treasury address for fees
     address internal _treasury;
     
-    /// @dev Performance fee minting for Junior/Reserve vaults
-    uint256 internal _lastMintTime;        // Last time performance fee was minted
+    /// @dev Management fee minting for Junior/Reserve vaults
+    uint256 internal _lastMintTime;        // Last time management fee was minted
     uint256 internal _mgmtFeeSchedule;     // Time interval between mints (e.g., 7 days, 30 days)
     
     /// @dev Constants
@@ -91,7 +91,7 @@ abstract contract BaseVault is ERC4626Upgradeable, IVault, AdminControlled, UUPS
         uint256 sharesMinted
     );
     event WithdrawalFeeCharged(address indexed user, uint256 fee, uint256 netAmount);
-    event PerformanceFeeMinted(address indexed treasury, uint256 amount, uint256 timestamp);
+    event ManagementFeeMinted(address indexed treasury, uint256 amount, uint256 timestamp);
     event MgmtFeeScheduleUpdated(uint256 oldSchedule, uint256 newSchedule);
     event ReserveSeededWithToken(
         address indexed token,
@@ -163,7 +163,7 @@ abstract contract BaseVault is ERC4626Upgradeable, IVault, AdminControlled, UUPS
         _vaultValue = initialValue_;
         _lastUpdateTime = block.timestamp;
         
-        // Initialize performance fee minting variables
+        // Initialize management fee minting variables
         _lastMintTime = block.timestamp;
         _mgmtFeeSchedule = 30 days; // Default: 30 days
     }
@@ -643,11 +643,11 @@ abstract contract BaseVault is ERC4626Upgradeable, IVault, AdminControlled, UUPS
     }
     
     // ============================================
-    // Performance Fee Minting (Junior/Reserve)
+    // Management Fee Minting (Junior/Reserve)
     // ============================================
     
     /**
-     * @notice Mint performance fee to treasury (1% of total supply)
+     * @notice Mint management fee to treasury (1% of total supply)
      * @dev Only admin can call this. Can only be called after mgmtFeeSchedule has passed
      * 
      * Flow:
@@ -656,7 +656,7 @@ abstract contract BaseVault is ERC4626Upgradeable, IVault, AdminControlled, UUPS
      * 3. Mint to treasury
      * 4. Update last mint time
      */
-    function mintPerformanceFee() external onlyAdmin {
+    function mintManagementFee() external onlyAdmin {
         if (_treasury == address(0)) revert AdminControlled.ZeroAddress();
         
         // Check if enough time has passed
@@ -676,11 +676,11 @@ abstract contract BaseVault is ERC4626Upgradeable, IVault, AdminControlled, UUPS
         // Update last mint time
         _lastMintTime = block.timestamp;
         
-        emit PerformanceFeeMinted(_treasury, feeAmount, block.timestamp);
+        emit ManagementFeeMinted(_treasury, feeAmount, block.timestamp);
     }
     
     /**
-     * @notice Set management fee schedule (time between performance fee mints)
+     * @notice Set management fee schedule (time between management fee mints)
      * @dev Only admin can update the schedule
      * @param newSchedule New schedule in seconds (e.g., 7 days, 30 days)
      */
@@ -695,14 +695,14 @@ abstract contract BaseVault is ERC4626Upgradeable, IVault, AdminControlled, UUPS
     
     /**
      * @notice Get current management fee schedule
-     * @return schedule Time in seconds between performance fee mints
+     * @return schedule Time in seconds between management fee mints
      */
     function getMgmtFeeSchedule() external view returns (uint256) {
         return _mgmtFeeSchedule;
     }
     
     /**
-     * @notice Get last time performance fee was minted
+     * @notice Get last time management fee was minted
      * @return timestamp Last mint timestamp
      */
     function getLastMintTime() external view returns (uint256) {
@@ -710,15 +710,15 @@ abstract contract BaseVault is ERC4626Upgradeable, IVault, AdminControlled, UUPS
     }
     
     /**
-     * @notice Check if performance fee can be minted now
+     * @notice Check if management fee can be minted now
      * @return canMint True if enough time has passed
      */
-    function canMintPerformanceFee() external view returns (bool) {
+    function canMintManagementFee() external view returns (bool) {
         return block.timestamp >= _lastMintTime + _mgmtFeeSchedule;
     }
     
     /**
-     * @notice Get time remaining until next performance fee can be minted
+     * @notice Get time remaining until next management fee can be minted
      * @return timeRemaining Seconds until next mint (0 if can mint now)
      */
     function getTimeUntilNextMint() external view returns (uint256) {

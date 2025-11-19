@@ -16,7 +16,7 @@ import {MathLib} from "../../src/libraries/MathLib.sol";
  *  - seedVault() / seedReserveWithToken()
  *  - investInKodiak()
  *  - setKodiakRouter() / kodiakRouter()
- *  - mintPerformanceFee()
+ *  - mintManagementFee()
  *  - setMgmtFeeSchedule() and related getters
  *  - setTreasury() / treasury()
  */
@@ -382,12 +382,12 @@ contract NewFeaturesTest is Test {
         vm.warp(block.timestamp + 7 days);
         
         // Check can mint
-        assertTrue(juniorVault.canMintPerformanceFee());
+        assertTrue(juniorVault.canMintManagementFee());
         assertEq(juniorVault.getTimeUntilNextMint(), 0);
         
         // Mint fee
         vm.prank(admin);
-        juniorVault.mintPerformanceFee();
+        juniorVault.mintManagementFee();
         
         // Assertions
         uint256 expectedFee = supplyBefore / 100; // 1% of supply
@@ -418,7 +418,7 @@ contract NewFeaturesTest is Test {
         
         // Mint fee
         vm.prank(admin);
-        reserveVault.mintPerformanceFee();
+        reserveVault.mintManagementFee();
         
         // Assertions
         uint256 expectedFee = supplyBefore / 100;
@@ -431,12 +431,12 @@ contract NewFeaturesTest is Test {
         
         vm.warp(block.timestamp + 3 days); // Only 3 days, need 7
         
-        assertFalse(juniorVault.canMintPerformanceFee());
+        assertFalse(juniorVault.canMintManagementFee());
         assertEq(juniorVault.getTimeUntilNextMint(), 4 days);
         
         vm.prank(admin);
         vm.expectRevert();
-        juniorVault.mintPerformanceFee();
+        juniorVault.mintManagementFee();
     }
     
     function testCannotMintPerformanceFee_NotAdmin() public {
@@ -449,7 +449,7 @@ contract NewFeaturesTest is Test {
         
         vm.prank(hacker);
         vm.expectRevert();
-        juniorVault.mintPerformanceFee();
+        juniorVault.mintManagementFee();
     }
 }
 
