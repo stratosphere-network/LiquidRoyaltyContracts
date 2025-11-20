@@ -1053,7 +1053,13 @@ abstract contract UnifiedSeniorVault is ISeniorVault, IERC20, AdminControlled, P
     }
     
     function previewWithdraw(uint256 amount) public view virtual returns (uint256) {
-        (,uint256 netAssets) = calculateWithdrawalPenalty(msg.sender, amount);
+        // Calculate early withdrawal penalty first
+        (, uint256 amountAfterEarlyPenalty) = calculateWithdrawalPenalty(msg.sender, amount);
+        
+        // Calculate 1% withdrawal fee on the amount after early penalty
+        uint256 withdrawalFee = (amountAfterEarlyPenalty * MathLib.WITHDRAWAL_FEE) / MathLib.PRECISION;
+        uint256 netAssets = amountAfterEarlyPenalty - withdrawalFee;
+        
         return netAssets;
     }
     

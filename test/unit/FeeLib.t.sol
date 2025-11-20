@@ -61,22 +61,23 @@ contract FeeLibTest is Test {
             currentTime
         );
         
-        // Penalty = 1000 × 5% = 50
-        assertEq(penalty, 50e18, "Penalty should be 50 (5%)");
-        assertEq(netAmount, 950e18, "Net amount should be 950");
+        // Penalty = 1000 × 20% = 200
+        assertEq(penalty, 200e18, "Penalty should be 200 (20%)");
+        assertEq(netAmount, 800e18, "Net amount should be 800");
     }
     
     /// @dev Test deduct management fee
-    function testDeductManagementFee() public pure {
-        uint256 grossValue = 10_500_000e18;
-        
-        (uint256 netValue, uint256 feeAmount) = FeeLib.deductManagementFee(grossValue);
-        
-        // Fee should be ~8,750
-        assertEq(feeAmount, 8_750e18, "Fee should be 8,750");
-        // Net should be 10,500,000 - 8,750 = 10,491,250
-        assertEq(netValue, 10_491_250e18, "Net value should be 10,491,250");
-    }
+    // DEPRECATED: Management fee is now minted as tokens, not deducted from vault value
+    // function testDeductManagementFee() public pure {
+    //     uint256 grossValue = 10_500_000e18;
+    //     
+    //     (uint256 netValue, uint256 feeAmount) = FeeLib.deductManagementFee(grossValue);
+    //     
+    //     // Fee should be ~8,750
+    //     assertEq(feeAmount, 8_750e18, "Fee should be 8,750");
+    //     // Net should be 10,500,000 - 8,750 = 10,491,250
+    //     assertEq(netValue, 10_491_250e18, "Net value should be 10,491,250");
+    // }
     
     /// @dev Test calculate rebase supply (13% APY)
     function testCalculateRebaseSupply13APY() public pure {

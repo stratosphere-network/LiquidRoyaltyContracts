@@ -6,10 +6,13 @@ import {ERC1967Proxy} from "@openzeppelin/contracts/proxy/ERC1967/ERC1967Proxy.s
 import {ConcreteJuniorVault} from "../../../src/concrete/ConcreteJuniorVault.sol";
 import {MockERC20} from "../../../src/mocks/MockERC20.sol";
 import {MathLib} from "../../../src/libraries/MathLib.sol";
+import {MockKodiakHook} from "../../mocks/MockKodiakHook.sol";
 
 contract ConcreteJuniorVaultTest is Test {
     ConcreteJuniorVault public vault;
     MockERC20 public lpToken;
+    MockKodiakHook public hook;
+    MockKodiakHook public seniorHook;
     
     address public seniorVault;
     address public user1;
@@ -55,9 +58,24 @@ contract ConcreteJuniorVaultTest is Test {
         vm.startPrank(keeper);
         vault.setVaultValue(INITIAL_VALUE);
         vault.setVaultValue(INITIAL_VALUE);
+        
+        // Create and set mock Kodiak hook
+        hook = new MockKodiakHook(address(vault), address(0), address(lpToken));
+        vault.setKodiakHook(address(hook));
         vm.stopPrank();
         
-        lpToken.mint(address(vault), INITIAL_VALUE);
+        // Mint LP tokens to the hook (this is where backstop LP comes from)
+        lpToken.mint(address(hook), INITIAL_VALUE);
+        
+        // Create senior hook for backstop transfers
+        seniorHook = new MockKodiakHook(seniorVault, address(0), address(lpToken));
+        
+        // Mock seniorVault.kodiakHook() to return our senior hook
+        vm.mockCall(
+            seniorVault,
+            abi.encodeWithSignature("kodiakHook()"),
+            abi.encode(address(seniorHook))
+        );
         
         // Whitelist the LP token so provideBackstop can transfer it
         vm.prank(keeper);
