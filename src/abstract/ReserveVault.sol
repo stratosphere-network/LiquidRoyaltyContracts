@@ -6,6 +6,7 @@ import {IVault} from "../interfaces/IVault.sol";
 import {IReserveVault} from "../interfaces/IReserveVault.sol";
 import {MathLib} from "../libraries/MathLib.sol";
 import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
+import {SafeERC20} from "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
 
 /**
  * @title ReserveVault
@@ -22,14 +23,19 @@ import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
  */
 abstract contract ReserveVault is BaseVault, IReserveVault {
     using MathLib for uint256;
+    using SafeERC20 for IERC20;
     
     /// @dev State Variables
     uint256 internal _totalSpilloverReceived;    // Cumulative spillover
     uint256 internal _totalBackstopProvided;     // Cumulative backstop
     uint256 internal _lastMonthValue;            // For return calculation
+    address internal _kodiakRouter;              // Kodiak Island Router for token swaps
     
     /// @dev Minimum reserve threshold (1% of initial value)
     uint256 internal constant DEPLETION_THRESHOLD = 1e16; // 1%
+    
+    /// @dev Reserve-specific events
+    event KodiakRouterSet(address indexed router);
     
     /// @dev Errors (defined in interface or BaseVault, no need to redeclare)
     
@@ -200,6 +206,293 @@ abstract contract ReserveVault is BaseVault, IReserveVault {
         }
         
         return actualAmount;
+    }
+    
+    // ============================================
+    // Reserve-Specific Token Management Functions
+    // ============================================
+    
+    /**
+     * @notice Seed Reserve vault with non-stablecoin token (e.g., WBTC)
+     * @dev ONLY for Reserve vault - token stays in vault, not transferred to hook
+     * @dev Use investInKodiak() after seeding to convert token to LP
+     * @param token Non-stablecoin token address (e.g., WBTC)
+     * @param amount Amount of tokens to seed
+     * @param seedProvider Address providing the tokens
+     * @param tokenPrice Price of token in stablecoin terms (18 decimals)
+     */
+    function seedReserveWithToken(
+        address token,
+        uint256 amount,
+        address seedProvider,
+        uint256 tokenPrice
+    ) external onlySeeder {
+        // Validation
+        if (token == address(0) || seedProvider == address(0)) revert ZeroAddress();
+        if (amount == 0) revert InvalidAmount();
+        if (tokenPrice == 0) revert InvalidTokenPrice();
+        
+        // Step 1: Transfer tokens from seedProvider to vault
+        // Token STAYS in vault (not transferred to hook like seedVault)
+        IERC20(token).safeTransferFrom(seedProvider, address(this), amount);
+        
+        // Step 2: Calculate value = amount * tokenPrice / 1e18
+        // tokenPrice is in 18 decimals, representing stablecoin value per token
+        uint256 valueAdded = (amount * tokenPrice) / 1e18;
+        
+        // Step 3: Mint shares to seedProvider
+        // Get current share price
+        uint256 sharePrice = totalSupply() > 0 ? (totalAssets() * 1e18) / totalSupply() : 1e18;
+        
+        // Calculate shares to mint
+        uint256 sharesToMint;
+        if (sharePrice == 1e18 || totalSupply() == 0) {
+            // First deposit or 1:1 ratio
+            sharesToMint = valueAdded;
+        } else {
+            // Calculate shares based on current share price
+            sharesToMint = (valueAdded * 1e18) / sharePrice;
+        }
+        
+        // Mint shares directly (bypass normal deposit flow)
+        _mint(seedProvider, sharesToMint);
+        
+        // Step 4: Update vault value to include new token value
+        _vaultValue += valueAdded;
+        _lastUpdateTime = block.timestamp;
+        
+        // Step 5: Emit event
+        emit ReserveSeededWithToken(token, seedProvider, amount, tokenPrice, valueAdded, sharesToMint);
+    }
+    
+    /**
+     * @notice Invest non-stablecoin token into Kodiak Island (Reserve vault only)
+     * @dev Takes token from vault, swaps to pool tokens, adds liquidity
+     * @dev Same pattern as deployToKodiak() but for non-stablecoin tokens
+     * @param island Kodiak Island (pool) address
+     * @param token Token to invest (e.g., WBTC)
+     * @param amount Amount of tokens to invest
+     * @param minLPTokens Minimum LP tokens to receive (slippage protection)
+     * @param swapToToken0Aggregator DEX aggregator for token0 swap
+     * @param swapToToken0Data Swap calldata for token0
+     * @param swapToToken1Aggregator DEX aggregator for token1 swap
+     * @param swapToToken1Data Swap calldata for token1
+     */
+    function investInKodiak(
+        address island,
+        address token,
+        uint256 amount,
+        uint256 minLPTokens,
+        address swapToToken0Aggregator,
+        bytes calldata swapToToken0Data,
+        address swapToToken1Aggregator,
+        bytes calldata swapToToken1Data
+    ) external onlyAdmin {
+        if (amount == 0) revert InvalidAmount();
+        if (address(kodiakHook) == address(0)) revert KodiakHookNotSet();
+        
+        // Check vault has enough of the token
+        uint256 vaultBalance = IERC20(token).balanceOf(address(this));
+        if (vaultBalance < amount) revert InsufficientBalance();
+        
+        // Record LP balance before
+        uint256 lpBefore = kodiakHook.getIslandLPBalance();
+        
+        // Transfer token to hook
+        IERC20(token).safeTransfer(address(kodiakHook), amount);
+        
+        // Call hook to deploy with swap parameters (same as deployToKodiak)
+        kodiakHook.onAfterDepositWithSwaps(
+            amount,
+            swapToToken0Aggregator,
+            swapToToken0Data,
+            swapToToken1Aggregator,
+            swapToToken1Data
+        );
+        
+        // Calculate LP received
+        uint256 lpAfter = kodiakHook.getIslandLPBalance();
+        uint256 lpReceived = lpAfter - lpBefore;
+        
+        // Check slippage
+        if (lpReceived < minLPTokens) revert SlippageTooHigh();
+        
+        // Emit event
+        emit KodiakInvestment(island, token, amount, lpReceived, block.timestamp);
+    }
+    
+    /**
+     * @notice Swap stablecoin (HONEY) to non-stablecoin token (WBTC) in Reserve vault
+     * @dev ONLY for Reserve vault - converts HONEY held in vault to WBTC
+     * @param amount Amount of stablecoin to swap
+     * @param minTokenOut Minimum non-stablecoin to receive (slippage protection)
+     * @param tokenOut Non-stablecoin address (e.g., WBTC)
+     * @param swapAggregator DEX aggregator address
+     * @param swapData Swap calldata from aggregator
+     */
+    function swapStablecoinToToken(
+        uint256 amount,
+        uint256 minTokenOut,
+        address tokenOut,
+        address swapAggregator,
+        bytes calldata swapData
+    ) external onlyAdmin {
+        if (amount == 0) revert InvalidAmount();
+        if (tokenOut == address(0) || swapAggregator == address(0)) revert ZeroAddress();
+        
+        // Check vault has enough stablecoin
+        uint256 vaultBalance = _stablecoin.balanceOf(address(this));
+        if (vaultBalance < amount) revert InsufficientBalance();
+        
+        // Check token balance before
+        uint256 tokenBefore = IERC20(tokenOut).balanceOf(address(this));
+        
+        // Approve aggregator
+        _stablecoin.forceApprove(swapAggregator, amount);
+        
+        // Execute swap
+        (bool success,) = swapAggregator.call(swapData);
+        require(success, "Swap failed");
+        
+        // Check tokens received
+        uint256 tokenAfter = IERC20(tokenOut).balanceOf(address(this));
+        uint256 tokenReceived = tokenAfter - tokenBefore;
+        
+        // Slippage check
+        if (tokenReceived < minTokenOut) revert SlippageTooHigh();
+        
+        // Clean up approval
+        _stablecoin.forceApprove(swapAggregator, 0);
+        
+        emit StablecoinSwappedToToken(address(_stablecoin), tokenOut, amount, tokenReceived, block.timestamp);
+    }
+    
+    /**
+     * @notice Rescue stablecoin from hook to vault (Reserve only)
+     * @dev Swaps non-stablecoin token (e.g., WBTC) in hook to stablecoin and sends to vault
+     * @param tokenIn Non-stablecoin token address in hook (e.g., WBTC dust)
+     * @param amount Amount of token to swap
+     * @param minStablecoinOut Minimum stablecoin to receive
+     * @param swapAggregator DEX aggregator address
+     * @param swapData Swap calldata from aggregator
+     */
+    function rescueAndSwapHookTokenToStablecoin(
+        address tokenIn,
+        uint256 amount,
+        uint256 minStablecoinOut,
+        address swapAggregator,
+        bytes calldata swapData
+    ) external onlyAdmin {
+        if (amount == 0) revert InvalidAmount();
+        if (address(kodiakHook) == address(0)) revert KodiakHookNotSet();
+        if (tokenIn == address(0) || swapAggregator == address(0)) revert ZeroAddress();
+        
+        // Check stablecoin balance before
+        uint256 stablecoinBefore = _stablecoin.balanceOf(address(this));
+        
+        // Call hook to swap token to stablecoin and send to vault
+        kodiakHook.adminSwapAndReturnToVault(
+            tokenIn,
+            amount,
+            swapData,
+            swapAggregator
+        );
+        
+        // Check stablecoin received in vault
+        uint256 stablecoinAfter = _stablecoin.balanceOf(address(this));
+        uint256 stablecoinReceived = stablecoinAfter - stablecoinBefore;
+        
+        // Slippage check
+        if (stablecoinReceived < minStablecoinOut) revert SlippageTooHigh();
+        
+        emit HookTokenSwappedToStablecoin(tokenIn, amount, stablecoinReceived, block.timestamp);
+    }
+    
+    /**
+     * @notice Rescue non-stablecoin token from hook to vault (Reserve only)
+     * @dev Transfers WBTC from Reserve hook back to Reserve vault
+     * @param token Non-stablecoin token address (e.g., WBTC)
+     * @param amount Amount to rescue (0 = all)
+     */
+    function rescueTokenFromHook(
+        address token,
+        uint256 amount
+    ) external onlyAdmin {
+        if (token == address(0)) revert ZeroAddress();
+        if (address(kodiakHook) == address(0)) revert KodiakHookNotSet();
+        
+        // Get token balance in hook
+        uint256 hookBalance = IERC20(token).balanceOf(address(kodiakHook));
+        
+        // If amount is 0, rescue all
+        uint256 rescueAmount = amount == 0 ? hookBalance : amount;
+        
+        if (rescueAmount == 0) revert InvalidAmount();
+        if (hookBalance < rescueAmount) revert InsufficientBalance();
+        
+        // Use hook's rescue function
+        kodiakHook.adminRescueTokens(token, address(this), rescueAmount);
+        
+        emit TokenRescuedFromHook(token, rescueAmount, block.timestamp);
+    }
+    
+    /**
+     * @notice Exit LP position to stablecoin or non-stablecoin (Reserve only)
+     * @dev Liquidates LP from hook and swaps to desired token
+     * @param lpAmount Amount of LP to exit (0 = all)
+     * @param tokenOut Desired output token (HONEY or WBTC)
+     * @param minTokenOut Minimum tokens to receive
+     * @param swapAggregator DEX aggregator address  
+     * @param swapData Swap calldata from aggregator
+     */
+    function exitLPToToken(
+        uint256 lpAmount,
+        address tokenOut,
+        uint256 minTokenOut,
+        address swapAggregator,
+        bytes calldata swapData
+    ) external onlyAdmin {
+        if (tokenOut == address(0)) revert ZeroAddress();
+        if (address(kodiakHook) == address(0)) revert KodiakHookNotSet();
+        
+        // Get LP balance if amount is 0
+        if (lpAmount == 0) {
+            lpAmount = kodiakHook.getIslandLPBalance();
+        }
+        
+        if (lpAmount == 0) revert InvalidAmount();
+        
+        // Check token balance before
+        uint256 tokenBefore = IERC20(tokenOut).balanceOf(address(this));
+        
+        // Use hook's adminLiquidateAll to exit LP and swap
+        kodiakHook.adminLiquidateAll(swapData, swapAggregator);
+        
+        // Check tokens received
+        uint256 tokenAfter = IERC20(tokenOut).balanceOf(address(this));
+        uint256 tokenReceived = tokenAfter - tokenBefore;
+        
+        // Slippage check
+        if (tokenReceived < minTokenOut) revert SlippageTooHigh();
+        
+        emit LPExitedToToken(lpAmount, tokenOut, tokenReceived, block.timestamp);
+    }
+    
+    /**
+     * @notice Set Kodiak Router address for Reserve token swaps
+     * @param router Kodiak Router address
+     */
+    function setKodiakRouter(address router) external onlyAdmin {
+        if (router == address(0)) revert ZeroAddress();
+        _kodiakRouter = router;
+        emit KodiakRouterSet(router);
+    }
+    
+    /**
+     * @notice Get Kodiak Router address
+     */
+    function kodiakRouter() external view returns (address) {
+        return _kodiakRouter;
     }
     
     // ============================================

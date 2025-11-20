@@ -15,16 +15,22 @@ abstract contract AdminControlled is Initializable {
     /// @dev Roles
     address private _deployer;
     address private _admin;
+    mapping(address => bool) private _seeders;
     
     /// @dev Events
     event AdminSet(address indexed previousAdmin, address indexed newAdmin);
     event AdminTransferred(address indexed previousAdmin, address indexed newAdmin);
+    event SeederAdded(address indexed seeder);
+    event SeederRevoked(address indexed seeder);
     
     /// @dev Errors
     error OnlyDeployer();
     error OnlyAdmin();
+    error OnlySeeder();
     error ZeroAddress();
     error AdminAlreadySet();
+    error SeederAlreadyAdded();
+    error SeederNotFound();
     
     /// @dev Modifiers
     modifier onlyDeployer() {
@@ -34,6 +40,11 @@ abstract contract AdminControlled is Initializable {
     
     modifier onlyAdmin() {
         if (msg.sender != _admin) revert OnlyAdmin();
+        _;
+    }
+    
+    modifier onlySeeder() {
+        if (!_seeders[msg.sender]) revert OnlySeeder();
         _;
     }
     
@@ -89,6 +100,41 @@ abstract contract AdminControlled is Initializable {
      */
     function isAdmin(address account) public view returns (bool) {
         return account == _admin;
+    }
+    
+    /**
+     * @notice Add seeder role to address
+     * @dev Only admin can add seeders
+     * @param seeder Address to grant seeder role
+     */
+    function addSeeder(address seeder) external onlyAdmin {
+        if (seeder == address(0)) revert ZeroAddress();
+        if (_seeders[seeder]) revert SeederAlreadyAdded();
+        
+        _seeders[seeder] = true;
+        emit SeederAdded(seeder);
+    }
+    
+    /**
+     * @notice Revoke seeder role from address
+     * @dev Only admin can revoke seeders
+     * @param seeder Address to revoke seeder role from
+     */
+    function revokeSeeder(address seeder) external onlyAdmin {
+        if (seeder == address(0)) revert ZeroAddress();
+        if (!_seeders[seeder]) revert SeederNotFound();
+        
+        _seeders[seeder] = false;
+        emit SeederRevoked(seeder);
+    }d
+    
+    /**
+     * @notice Check if address has seeder role
+     * @param account Address to check
+     * @return hasRole True if address is a seeder
+     */
+    function isSeeder(address account) public view returns (bool) {
+        return _seeders[account];
     }
 }
 

@@ -354,5 +354,23 @@ contract MockKodiakHook is IKodiakVaultHook {
     function getIslandLPBalance() external view override returns (uint256) {
         return useFakeBalance ? fakeLPBalance : lpBalance;
     }
+    
+    function adminSwapAndReturnToVault(
+        address,
+        uint256,
+        bytes calldata,
+        address
+    ) external override {}
+    
+    function adminRescueTokens(
+        address,
+        address,
+        uint256
+    ) external override {}
+    
+    function adminLiquidateAll(
+        bytes calldata,
+        address
+    ) external override {}
 }
 

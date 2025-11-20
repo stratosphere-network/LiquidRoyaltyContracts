@@ -30,7 +30,7 @@ export KODIAK_ROUTER_ADDRESS=0x679a7C63FC83b6A4D9C1F931891d705483d4791F
 # All vaults now have: seedVault(), setTreasury(), 1% withdrawal fee, 20% early penalty
 # Junior/Reserve have: mintManagementFee() (renamed from mintPerformanceFee), canMintManagementFee()
 # Reserve additionally has: seedReserveWithToken(), investInKodiak(), setKodiakRouter()
-export SENIOR_IMPL=0xd748881505d295B2Ffc756B5940ADd162489Cbb4
+export SENIOR_IMPL=0x19E4440225dcCe37855916dc338A46b1966b689d
 export JUNIOR_IMPL=0xeAFfefD61E760b7a43EeD48D43b5230b82EA7C45
 export RESERVE_IMPL=0x70Cdca956fbBF10b028cCd13D84f2f2a8F2F0096
 
@@ -54,3 +54,40 @@ export JUNIOR_HOOK=0x9e7753A490628C65219c467A792b708A89209168
 export RESERVE_HOOK=0x88FA91FCF1771AC3C07b3f6684239A4A0B234299
 
 
+
+# ============================================
+# REFACTORED IMPLEMENTATIONS (Nov 20, 2025)
+# ============================================
+export JUNIOR_IMPL_V2=0xa0729705e1A1fD4a7C2C450AaB69cc25d30B8061  # 20.5 KB - WITH pending LP deposits
+export RESERVE_IMPL_V2=0x3Bf2a71e9226867fc5503e6bAA3E9bF31a1D2676 # 22.5 KB - NO pending LP (token mgmt only)
+export SENIOR_IMPL_V2=0x19E4440225dcCe37855916dc338A46b1966b689d  # 23.1 KB - WITH pending LP deposits
+
+# ============================================
+# ARCHITECTURE NOTES (Post-Refactoring)
+# ============================================
+# 
+# CONTRACT SIZE OPTIMIZATION:
+# - BaseVault.sol: 19.2 KB (core ERC4626 + Kodiak integration)
+# - JuniorVault.sol: 21.0 KB (adds pending LP deposit system)
+# - ReserveVault.sol: 22.5 KB (adds 6 token management functions)
+# - Senior: 23.1 KB (own pending LP deposit system)
+# 
+# PENDING LP DEPOSITS:
+# - Senior: ✅ HAS pending LP deposits (in UnifiedSeniorVault)
+# - Junior: ✅ HAS pending LP deposits (inherited from JuniorVault)
+# - Reserve: ❌ NO pending LP deposits (removed to save space)
+# 
+# TOKEN MANAGEMENT (Reserve-Specific):
+# Reserve vault has 6 unique functions for non-stablecoin management:
+# 1. seedReserveWithToken() - Seed with WBTC (stays in vault)
+# 2. investInKodiak() - Convert WBTC to LP tokens
+# 3. swapStablecoinToToken() - HONEY → WBTC in vault
+# 4. rescueAndSwapHookTokenToStablecoin() - Rescue+swap HONEY from hook
+# 5. rescueTokenFromHook() - Generic token rescue from hook
+# 6. exitLPToToken() - Exit LP to HONEY (via hook)
+# 7. setKodiakRouter() + kodiakRouter() - Router management
+# 
+# USER DEPOSIT FLOWS:
+# - Senior: HONEY deposits OR LP deposits (pending approval)
+# - Junior: HONEY deposits OR LP deposits (pending approval)
+# - Reserve: HONEY deposits ONLY (or admin seedVault for initial LP)
