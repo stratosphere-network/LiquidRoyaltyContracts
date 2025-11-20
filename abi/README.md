@@ -1,207 +1,286 @@
-# Contract ABIs
+# 📦 ABI Directory
 
-This directory contains the JSON ABIs (Application Binary Interfaces) for all smart contracts in the Senior Tranche Protocol.
+This directory contains all JSON ABIs for the Senior Tranche Protocol contracts.
 
-## 📦 Main Contracts (Deploy These)
+---
 
-### Vault Contracts
-- **`UnifiedConcreteSeniorVault.json`** - Senior vault implementation (rebasing, lowest risk)
-- **`ConcreteJuniorVault.json`** - Junior vault implementation (non-rebasing, medium risk)
-- **`ConcreteReserveVault.json`** - Reserve vault implementation (non-rebasing, highest risk)
+## 🏦 **Deployable Contracts (Use These in Production)**
 
-### Integration Contracts
-- **`KodiakVaultHook.json`** - Kodiak Island LP management hook
+### Vault Implementations
+- **`UnifiedConcreteSeniorVault.json`** (50 KB) - Senior vault (snrUSD rebasing token)
+  - Proxy: `0x65691bd1972e906459954306aDa0f622a47d4744`
+  - Implementation: `0x19E4440225dcCe37855916dc338A46b1966b689d`
+  - Features: Rebase, cooldown, pending LP deposits
 
-### Testing
-- **`MockERC20.json`** - Mock ERC20 token for testing
+- **`ConcreteJuniorVault.json`** (56 KB) - Junior vault (jnrUSD ERC4626)
+  - Proxy: `0x3A1b3b300dEE06Caf0b691F1771d1Aa26d70B067`
+  - Implementation: `0xa0729705e1A1fD4a7C2C450AaB69cc25d30B8061`
+  - Features: ERC4626, spillover, pending LP deposits
 
-## 🔌 Interfaces (For Integration)
+- **`ConcreteReserveVault.json`** (55 KB) - Reserve vault (resUSD ERC4626)
+  - Proxy: `0x2C75291479788C568A6750185CaDedf43aBFC553`
+  - Implementation: `0x3Bf2a71e9226867fc5503e6bAA3E9bF31a1D2676`
+  - Features: ERC4626, backstop, token management (6 functions)
 
-### Vault Interfaces
-- **`IVault.json`** - Base vault interface (common functions)
-- **`ISeniorVault.json`** - Senior vault specific interface
-- **`IJuniorVault.json`** - Junior vault specific interface
-- **`IReserveVault.json`** - Reserve vault specific interface
+### Hooks
+- **`KodiakVaultHook.json`** (16 KB) - LP management for Kodiak Island
+  - Senior Hook: `0x949Ba11180BDF15560D7Eba9864c929FA4a32bA2`
+  - Junior Hook: `0x9e7753A490628C65219c467A792b708A89209168`
+  - Reserve Hook: `0x88FA91FCF1771AC3C07b3f6684239A4A0B234299`
 
-### External Integrations
-- **`IKodiakVaultHook.json`** - Kodiak hook interface
-- **`IKodiakIsland.json`** - Kodiak Island pool interface
-- **`IKodiakIslandRouter.json`** - Kodiak router interface
+---
 
-## 📚 Abstract Contracts (Reference)
+## 📋 **Interfaces (For Type Safety)**
 
-- **`BaseVault.json`** - Base vault abstract contract (ERC4626 compliant)
-- **`UnifiedSeniorVault.json`** - Senior vault abstract contract
-- **`JuniorVault.json`** - Junior vault abstract contract
-- **`ReserveVault.json`** - Reserve vault abstract contract
+- **`ISeniorVault.json`** (13 KB) - Senior vault interface
+- **`IVault.json`** (3.8 KB) - Base vault interface
+- **`IJuniorVault.json`** (7.3 KB) - Junior vault interface
+- **`IReserveVault.json`** (8.3 KB) - Reserve vault interface
+- **`IKodiakVaultHook.json`** (3.4 KB) - Hook interface
+- **`IKodiakIsland.json`** (6.6 KB) - Kodiak Island interface
+- **`IKodiakIslandRouter.json`** (5.5 KB) - Kodiak Router interface
 
-## 🚀 Usage Examples
+---
 
-### Using with ethers.js (JavaScript/TypeScript)
+## 🏗️ **Abstract Contracts (For Understanding Inheritance)**
 
-```javascript
-import { ethers } from 'ethers';
-import seniorABI from './abi/UnifiedConcreteSeniorVault.json';
+- **`BaseVault.json`** (46 KB) - Core ERC4626 logic (inherited by Junior/Reserve)
+- **`UnifiedSeniorVault.json`** (49 KB) - Senior vault base
+- **`JuniorVault.json`** (55 KB) - Junior vault abstract (adds pending LP deposits)
+- **`ReserveVault.json`** (55 KB) - Reserve vault abstract (adds token management)
 
-const provider = new ethers.providers.JsonRpcProvider('https://rpc.berachain.com');
-const seniorVault = new ethers.Contract(
-  '0x65691bd1972e906459954306aDa0f622a47d4744', // Senior vault address
-  seniorABI,
-  provider
-);
+---
 
-// Read functions
-const totalSupply = await seniorVault.totalSupply();
-const backingRatio = await seniorVault.backingRatio();
-const vaultValue = await seniorVault.vaultValue();
+## 🪙 **Token Standards**
 
-// Write functions (requires signer)
-const signer = provider.getSigner();
-const seniorVaultWithSigner = seniorVault.connect(signer);
-const tx = await seniorVaultWithSigner.deposit(
-  ethers.utils.parseEther('1000'), // 1000 HONEY
-  userAddress
-);
-await tx.wait();
-```
+- **`ERC20.json`** (5.5 KB) - Standard ERC20 interface
+- **`MockERC20.json`** (6.6 KB) - Mock ERC20 for testing
 
-### Using with viem (TypeScript)
+---
 
+## 📊 **Feature Comparison**
+
+| Contract | Size | Pending LP Deposits | Token Management | Special Features |
+|----------|------|-------------------|------------------|-----------------|
+| **Senior** | 50 KB | ✅ YES | ❌ No | Rebase, 7-day cooldown, 20% early penalty |
+| **Junior** | 56 KB | ✅ YES | ❌ No | ERC4626, spillover receiver, management fee |
+| **Reserve** | 55 KB | ❌ **NO** | ✅ **6 functions** | Backstop provider, WBTC management |
+
+---
+
+## 🔧 **Usage in Frontend**
+
+### Viem (Recommended)
 ```typescript
+import seniorVaultABI from './abi/UnifiedConcreteSeniorVault.json';
+import juniorVaultABI from './abi/ConcreteJuniorVault.json';
+import reserveVaultABI from './abi/ConcreteReserveVault.json';
+import kodiakHookABI from './abi/KodiakVaultHook.json';
+
+// Use with Viem
 import { createPublicClient, http } from 'viem';
 import { berachain } from 'viem/chains';
-import seniorABI from './abi/UnifiedConcreteSeniorVault.json';
 
 const client = createPublicClient({
   chain: berachain,
   transport: http('https://rpc.berachain.com')
 });
 
-// Read functions
-const backingRatio = await client.readContract({
+const seniorVault = {
   address: '0x65691bd1972e906459954306aDa0f622a47d4744',
-  abi: seniorABI,
-  functionName: 'backingRatio',
+  abi: seniorVaultABI,
+};
+
+// Read vault value
+const vaultValue = await client.readContract({
+  ...seniorVault,
+  functionName: 'vaultValue',
 });
 ```
 
-### Using with web3.py (Python)
+### Ethers.js
+```javascript
+import { ethers } from 'ethers';
+import seniorVaultABI from './abi/UnifiedConcreteSeniorVault.json';
 
-```python
-from web3 import Web3
-import json
+const provider = new ethers.JsonRpcProvider('https://rpc.berachain.com');
+const seniorVault = new ethers.Contract(
+  '0x65691bd1972e906459954306aDa0f622a47d4744',
+  seniorVaultABI,
+  provider
+);
 
-# Connect to Berachain
-w3 = Web3(Web3.HTTPProvider('https://rpc.berachain.com'))
-
-# Load ABI
-with open('abi/UnifiedConcreteSeniorVault.json') as f:
-    senior_abi = json.load(f)
-
-# Create contract instance
-senior_vault = w3.eth.contract(
-    address='0x65691bd1972e906459954306aDa0f622a47d4744',
-    abi=senior_abi
-)
-
-# Read functions
-total_supply = senior_vault.functions.totalSupply().call()
-backing_ratio = senior_vault.functions.backingRatio().call()
-
-# Write functions
-tx = senior_vault.functions.deposit(
-    w3.to_wei(1000, 'ether'),  # 1000 HONEY
-    user_address
-).transact({'from': user_address})
+const vaultValue = await seniorVault.vaultValue();
 ```
 
-### Using with Foundry Cast (CLI)
+### Web3.js
+```javascript
+import Web3 from 'web3';
+import seniorVaultABI from './abi/UnifiedConcreteSeniorVault.json';
+
+const web3 = new Web3('https://rpc.berachain.com');
+const seniorVault = new web3.eth.Contract(
+  seniorVaultABI,
+  '0x65691bd1972e906459954306aDa0f622a47d4744'
+);
+
+const vaultValue = await seniorVault.methods.vaultValue().call();
+```
+
+---
+
+## 🔑 **Key Functions by Contract**
+
+### Senior Vault (UnifiedConcreteSeniorVault)
+```solidity
+// Deposits & Withdrawals
+function deposit(uint256 assets, address receiver) returns (uint256 shares);
+function withdraw(uint256 assets, address receiver, address owner) returns (uint256 shares);
+function initiateCooldown();
+
+// Pending LP Deposits (NEW!)
+function depositLP(address lpToken, uint256 amount) returns (uint256 depositId);
+function approveLPDeposit(uint256 depositId, uint256 lpPrice); // Admin
+function rejectLPDeposit(uint256 depositId, string reason); // Admin
+function cancelPendingDeposit(uint256 depositId); // User
+function claimExpiredDeposit(uint256 depositId); // Anyone
+function getPendingDeposit(uint256 depositId) returns (...);
+function getUserDepositIds(address user) returns (uint256[]);
+
+// Rebase
+function rebase(uint256 lpPrice); // Admin
+
+// View Functions
+function balanceOf(address account) returns (uint256);
+function totalSupply() returns (uint256);
+function vaultValue() returns (uint256);
+function backingRatio() returns (uint256);
+```
+
+### Junior Vault (ConcreteJuniorVault)
+```solidity
+// ERC4626 Standard
+function deposit(uint256 assets, address receiver) returns (uint256 shares);
+function withdraw(uint256 assets, address receiver, address owner) returns (uint256 shares);
+function mint(uint256 shares, address receiver) returns (uint256 assets);
+function redeem(uint256 shares, address receiver, address owner) returns (uint256 assets);
+
+// Pending LP Deposits (NEW!)
+function depositLP(address lpToken, uint256 amount) returns (uint256 depositId);
+function approveLPDeposit(uint256 depositId, uint256 lpPrice); // Admin
+function rejectLPDeposit(uint256 depositId, string reason); // Admin
+function cancelPendingDeposit(uint256 depositId); // User
+function claimExpiredDeposit(uint256 depositId); // Anyone
+function getPendingDeposit(uint256 depositId) returns (...);
+function getUserDepositIds(address user) returns (uint256[]);
+
+// Management Fee
+function mintManagementFee(); // Admin
+function setMgmtFeeSchedule(uint256 newSchedule); // Admin
+function canMintManagementFee() returns (bool);
+function getTimeUntilNextMint() returns (uint256);
+
+// View Functions
+function totalAssets() returns (uint256);
+function unstakingRatio() returns (uint256);
+```
+
+### Reserve Vault (ConcreteReserveVault)
+```solidity
+// ERC4626 Standard
+function deposit(uint256 assets, address receiver) returns (uint256 shares);
+function withdraw(uint256 assets, address receiver, address owner) returns (uint256 shares);
+
+// Token Management (Reserve-Specific) ⭐
+function seedReserveWithToken(address token, uint256 amount, address provider, uint256 tokenPrice); // Seeder
+function investInKodiak(address island, address token, uint256 amount, ...); // Admin
+function swapStablecoinToToken(address tokenOut, uint256 amountIn, bytes swapData, address aggregator); // Admin
+function rescueAndSwapHookTokenToStablecoin(address tokenIn, uint256 amountIn, bytes swapData, address aggregator); // Admin
+function rescueTokenFromHook(address token, uint256 amount); // Admin
+function exitLPToToken(uint256 lpAmount, address tokenOut, bytes swapData, address aggregator); // Admin
+function setKodiakRouter(address router); // Admin
+
+// Management Fee
+function mintManagementFee(); // Admin
+function setMgmtFeeSchedule(uint256 newSchedule); // Admin
+
+// View Functions
+function totalAssets() returns (uint256);
+function unstakingRatio() returns (uint256);
+function kodiakRouter() returns (address);
+```
+
+### Kodiak Vault Hook
+```solidity
+// Deposit & Withdraw
+function onAfterDepositWithSwaps(uint256 assets, ...); // Vault only
+function liquidateLPForAmount(uint256 unstake_usd); // Vault only
+
+// Admin Management
+function setIsland(address island);
+function setRouter(address router);
+function setSafetyMultiplier(uint256 multiplier);
+function setAggregatorWhitelisted(address aggregator, bool status);
+
+// Token Management
+function adminSwapAndReturnToVault(address tokenIn, uint256 amountIn, bytes swapData, address aggregator);
+function adminRescueTokens(address token, address to, uint256 amount);
+function adminLiquidateAllToToken(address tokenOut, bytes swapData, address aggregator);
+
+// View Functions
+function getIslandLPBalance() returns (uint256);
+function vault() returns (address);
+function island() returns (address);
+function router() returns (address);
+```
+
+---
+
+## 📝 **ABI Generation Command**
+
+To regenerate ABIs after contract changes:
 
 ```bash
-# Read contract
-cast call 0x65691bd1972e906459954306aDa0f622a47d4744 \
-  "backingRatio()(uint256)" \
-  --rpc-url https://rpc.berachain.com
-
-# Write to contract
-cast send 0x65691bd1972e906459954306aDa0f622a47d4744 \
-  "deposit(uint256,address)" \
-  1000000000000000000000 \  # 1000 HONEY
-  $USER_ADDRESS \
-  --private-key $PRIVATE_KEY \
-  --rpc-url https://rpc.berachain.com
-```
-
-## 📋 Contract Addresses (Berachain Artio)
-
-### Vaults
-```
-Senior:  0x65691bd1972e906459954306aDa0f622a47d4744
-Junior:  0x3A1b3b300dEE06Caf0b691F1771d1Aa26d70B067
-Reserve: 0x2C75291479788C568A6750185CaDedf43aBFC553
-```
-
-### Hooks
-```
-Senior Hook:  0x949Ba11180BDF15560D7Eba9864c929FA4a32bA2
-Junior Hook:  0x9e7753A490628C65219c467A792b708A89209168
-Reserve Hook: 0x88FA91FCF1771AC3C07b3f6684239A4A0B234299
-```
-
-### Tokens
-```
-HONEY (Stablecoin): 0xFCBD14DC51f0A4d49d5E53C2E0950e0bC26d0Dce
-WBTC:               0x0555E30da8f98308EdB960aa94C0Db47230d2B9c
-Kodiak Island:      0xf6b16E73d3b0e2784AAe8C4cd06099BE65d092Bf
-```
-
-## 🔄 Regenerating ABIs
-
-To regenerate all ABIs after contract changes:
-
-```bash
-# Compile contracts
-forge build
+# Build contracts
+forge build --force
 
 # Extract ABIs
 ./extract_abis.sh
-./extract_more_abis.sh
 ```
 
 Or manually:
-
 ```bash
-# Extract ABI for a specific contract
-jq '.abi' out/ContractName.sol/ContractName.json > abi/ContractName.json
+jq '.abi' out/UnifiedConcreteSeniorVault.sol/UnifiedConcreteSeniorVault.json > abi/UnifiedConcreteSeniorVault.json
 ```
 
-## 📊 ABI Size Reference
+---
 
-| Contract | ABI Size | Functions | Events |
-|----------|----------|-----------|--------|
-| Senior | ~40KB | 60+ | 20+ |
-| Junior | ~39KB | 50+ | 15+ |
-| Reserve | ~40KB | 50+ | 15+ |
-| Hook | ~16KB | 25+ | 10+ |
+## 🚀 **Production Addresses (Berachain Artio)**
 
-## 🔗 Related Documentation
+| Contract | Address | ABI File |
+|----------|---------|----------|
+| **Senior Vault (Proxy)** | `0x65691bd1972e906459954306aDa0f622a47d4744` | `UnifiedConcreteSeniorVault.json` |
+| **Junior Vault (Proxy)** | `0x3A1b3b300dEE06Caf0b691F1771d1Aa26d70B067` | `ConcreteJuniorVault.json` |
+| **Reserve Vault (Proxy)** | `0x2C75291479788C568A6750185CaDedf43aBFC553` | `ConcreteReserveVault.json` |
+| **Senior Hook** | `0x949Ba11180BDF15560D7Eba9864c929FA4a32bA2` | `KodiakVaultHook.json` |
+| **Junior Hook** | `0x9e7753A490628C65219c467A792b708A89209168` | `KodiakVaultHook.json` |
+| **Reserve Hook** | `0x88FA91FCF1771AC3C07b3f6684239A4A0B234299` | `KodiakVaultHook.json` |
+| **HONEY (Stablecoin)** | `0xFCBD14DC51f0A4d49d5E53C2E0950e0bC26d0Dce` | `ERC20.json` |
+| **WBTC** | `0x0555E30da8f98308EdB960aa94C0Db47230d2B9c` | `ERC20.json` |
+| **Kodiak Island (LP)** | `0xf6b16E73d3b0e2784AAe8C4cd06099BE65d092Bf` | `IKodiakIsland.json` |
+| **Kodiak Router** | `0x679a7C63FC83b6A4D9C1F931891d705483d4791F` | `IKodiakIslandRouter.json` |
 
-- [Contract Architecture](../CONTRACT_ARCHITECTURE.md) - System design and flows
-- [Deployment Guide](../DEPLOYMENT_GUIDE.md) - How to deploy contracts
-- [Math Specification](../math_spec.md) - Protocol mathematics
-- [Main README](../Readme.md) - Project overview
+---
 
-## 📝 Notes
+## 📚 **Related Documentation**
 
-- All ABIs are automatically generated from compiled Solidity contracts
-- ABIs include all public/external functions, events, and errors
-- ABIs are compatible with all standard Web3 libraries
-- Abstract contract ABIs are included for reference but cannot be deployed directly
+- **Architecture**: See `CONTRACT_ARCHITECTURE.md`
+- **Operations**: See `OPERATIONS_MANUAL.md`
+- **Deployment**: See `DEPLOYMENT_GUIDE.md`
+- **Addresses**: See `deployed_tokens.txt`
 
-## 🆘 Support
+---
 
-For issues or questions about using these ABIs:
-1. Check the [Contract Architecture](../CONTRACT_ARCHITECTURE.md) documentation
-2. Review the contract source code in `/src`
-3. See deployment examples in `/script`
-
+**Last Updated**: November 20, 2025  
+**Version**: 1.3.0 - Post-refactoring with pending LP deposits  
+**Network**: Berachain Artio Testnet (Chain ID: 80094)
