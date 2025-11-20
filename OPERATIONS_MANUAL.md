@@ -27,6 +27,12 @@
 | **Set Kodiak Router (Reserve)** | Admin | Once | `cast send $RESERVE_VAULT "setKodiakRouter(address)" $KODIAK_ROUTER --private-key $PRIVATE_KEY --rpc-url $RPC_URL --legacy` | Reserve only! Required before investInKodiak. Sets router for swaps. |
 | **Upgrade Vault Implementation** | Admin | When needed | `cast send $PROXY "upgradeToAndCall(address,bytes)" $NEW_IMPL "0x" --private-key $PRIVATE_KEY --rpc-url $RPC_URL --legacy` | Deploy new implementation first. UUPS upgrade. Test thoroughly! |
 | **Deposit (User)** | User | Anytime | `vault.deposit(amount, receiver)` via frontend or cast | Requires HONEY approval first. 7-day cooldown starts. |
+| **Deposit LP (User) - NEW!** | User | Anytime | `vault.depositLP(lpToken, amount)` via frontend | LP goes to hook, creates pending deposit. 48h expiry. Admin must approve. |
+| **Approve LP Deposit** | Admin | As needed | `cast send $VAULT "approveLPDeposit(uint256,uint256)" $DEPOSIT_ID $LP_PRICE --private-key $PRIVATE_KEY --rpc-url $RPC_URL --legacy` | Check LP price from Enso first. Mints shares to depositor. Must be within 48h. |
+| **Reject LP Deposit** | Admin | As needed | `cast send $VAULT "rejectLPDeposit(uint256,string)" $DEPOSIT_ID "reason" --private-key $PRIVATE_KEY --rpc-url $RPC_URL --legacy` | Returns LP to depositor. Can provide reason. |
+| **Cancel Pending Deposit (User)** | User | Before approval | `vault.cancelPendingDeposit(depositId)` via frontend | Gets LP back. Only depositor can call. |
+| **Claim Expired Deposit** | Anyone | After 48h | `vault.claimExpiredDeposit(depositId)` via frontend | Returns LP to original depositor. Good Samaritan mechanism. |
+| **View Pending Deposits** | Anyone | Anytime | `vault.getPendingDeposit(depositId)` or `vault.getUserDepositIds(user)` | Monitor deposit queue. Check status, expiry, amounts. |
 | **Withdraw (User)** | User | After cooldown | `vault.withdraw(amount, receiver, owner)` via frontend | Requires 7-day cooldown completed. May liquidate LP. |
 | **Redeem (User)** | User | After cooldown | `vault.redeem(shares, receiver, owner)` via frontend | Burns shares, gets HONEY. Alternative to withdraw. |
 | **Initiate Cooldown (User)** | User | Before withdraw | `vault.initiateCooldown()` via frontend | Required 7 days before withdrawal. Senior vault only. |
@@ -678,6 +684,306 @@ echo "Reserve time until next: $(cast call $RESERVE_VAULT "getTimeUntilNextMint(
 
 ---
 
+## 📥 Pending LP Deposit Operations (NEW!)
+
+### Overview
+
+**Senior and Junior vaults** support pending LP deposits from users. LP tokens are transferred to the vault's hook immediately, creating a pending deposit that waits for admin approval.
+
+**⚠️ Note**: **Reserve vault does NOT support pending LP deposits**. Reserve focuses on token management and standard HONEY deposits only. For initial LP seeding in Reserve, use `seedVault()` (admin-only).
+
+### User Workflow - Deposit LP Tokens
+
+```bash
+# Example: User deposits 10 LP tokens to Senior vault
+
+# 1. User approves vault to transfer LP
+cast send $KODIAK_ISLAND_ADDRESS \
+  "approve(address,uint256)" \
+  $SENIOR_VAULT \
+  10000000000000000000 \
+  --private-key $USER_KEY \
+  --rpc-url $RPC_URL \
+  --legacy
+
+# 2. User deposits LP tokens
+cast send $SENIOR_VAULT \
+  "depositLP(address,uint256)" \
+  $KODIAK_ISLAND_ADDRESS \
+  10000000000000000000 \
+  --private-key $USER_KEY \
+  --rpc-url $RPC_URL \
+  --legacy
+
+# Transaction will emit PendingLPDepositCreated event with depositId
+
+# 3. User can check their deposit IDs
+cast call $SENIOR_VAULT \
+  "getUserDepositIds(address)(uint256[])" \
+  $USER_ADDRESS \
+  --rpc-url $RPC_URL
+
+# 4. User can check specific deposit details
+cast call $SENIOR_VAULT \
+  "getPendingDeposit(uint256)(address,address,uint256,uint256,uint256,uint8)" \
+  $DEPOSIT_ID \
+  --rpc-url $RPC_URL
+# Returns: depositor, lpToken, amount, timestamp, expiresAt, status
+```
+
+### Admin Workflow - Approve LP Deposits
+
+```bash
+# Daily/Regular task: Review and approve pending LP deposits
+
+# 1. Monitor for new deposits (check events or frontend)
+# Deposits emit PendingLPDepositCreated events
+
+# 2. Get deposit details
+DEPOSIT_ID=0  # From event or user query
+cast call $SENIOR_VAULT \
+  "getPendingDeposit(uint256)(address,address,uint256,uint256,uint256,uint8)" \
+  $DEPOSIT_ID \
+  --rpc-url $RPC_URL
+
+# Parse output:
+# depositor: 0x...
+# lpToken: 0x...
+# amount: 10000000000000000000 (10 LP)
+# timestamp: 1700000000
+# expiresAt: 1700172800 (48h later)
+# status: 0 (PENDING)
+
+# 3. Get current LP price from Enso API
+LP_PRICE=$(curl -s "https://api.enso.finance/api/v1/price?chainId=80094&address=$KODIAK_ISLAND_ADDRESS" | jq -r '.price')
+LP_PRICE_WEI=$(echo "$LP_PRICE * 10^18" | bc)
+
+echo "LP Price: $LP_PRICE USD"
+echo "LP Price (wei): $LP_PRICE_WEI"
+
+# 4. Calculate expected shares to be minted
+# For Senior: shares = amount * lpPrice / 1e18
+# For Junior/Reserve: shares = (amount * lpPrice / 1e18) / sharePrice
+
+LP_AMOUNT=10000000000000000000  # From step 2
+VALUE_USD=$(echo "$LP_AMOUNT * $LP_PRICE / 10^18" | bc)
+echo "Value to add: $VALUE_USD USD"
+
+# 5. Approve deposit (mints shares to depositor)
+cast send $SENIOR_VAULT \
+  "approveLPDeposit(uint256,uint256)" \
+  $DEPOSIT_ID \
+  $LP_PRICE_WEI \
+  --private-key $PRIVATE_KEY \
+  --rpc-url $RPC_URL \
+  --legacy
+
+# 6. Verify shares were minted
+DEPOSITOR=0x...  # From step 2
+cast call $SENIOR_VAULT "balanceOf(address)(uint256)" $DEPOSITOR --rpc-url $RPC_URL
+
+# 7. Verify LP stayed in hook
+cast call $KODIAK_ISLAND_ADDRESS "balanceOf(address)(uint256)" $SENIOR_HOOK --rpc-url $RPC_URL
+```
+
+### Admin Workflow - Reject LP Deposits
+
+```bash
+# When you need to reject a deposit (wrong LP, suspicious, etc.)
+
+# 1. Get deposit details
+cast call $SENIOR_VAULT \
+  "getPendingDeposit(uint256)(address,address,uint256,uint256,uint256,uint8)" \
+  $DEPOSIT_ID \
+  --rpc-url $RPC_URL
+
+# 2. Reject with reason
+cast send $SENIOR_VAULT \
+  "rejectLPDeposit(uint256,string)" \
+  $DEPOSIT_ID \
+  "LP token not whitelisted" \
+  --private-key $PRIVATE_KEY \
+  --rpc-url $RPC_URL \
+  --legacy
+
+# Reasons for rejection:
+# - "LP token not whitelisted"
+# - "Amount too small"
+# - "Suspicious address"
+# - "LP price unavailable"
+# - etc.
+
+# 3. Verify LP returned to depositor
+DEPOSITOR=0x...  # From step 1
+cast call $KODIAK_ISLAND_ADDRESS "balanceOf(address)(uint256)" $DEPOSITOR --rpc-url $RPC_URL
+```
+
+### User Workflow - Cancel Pending Deposit
+
+```bash
+# User can cancel anytime before admin approval
+
+# 1. Get user's deposit IDs
+cast call $SENIOR_VAULT \
+  "getUserDepositIds(address)(uint256[])" \
+  $USER_ADDRESS \
+  --rpc-url $RPC_URL
+
+# 2. Check deposit status
+cast call $SENIOR_VAULT \
+  "getPendingDeposit(uint256)(address,address,uint256,uint256,uint256,uint8)" \
+  $DEPOSIT_ID \
+  --rpc-url $RPC_URL
+
+# 3. Cancel (if status is PENDING)
+cast send $SENIOR_VAULT \
+  "cancelPendingDeposit(uint256)" \
+  $DEPOSIT_ID \
+  --private-key $USER_KEY \
+  --rpc-url $RPC_URL \
+  --legacy
+
+# 4. Verify LP returned
+cast call $KODIAK_ISLAND_ADDRESS "balanceOf(address)(uint256)" $USER_ADDRESS --rpc-url $RPC_URL
+```
+
+### Anyone Workflow - Claim Expired Deposits
+
+```bash
+# Good Samaritan: Return expired deposits to original depositors
+
+# 1. Check if deposit is expired (after 48h)
+cast call $SENIOR_VAULT \
+  "getPendingDeposit(uint256)(address,address,uint256,uint256,uint256,uint8)" \
+  $DEPOSIT_ID \
+  --rpc-url $RPC_URL
+
+# Check expiresAt timestamp vs current time
+CURRENT_TIME=$(date +%s)
+EXPIRES_AT=...  # From above call
+
+if [ $CURRENT_TIME -gt $EXPIRES_AT ]; then
+  echo "Deposit expired, can claim"
+else
+  echo "Deposit not yet expired"
+  exit 1
+fi
+
+# 2. Claim expired deposit (anyone can call)
+cast send $SENIOR_VAULT \
+  "claimExpiredDeposit(uint256)" \
+  $DEPOSIT_ID \
+  --private-key $ANY_KEY \
+  --rpc-url $RPC_URL \
+  --legacy
+
+# LP will be returned to original depositor automatically
+```
+
+### Batch Processing - Approve Multiple Deposits
+
+```bash
+# Script to approve multiple pending deposits at once
+
+# Get all pending deposit IDs (implement event indexing or loop through IDs)
+NEXT_ID=$(cast call $SENIOR_VAULT "getNextDepositId()(uint256)" --rpc-url $RPC_URL)
+
+# Get LP price once
+LP_PRICE=$(curl -s "https://api.enso.finance/api/v1/price?chainId=80094&address=$KODIAK_ISLAND_ADDRESS" | jq -r '.price')
+LP_PRICE_WEI=$(echo "$LP_PRICE * 10^18" | bc)
+
+# Loop through potential deposit IDs
+for DEPOSIT_ID in $(seq 0 $((NEXT_ID - 1))); do
+  # Check if deposit is PENDING
+  STATUS=$(cast call $SENIOR_VAULT \
+    "getPendingDeposit(uint256)(address,address,uint256,uint256,uint256,uint8)" \
+    $DEPOSIT_ID \
+    --rpc-url $RPC_URL | tail -1)
+  
+  if [ "$STATUS" = "0" ]; then
+    # Status is PENDING, approve it
+    echo "Approving deposit $DEPOSIT_ID..."
+    cast send $SENIOR_VAULT \
+      "approveLPDeposit(uint256,uint256)" \
+      $DEPOSIT_ID \
+      $LP_PRICE_WEI \
+      --private-key $PRIVATE_KEY \
+      --rpc-url $RPC_URL \
+      --legacy
+    
+    sleep 2  # Rate limiting
+  fi
+done
+```
+
+### Monitoring & Health Checks
+
+```bash
+# Check for pending deposits across all vaults
+
+echo "=== SENIOR VAULT PENDING DEPOSITS ==="
+SENIOR_NEXT_ID=$(cast call $SENIOR_VAULT "getNextDepositId()(uint256)" --rpc-url $RPC_URL)
+echo "Total deposits created: $SENIOR_NEXT_ID"
+
+# Count by status (implement via events or loop)
+
+echo -e "\n=== JUNIOR VAULT PENDING DEPOSITS ==="
+JUNIOR_NEXT_ID=$(cast call $JUNIOR_VAULT "getNextDepositId()(uint256)" --rpc-url $RPC_URL)
+echo "Total deposits created: $JUNIOR_NEXT_ID"
+
+# Note: Reserve vault does NOT support pending LP deposits
+
+# Check for expiring deposits (within 1 hour of expiry)
+# Implement via event indexing or database
+```
+
+### Important Notes
+
+1. **48-Hour Window**: Admin must approve or reject within 48 hours
+2. **LP Price Source**: Always use Enso API or trusted oracle for LP price
+3. **Gas Costs**: 
+   - User pays for: `depositLP`, `cancelPendingDeposit`
+   - Admin pays for: `approveLPDeposit`, `rejectLPDeposit`
+   - Anyone pays for: `claimExpiredDeposit` (Good Samaritan)
+4. **Security**: Validate LP token address before approving
+5. **Monitoring**: Set up alerts for new deposits and expiring deposits
+6. **Automation**: Consider automating approval for whitelisted LPs
+
+### Deposit States Reference
+
+```
+Status Value | State Name | Description
+-------------|------------|------------
+0            | PENDING    | Waiting for admin action
+1            | APPROVED   | Admin approved, shares minted
+2            | REJECTED   | Admin rejected, LP returned
+3            | EXPIRED    | 48h passed, LP claimable
+4            | CANCELLED  | User cancelled, LP returned
+```
+
+### Events to Monitor
+
+```solidity
+// Track these events for deposit management
+PendingLPDepositCreated(depositId, depositor, lpToken, amount, expiresAt)
+PendingLPDepositApproved(depositId, depositor, lpPrice, sharesMinted)
+PendingLPDepositRejected(depositId, depositor, reason)
+PendingLPDepositCancelled(depositId, depositor)
+PendingLPDepositExpired(depositId, depositor)
+```
+
+### Integration with Frontend
+
+The frontend should:
+1. Allow users to deposit LP tokens easily
+2. Show pending deposits for connected wallet
+3. Display countdown to expiry
+4. Allow users to cancel pending deposits
+5. Notify users when deposits are approved/rejected
+6. Show admin dashboard for approval queue
+
+---
+
 ## Monitoring & Health Checks
 
 ### Health Check Commands
@@ -748,11 +1054,13 @@ cast send $RESERVE_VAULT "unpause()" --private-key $PRIVATE_KEY --rpc-url $RPC_U
 | Operation | Frequency | Recommended Time | Priority |
 |-----------|-----------|-----------------|----------|
 | Rebase Senior Vault | Monthly | 1st of month, 12:00 UTC | 🔴 Critical |
+| **Process Pending LP Deposits (NEW!)** | **Daily** | **10:00 & 16:00 UTC** | **🟡 Important** |
 | Mint Performance Fee (Junior/Reserve) | Per schedule | Based on fee schedule | 🟡 Important |
 | Update Junior/Reserve Values | Weekly | Monday 08:00 UTC | 🟡 Important |
 | Deploy Capital to Kodiak | As needed | After large deposits | 🟢 Normal |
 | Dust Recovery | Weekly | Friday 16:00 UTC | 🟢 Normal |
 | Health Check | Daily | 06:00 & 18:00 UTC | 🟡 Important |
+| **Check Expiring Deposits (NEW!)** | **Daily** | **Every 6 hours** | **🟢 Normal** |
 | Frontend Updates | After upgrades | Immediately | 🔴 Critical |
 | Security Review | Monthly | First Monday | 🟡 Important |
 

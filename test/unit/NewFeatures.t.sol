@@ -36,6 +36,7 @@ contract NewFeaturesTest is Test {
     address public treasury;
     address public admin;
     address public seedProvider;
+    address public seeder;
     address public kodiakRouter;
     
     uint256 constant INITIAL_VALUE = 1000e18;
@@ -46,6 +47,7 @@ contract NewFeaturesTest is Test {
         treasury = makeAddr("treasury");
         admin = makeAddr("admin");
         seedProvider = makeAddr("seedProvider");
+        seeder = makeAddr("seeder");
         kodiakRouter = makeAddr("kodiakRouter");
         
         // Deploy tokens
@@ -103,6 +105,13 @@ contract NewFeaturesTest is Test {
         seniorVault.setAdmin(admin);
         juniorVault.setAdmin(admin);
         reserveVault.setAdmin(admin);
+        
+        // Add seeders
+        vm.startPrank(admin);
+        seniorVault.addSeeder(seeder);
+        juniorVault.addSeeder(seeder);
+        reserveVault.addSeeder(seeder);
+        vm.stopPrank();
         
         // Create hooks
         seniorHook = new MockKodiakHook(address(seniorVault), address(0), address(lpToken));
@@ -176,7 +185,7 @@ contract NewFeaturesTest is Test {
         uint256 vaultValueBefore = seniorVault.vaultValue();
         
         // Seed vault
-        vm.prank(admin);
+        vm.prank(seeder);
         seniorVault.seedVault(address(lpToken), 100e18, seedProvider, LP_PRICE);
         
         // Assertions
@@ -195,7 +204,7 @@ contract NewFeaturesTest is Test {
         uint256 vaultValueBefore = juniorVault.vaultValue();
         
         // Seed vault
-        vm.prank(admin);
+        vm.prank(seeder);
         juniorVault.seedVault(address(lpToken), 50e18, seedProvider, LP_PRICE);
         
         // Assertions
@@ -230,7 +239,7 @@ contract NewFeaturesTest is Test {
         // WBTC has 8 decimals, so 1 WBTC = 1e8
         // Price is in 18 decimals: 50000e18 USD per WBTC
         // Value = (1e8 * 50000e18) / 1e18 = 1e8 * 50000 = 5000000e8 = 50000e18
-        vm.prank(admin);
+        vm.prank(seeder);
         reserveVault.seedReserveWithToken(address(wbtc), 1e8, seedProvider, WBTC_PRICE);
         
         // Assertions
@@ -282,22 +291,13 @@ contract NewFeaturesTest is Test {
         vm.prank(seedProvider);
         wbtc.approve(address(reserveVault), 1e8);
         
-        vm.prank(admin);
+        vm.prank(seeder);
         reserveVault.seedReserveWithToken(address(wbtc), 1e8, seedProvider, WBTC_PRICE);
         
         // Verify WBTC is in reserve vault
         assertEq(wbtc.balanceOf(address(reserveVault)), 1e8);
         
-        // Mock the hook's onAfterDepositWithSwaps to return LP tokens
-        lpToken.mint(address(reserveHook), 50e18); // Mock LP received
-        
-        vm.mockCall(
-            address(reserveHook),
-            abi.encodeWithSignature(
-                "onAfterDepositWithSwaps(uint256,address,bytes,address,bytes)"
-            ),
-            abi.encode(50e18) // Returns 50 LP tokens
-        );
+        // No need to mock - MockKodiakHook will automatically mint LP based on WBTC amount
         
         // Invest WBTC into Kodiak (same pattern as deployToKodiak)
         address island = makeAddr("kodiakIsland");
@@ -309,7 +309,7 @@ contract NewFeaturesTest is Test {
             island,             // Kodiak Island (pool)
             address(wbtc),      // token
             0.5e8,              // 0.5 WBTC
-            40e18,              // minLP (with slippage)
+            20000e18,           // minLP (~25k expected with slippage)
             dexAggregator,      // swap aggregator
             swapData,           // swap 0.5 WBTC to pool tokens
             address(0),         // no second aggregator
@@ -370,7 +370,7 @@ contract NewFeaturesTest is Test {
         vm.prank(seedProvider);
         lpToken.approve(address(juniorVault), 100e18);
         
-        vm.prank(admin);
+        vm.prank(seeder);
         juniorVault.seedVault(address(lpToken), 100e18, seedProvider, LP_PRICE);
         
         uint256 supplyBefore = juniorVault.totalSupply();
@@ -405,7 +405,7 @@ contract NewFeaturesTest is Test {
         vm.prank(seedProvider);
         lpToken.approve(address(reserveVault), 100e18);
         
-        vm.prank(admin);
+        vm.prank(seeder);
         reserveVault.seedVault(address(lpToken), 100e18, seedProvider, LP_PRICE);
         
         uint256 supplyBefore = reserveVault.totalSupply();

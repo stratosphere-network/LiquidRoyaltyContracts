@@ -57,4 +57,34 @@ interface IKodiakVaultHook {
      * @notice Get Island LP balance held by this hook.
      */
     function getIslandLPBalance() external view returns (uint256);
+    
+    /**
+     * @notice Admin function to swap tokens in hook and return stablecoin to vault
+     * @dev Used for converting tokens to stablecoin in hook
+     */
+    function adminSwapAndReturnToVault(
+        address tokenIn,
+        uint256 amountIn,
+        bytes calldata swapData,
+        address aggregator
+    ) external;
+    
+    /**
+     * @notice Admin function to rescue tokens from hook to specified address
+     * @dev Used for recovering WBTC or other tokens
+     */
+    function adminRescueTokens(
+        address token,
+        address to,
+        uint256 amount
+    ) external;
+    
+    /**
+     * @notice Admin function to liquidate all LP and swap to desired token
+     * @dev Used for exiting LP positions completely
+     */
+    function adminLiquidateAll(
+        bytes calldata swapData,
+        address aggregator
+    ) external;
 }

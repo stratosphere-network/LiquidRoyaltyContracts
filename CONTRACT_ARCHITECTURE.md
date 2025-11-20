@@ -1089,6 +1089,190 @@ uint256 constant PRECISION = 1e18;                // 18 decimals
 
 ---
 
+## Pending LP Deposit System
+
+### Overview
+
+**Senior and Junior vaults** support a **pending deposit queue system** that allows users to deposit LP tokens directly. Since LP token pricing requires off-chain oracles, deposits are queued for admin approval rather than processed immediately.
+
+**⚠️ Note**: Reserve vault does **NOT** have pending LP deposit functionality. Reserve focuses on token management (WBTC swaps, rescues, etc.) and standard HONEY deposits only.
+
+### Key Features
+
+✅ **User-Friendly** - Users can deposit LP tokens anytime without waiting for admin
+✅ **Secure** - Admin validates LP price before minting shares (prevents oracle manipulation)
+✅ **Time-Bounded** - 48-hour expiry prevents indefinite locks
+✅ **User Control** - Depositors can cancel anytime before approval
+✅ **Transparent** - All actions emit events for tracking
+
+### Deposit States
+
+```
+PENDING   → Initial state after depositLP()
+APPROVED  → Admin approved, shares minted, LP stays in hook
+REJECTED  → Admin rejected, LP returned to depositor
+CANCELLED → User cancelled, LP returned to depositor
+EXPIRED   → 48h passed, LP claimable by anyone
+```
+
+### State Machine
+
+```
+          depositLP()
+              ↓
+         [PENDING] ←── (48h timer starts)
+         /   |   \
+        /    |    \
+   cancel  approve  reject  (or 48h expires)
+      ↓      ↓       ↓            ↓
+[CANCELLED] [APPROVED] [REJECTED] [EXPIRED]
+      ↓      ↓       ↓            ↓
+   LP back  Shares  LP back    LP back
+           minted
+```
+
+### Core Functions
+
+#### User Functions
+
+**1. `depositLP(address lpToken, uint256 amount) → uint256 depositId`**
+- Deposit LP tokens (pending approval)
+- LP transferred to vault's hook immediately
+- Returns deposit ID for tracking
+- Emits: `PendingLPDepositCreated`
+
+**2. `cancelPendingDeposit(uint256 depositId)`**
+- Cancel before admin approval
+- Gets LP back from hook
+- Only original depositor can call
+- Emits: `PendingLPDepositCancelled`
+
+**3. `claimExpiredDeposit(uint256 depositId)`**
+- Claim after 48h expiry
+- Anyone can trigger (good Samaritan)
+- Returns LP to original depositor
+- Emits: `PendingLPDepositExpired`
+
+#### Admin Functions
+
+**4. `approveLPDeposit(uint256 depositId, uint256 lpPrice)`**
+- Approve with LP price (18 decimals)
+- Mints shares to depositor
+- Updates vault value
+- Must be within 48h
+- Emits: `PendingLPDepositApproved`
+
+**5. `rejectLPDeposit(uint256 depositId, string reason)`**
+- Reject with reason
+- Returns LP to depositor
+- Can happen anytime
+- Emits: `PendingLPDepositRejected`
+
+#### View Functions
+
+**6. `getPendingDeposit(uint256 depositId)`**
+- Returns deposit details:
+  - `depositor` - Who deposited
+  - `lpToken` - Which LP token
+  - `amount` - How many LP tokens
+  - `timestamp` - When deposited
+  - `expiresAt` - Expiry timestamp
+  - `status` - Current state
+
+**7. `getUserDepositIds(address user)`**
+- Returns array of depositIds for a user
+- Track all deposits by user
+
+**8. `getNextDepositId()`**
+- Returns next deposit ID
+- Useful for monitoring
+
+### Complete Workflow Example
+
+```solidity
+// USER FLOW
+// 1. User deposits 100 LP tokens
+lpToken.approve(seniorVault, 100e18);
+uint256 depositId = seniorVault.depositLP(lpToken, 100e18);
+// → LP now in hook, deposit is PENDING
+
+// 2. User can check status
+(address depositor, address token, uint256 amount, , uint256 expiresAt, DepositStatus status) = 
+    seniorVault.getPendingDeposit(depositId);
+
+// 3a. User can cancel before approval
+seniorVault.cancelPendingDeposit(depositId);
+// → Gets 100 LP back
+
+// OR 3b. Admin approves (after checking LP price off-chain)
+uint256 lpPrice = 2e18; // $2 per LP from Enso API
+seniorVault.approveLPDeposit(depositId, lpPrice);
+// → User receives shares worth $200
+
+// OR 3c. Admin rejects
+seniorVault.rejectLPDeposit(depositId, "LP token not whitelisted");
+// → User gets 100 LP back
+
+// OR 3d. 48h passes, anyone claims
+// After 48 hours...
+seniorVault.claimExpiredDeposit(depositId);
+// → User gets 100 LP back
+```
+
+### Share Minting Logic
+
+#### Senior Vault (Rebasing Token)
+```solidity
+uint256 valueAdded = (lpAmount * lpPrice) / 1e18;
+uint256 sharesToMint = valueAdded;  // 1:1 with USD value
+// Example: 100 LP @ $2 = $200 = 200 snrUSD
+```
+
+#### Junior/Reserve Vaults (ERC4626)
+```solidity
+uint256 valueAdded = (lpAmount * lpPrice) / 1e18;
+uint256 sharePrice = (totalAssets() * 1e18) / totalSupply();
+uint256 sharesToMint = (valueAdded * 1e18) / sharePrice;
+// Example: 100 LP @ $2 = $200 USD
+// If sharePrice = 1.2, then shares = 200/1.2 = 166.67
+```
+
+### Security Features
+
+1. **Time-Bounded** - 48h expiry prevents indefinite locks
+2. **Admin Validation** - Manual price checking prevents oracle manipulation
+3. **User Control** - Can cancel anytime before approval
+4. **Event Logging** - All actions emit events
+5. **Zero Address Checks** - Prevents invalid deposits
+6. **Hook Validation** - Ensures hook exists before deposit
+
+### Important Notes
+
+- **LP goes to hook immediately** - Not held in vault
+- **48-hour expiry** - Admin must act within 48h or deposit expires
+- **No automatic approval** - Always requires admin action
+- **Price is admin-provided** - From off-chain oracle/API (e.g., Enso)
+- **Gas costs** - User pays for deposit, admin pays for approval
+- **Cancellation** - Free for users (just gas)
+- **Expiry claim** - Anyone can trigger (good Samaritan mechanism)
+
+### Integration with Existing Systems
+
+The pending LP deposit system complements existing deposit methods:
+
+| Feature | Standard Deposit | Pending LP Deposit |
+|---------|------------------|-------------------|
+| **Asset** | HONEY stablecoin | LP tokens |
+| **Processing** | Immediate | Queued for approval |
+| **Pricing** | Known (1:1) | Requires oracle |
+| **Approval** | Automatic | Manual by admin |
+| **Use Case** | Standard deposits | Bootstrap, LP holders |
+| **Availability** | All vaults | **Senior & Junior only** |
+
+**⚠️ Reserve Vault**: Does not support pending LP deposits. Use `seedVault()` (admin-only) for initial LP seeding or standard HONEY `deposit()` for regular deposits.
+
+---
+
 ## Reserve Vault - Unique Features
 
 ### Overview
@@ -1400,7 +1584,8 @@ The **Senior Tranche Protocol** implements a sophisticated three-vault structure
 - ✅ **Dynamic APY Selection** (11-13% waterfall)
 - ✅ **Three-Zone Spillover System** (profit sharing + backstop)
 - ✅ **Kodiak LP Integration** (automated yield deployment)
-- ✅ **Reserve Unique Features** (WBTC seeding + investInKodiak)
+- ✅ **Pending LP Deposit Queue** (Senior & Junior: user deposits LP, admin approves)
+- ✅ **Reserve Unique Features** (WBTC seeding + token management, NO pending LP deposits)
 - ✅ **Comprehensive Fee Structure** (8 different fee types across vaults)
 - ✅ **Smart Withdrawal Liquidation** (on-chain pool data, not estimates)
 - ✅ **Gas-Optimized Rebase** (O(1) balance updates)
@@ -1413,14 +1598,15 @@ The **Senior Tranche Protocol** implements a sophisticated three-vault structure
 3. **Wide Buffer Zone**: 10% healthy range (100-110%) prevents constant spillover
 4. **Fair Backstop**: Reserve first, Junior second (no caps, can be wiped out)
 5. **Accurate LP Pricing**: Uses actual pool data (not inflated estimates)
-6. **Reserve Flexibility**: Unique ability to handle non-stablecoin assets (WBTC)
+6. **Reserve Flexibility**: Unique ability to handle non-stablecoin assets (WBTC) with 6 token management functions
 7. **Sustainable Fees**: Multiple fee mechanisms ensure protocol sustainability
+8. **LP Deposit Queue**: Senior & Junior allow users to deposit LP tokens (48h expiry, admin approval)
 
 ---
 
 **Documentation Status**: ✅ Complete  
-**Last Updated**: November 19, 2025  
-**Version**: 1.1.0  
+**Last Updated**: November 20, 2025  
+**Version**: 1.2.0 - Added Pending LP Deposit System
 **Author**: AI Assistant
 
 For mathematical specifications, see: `math_spec.md`  

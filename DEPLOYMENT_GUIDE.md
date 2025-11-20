@@ -763,11 +763,112 @@ cast send $SENIOR_VAULT \
 cast call $KODIAK_ISLAND_ADDRESS "balanceOf(address)(uint256)" $SENIOR_HOOK --rpc-url $RPC_URL
 ```
 
+### Phase 7: Configure Pending LP Deposit System (NEW!)
+
+**Senior and Junior vaults** support pending LP deposits from users. No additional configuration needed - it works out of the box!
+
+**⚠️ Note**: **Reserve vault does NOT support pending LP deposits**. Reserve focuses on token management (WBTC swaps, rescues) and standard HONEY deposits. For initial LP seeding in Reserve, use `seedVault()` (admin-only).
+
+#### How It Works (Senior & Junior Only):
+1. **Users** deposit LP tokens → goes to hook → creates pending deposit (48h expiry)
+2. **Admin** checks LP price off-chain (Enso API) → approves deposit → user gets shares
+3. **Users** can cancel anytime before approval
+4. **Anyone** can claim expired deposits (after 48h) for original depositor
+
+#### Test User LP Deposit Flow:
+
+```bash
+# Simulate a user depositing LP tokens
+
+# 1. User approves vault to transfer LP
+USER_ADDRESS=0x...  # Test user wallet
+USER_KEY=0x...  # Test user private key
+
+cast send $KODIAK_ISLAND_ADDRESS \
+  "approve(address,uint256)" \
+  $SENIOR_VAULT \
+  10000000000000000000 \
+  --private-key $USER_KEY \
+  --rpc-url $RPC_URL \
+  --legacy
+
+# 2. User deposits LP tokens (creates pending deposit)
+cast send $SENIOR_VAULT \
+  "depositLP(address,uint256)" \
+  $KODIAK_ISLAND_ADDRESS \
+  10000000000000000000 \
+  --private-key $USER_KEY \
+  --rpc-url $RPC_URL \
+  --legacy
+
+# 3. Get the deposit ID from event or by checking user deposits
+DEPOSIT_ID=$(cast call $SENIOR_VAULT "getUserDepositIds(address)(uint256[])" $USER_ADDRESS --rpc-url $RPC_URL | tail -1)
+
+# 4. Admin checks deposit details
+cast call $SENIOR_VAULT \
+  "getPendingDeposit(uint256)(address,address,uint256,uint256,uint256,uint8)" \
+  $DEPOSIT_ID \
+  --rpc-url $RPC_URL
+
+# 5. Admin gets LP price from Enso
+LP_PRICE=$(curl -s "https://api.enso.finance/api/v1/price?chainId=80094&address=$KODIAK_ISLAND_ADDRESS" | jq -r '.price')
+LP_PRICE_WEI=$(echo "$LP_PRICE * 10^18" | bc)
+
+# 6. Admin approves deposit (mints shares to user)
+cast send $SENIOR_VAULT \
+  "approveLPDeposit(uint256,uint256)" \
+  $DEPOSIT_ID \
+  $LP_PRICE_WEI \
+  --private-key $PRIVATE_KEY \
+  --rpc-url $RPC_URL \
+  --legacy
+
+# 7. Verify user received shares
+cast call $SENIOR_VAULT "balanceOf(address)(uint256)" $USER_ADDRESS --rpc-url $RPC_URL
+```
+
+#### Admin Monitoring Commands:
+
+```bash
+# Check all pending deposits for a user
+cast call $SENIOR_VAULT "getUserDepositIds(address)(uint256[])" $USER_ADDRESS --rpc-url $RPC_URL
+
+# Get details of a specific deposit
+cast call $SENIOR_VAULT \
+  "getPendingDeposit(uint256)(address,address,uint256,uint256,uint256,uint8)" \
+  $DEPOSIT_ID \
+  --rpc-url $RPC_URL
+
+# Get next deposit ID
+cast call $SENIOR_VAULT "getNextDepositId()(uint256)" --rpc-url $RPC_URL
+```
+
+#### User Actions (Optional Testing):
+
+```bash
+# User cancels pending deposit (gets LP back)
+cast send $SENIOR_VAULT \
+  "cancelPendingDeposit(uint256)" \
+  $DEPOSIT_ID \
+  --private-key $USER_KEY \
+  --rpc-url $RPC_URL \
+  --legacy
+
+# Anyone claims expired deposit (after 48h)
+# Wait 48+ hours or manipulate time in test
+cast send $SENIOR_VAULT \
+  "claimExpiredDeposit(uint256)" \
+  $DEPOSIT_ID \
+  --private-key $ANY_KEY \
+  --rpc-url $RPC_URL \
+  --legacy
+```
+
 ---
 
 ## Verification
 
-### Phase 7: Complete System Verification
+### Phase 8: Complete System Verification
 
 #### 7.1 Verify All Addresses
 
@@ -848,7 +949,7 @@ forge script script/VerifyDeployment.s.sol \
 
 ## Post-Deployment
 
-### Phase 8: Save Deployment Data
+### Phase 9: Save Deployment Data
 
 #### 8.1 Update `deployed_tokens.txt`
 
@@ -945,9 +1046,9 @@ npm run build
 npm run deploy
 ```
 
-### Phase 9: Test Basic Operations
+### Phase 10: Test Basic Operations
 
-#### 9.1 Test Deposit
+#### 10.1 Test Deposit
 
 ```bash
 # Approve HONEY
@@ -972,7 +1073,7 @@ cast send $SENIOR_VAULT \
 cast call $SENIOR_VAULT "balanceOf(address)(uint256)" $(cast wallet address --private-key $PRIVATE_KEY) --rpc-url $RPC_URL
 ```
 
-#### 9.2 Test Withdrawal (After Cooldown)
+#### 10.2 Test Withdrawal (After Cooldown)
 
 ```bash
 # Initiate cooldown
@@ -996,7 +1097,7 @@ cast send $SENIOR_VAULT \
   --legacy
 ```
 
-#### 9.3 Test Rebase (Admin Only)
+#### 10.3 Test Rebase (Admin Only)
 
 ```bash
 # Get LP price from Enso or DEX
