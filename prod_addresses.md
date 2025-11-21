@@ -1,11 +1,11 @@
-# 🚀 Production Deployment Addresses
+# Production Deployment Addresses
 
 > **Deployed on Berachain Testnet**  
 > Deployment Date: November 21, 2025
 
 ---
 
-## 📦 Implementation Contracts
+## Implementation Contracts
 
 These are the upgradeable blueprint contracts:
 
@@ -17,7 +17,7 @@ These are the upgradeable blueprint contracts:
 
 ---
 
-## 🏦 Vault Proxy Contracts
+## Vault Proxy Contracts
 
 These are the actual vault contracts users interact with:
 
@@ -29,7 +29,7 @@ These are the actual vault contracts users interact with:
 
 ---
 
-## 🪝 Hook Contracts
+## Hook Contracts
 
 Hooks manage Kodiak LP tokens for each vault:
 
@@ -41,7 +41,7 @@ Hooks manage Kodiak LP tokens for each vault:
 
 ---
 
-## 🪙 Token Addresses
+## Token Addresses
 
 External tokens used by the protocol:
 
@@ -53,7 +53,7 @@ External tokens used by the protocol:
 
 ---
 
-## 🔧 Infrastructure Addresses
+## Infrastructure Addresses
 
 | Component | Address |
 |-----------|---------|
@@ -62,7 +62,7 @@ External tokens used by the protocol:
 
 ---
 
-## 🌱 Authorized Seeders
+## Authorized Seeders
 
 These addresses can seed vaults with initial liquidity:
 
@@ -71,7 +71,7 @@ These addresses can seed vaults with initial liquidity:
 
 ---
 
-## 📋 Quick Reference for Scripts
+## Quick Reference for Scripts
 
 Copy-paste ready environment variables:
 
@@ -107,7 +107,7 @@ export SEEDER2=0xd81055ac2782453ccc7fd4f0bc811eef17d12dd7
 
 ---
 
-## 🔗 Verification Links
+## Verification Links
 
 **Block Explorer**: [Add your block explorer URL]
 
@@ -117,7 +117,7 @@ export SEEDER2=0xd81055ac2782453ccc7fd4f0bc811eef17d12dd7
 
 ---
 
-## ✅ Deployment Status
+## Deployment Status
 
 - [x] All implementations deployed
 - [x] All proxies deployed with custom names
@@ -130,11 +130,11 @@ export SEEDER2=0xd81055ac2782453ccc7fd4f0bc811eef17d12dd7
 - [x] Seeders authorized
 - [x] Reserve vault Kodiak Router set
 
-**System Status**: 🟢 Fully Operational
+**System Status**: Fully Operational
 
 ---
 
-## 📝 Notes
+## Notes
 
 - **Network**: Berachain Testnet
 - **Deployment Method**: Foundry scripts with UUPS proxies
@@ -146,16 +146,13 @@ export SEEDER2=0xd81055ac2782453ccc7fd4f0bc811eef17d12dd7
 
 ---
 
-## 🔐 Security
+## Security
 
-- ✅ Admin set on all vaults
-- ✅ Treasury configured
-- ✅ All connections verified
-- ✅ All configurations tested
-- ⚠️ **Private keys must remain secure**
-- ⚠️ **Verify all transactions before signing**
+- All vaults have admin configured
+- Treasury address set on all vaults
+- All connections verified
+- All configurations tested
+
 
 ---
 
-**Last Updated**: November 21, 2025  
-**Documentation**: See `DEPLOY_STEP_BY_STEP.md` for complete deployment process
