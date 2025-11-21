@@ -3,12 +3,13 @@ import { useAccount } from 'wagmi';
 import { WalletConnect } from './components/WalletConnect';
 import { VaultDashboard } from './components/VaultDashboard';
 import { AdminPanel } from './components/AdminPanel';
+import { SimulationDashboard } from './components/SimulationDashboard';
 import { Shield, Wallet } from 'lucide-react';
 import './App.css';
 
 function App() {
   const { isConnected } = useAccount();
-  const [activeTab, setActiveTab] = useState<'vaults' | 'admin'>('vaults');
+  const [activeTab, setActiveTab] = useState<'vaults' | 'admin' | 'simulations'>('simulations');
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-slate-900 via-purple-900 to-slate-900">
@@ -34,7 +35,7 @@ function App() {
 
       {/* Main Content */}
       <main className="container mx-auto px-4 py-8">
-        {!isConnected ? (
+        {!isConnected && activeTab !== 'simulations' ? (
           <div className="flex flex-col items-center justify-center min-h-[60vh] text-center">
             <Wallet className="w-20 h-20 text-purple-400 mb-6" />
             <h2 className="text-3xl font-bold text-white mb-4">
@@ -50,29 +51,49 @@ function App() {
             {/* Tabs */}
             <div className="flex space-x-4 mb-8">
               <button
-                onClick={() => setActiveTab('vaults')}
+                onClick={() => setActiveTab('simulations')}
                 className={`px-6 py-3 rounded-lg font-semibold transition-all ${
-                  activeTab === 'vaults'
+                  activeTab === 'simulations'
                     ? 'bg-purple-600 text-white shadow-lg shadow-purple-500/50'
                     : 'bg-white/5 text-gray-400 hover:bg-white/10'
                 }`}
               >
-                Vaults
+                📊 Simulations
               </button>
-              <button
-                onClick={() => setActiveTab('admin')}
-                className={`px-6 py-3 rounded-lg font-semibold transition-all ${
-                  activeTab === 'admin'
-                    ? 'bg-purple-600 text-white shadow-lg shadow-purple-500/50'
-                    : 'bg-white/5 text-gray-400 hover:bg-white/10'
-                }`}
-              >
-                Admin
-              </button>
+              {isConnected && (
+                <>
+                  <button
+                    onClick={() => setActiveTab('vaults')}
+                    className={`px-6 py-3 rounded-lg font-semibold transition-all ${
+                      activeTab === 'vaults'
+                        ? 'bg-purple-600 text-white shadow-lg shadow-purple-500/50'
+                        : 'bg-white/5 text-gray-400 hover:bg-white/10'
+                    }`}
+                  >
+                    Vaults
+                  </button>
+                  <button
+                    onClick={() => setActiveTab('admin')}
+                    className={`px-6 py-3 rounded-lg font-semibold transition-all ${
+                      activeTab === 'admin'
+                        ? 'bg-purple-600 text-white shadow-lg shadow-purple-500/50'
+                        : 'bg-white/5 text-gray-400 hover:bg-white/10'
+                    }`}
+                  >
+                    Admin
+                  </button>
+                </>
+              )}
             </div>
 
             {/* Content */}
-            {activeTab === 'vaults' ? <VaultDashboard /> : <AdminPanel />}
+            {activeTab === 'vaults' ? (
+              <VaultDashboard />
+            ) : activeTab === 'simulations' ? (
+              <SimulationDashboard />
+            ) : (
+              <AdminPanel />
+            )}
           </>
         )}
       </main>

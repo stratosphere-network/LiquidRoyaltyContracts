@@ -20,6 +20,8 @@ contract DeployJuniorProxy is Script {
         bytes memory initData = abi.encodeWithSelector(
             ConcreteJuniorVault.initialize.selector,
             stablecoin,
+            "Junior Tranche",
+            "jnr",
             address(0x0000000000000000000000000000000000000001),
             0
         );

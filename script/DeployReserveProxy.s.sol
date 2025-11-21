@@ -20,6 +20,8 @@ contract DeployReserveProxy is Script {
         bytes memory initData = abi.encodeWithSelector(
             ConcreteReserveVault.initialize.selector,
             stablecoin,
+            "Alar",
+            "alar",
             address(0x0000000000000000000000000000000000000001),
             0
         );

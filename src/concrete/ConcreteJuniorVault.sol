@@ -18,18 +18,22 @@ contract ConcreteJuniorVault is JuniorVault {
     /**
      * @notice Initialize Junior vault (for proxy deployment)
      * @param stablecoin_ Stablecoin address (e.g., USDe-SAIL)
+     * @param tokenName_ Token name ("Junior Tranche")
+     * @param tokenSymbol_ Token symbol ("jnr")
      * @param seniorVault_ Senior vault address
      * @param initialValue_ Initial vault value in USD
      */
     function initialize(
         address stablecoin_,
+        string memory tokenName_,
+        string memory tokenSymbol_,
         address seniorVault_,
         uint256 initialValue_
     ) external initializer {
         __JuniorVault_init(
             stablecoin_,
-            "Junior Tranche Shares",
-            "jTRN",
+            tokenName_,
+            tokenSymbol_,
             seniorVault_,
             initialValue_
         );
