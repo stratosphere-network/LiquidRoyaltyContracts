@@ -126,7 +126,7 @@ abstract contract AdminControlled is Initializable {
         
         _seeders[seeder] = false;
         emit SeederRevoked(seeder);
-    }d
+    }
     
     /**
      * @notice Check if address has seeder role
