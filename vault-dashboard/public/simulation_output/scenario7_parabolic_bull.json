@@ -1,0 +1,473 @@
+{
+  "simulation": "Rebase Time Series",
+  "snapshots": [
+    {
+      "epoch": 0,
+      "timestamp": 1,
+      "zone": "HEALTHY",
+      "pool": {
+        "usdeReserve": 1000000,
+        "sailReserve": 100000,
+        "sailPrice": 10000,
+        "lpTokenPrice": 6324,
+        "totalLPSupply": 316227
+      },
+      "senior": {
+        "lpAmount": 237170,
+        "value": 1500000,
+        "supply": 1500000,
+        "backingRatio": 100,
+        "rebaseIndex": 1000,
+        "apy": 0
+      },
+      "junior": {
+        "lpAmount": 237170,
+        "value": 1500000,
+        "shares": 1500000
+      },
+      "reserve": {
+        "sailAmount": 75000,
+        "value": 750000,
+        "shares": 750000
+      },
+      "transfers": {
+        "spilloverToJunior": 0,
+        "spilloverToReserve": 0,
+        "backstopFromReserve": 0,
+        "backstopFromJunior": 0
+      }
+    },
+    {
+      "epoch": 1,
+      "timestamp": 2592001,
+      "zone": "HEALTHY",
+      "pool": {
+        "usdeReserve": 1052631,
+        "sailReserve": 95000,
+        "sailPrice": 11080,
+        "lpTokenPrice": 6657,
+        "totalLPSupply": 316227
+      },
+      "senior": {
+        "lpAmount": 237170,
+        "value": 1578947,
+        "supply": 1517890,
+        "backingRatio": 104,
+        "rebaseIndex": 1011,
+        "apy": 3
+      },
+      "junior": {
+        "lpAmount": 237170,
+        "value": 1578947,
+        "shares": 1500000
+      },
+      "reserve": {
+        "sailAmount": 75000,
+        "value": 831024,
+        "shares": 750000
+      },
+      "transfers": {
+        "spilloverToJunior": 0,
+        "spilloverToReserve": 0,
+        "backstopFromReserve": 0,
+        "backstopFromJunior": 0
+      }
+    },
+    {
+      "epoch": 2,
+      "timestamp": 5184001,
+      "zone": "HEALTHY",
+      "pool": {
+        "usdeReserve": 1123595,
+        "sailReserve": 89000,
+        "sailPrice": 12624,
+        "lpTokenPrice": 7106,
+        "totalLPSupply": 316227
+      },
+      "senior": {
+        "lpAmount": 237170,
+        "value": 1685393,
+        "supply": 1536066,
+        "backingRatio": 109,
+        "rebaseIndex": 1022,
+        "apy": 3
+      },
+      "junior": {
+        "lpAmount": 237170,
+        "value": 1685393,
+        "shares": 1500000
+      },
+      "reserve": {
+        "sailAmount": 75000,
+        "value": 946850,
+        "shares": 750000
+      },
+      "transfers": {
+        "spilloverToJunior": 0,
+        "spilloverToReserve": 0,
+        "backstopFromReserve": 0,
+        "backstopFromJunior": 0
+      }
+    },
+    {
+      "epoch": 3,
+      "timestamp": 7776001,
+      "zone": "HEALTHY",
+      "pool": {
+        "usdeReserve": 1234567,
+        "sailReserve": 81000,
+        "sailPrice": 15241,
+        "lpTokenPrice": 7808,
+        "totalLPSupply": 316227
+      },
+      "senior": {
+        "lpAmount": 218791,
+        "value": 1708343,
+        "supply": 1554583,
+        "backingRatio": 109,
+        "rebaseIndex": 1033,
+        "apy": 3
+      },
+      "junior": {
+        "lpAmount": 251874,
+        "value": 1966658,
+        "shares": 1500000
+      },
+      "reserve": {
+        "sailAmount": 76883,
+        "value": 1171820,
+        "shares": 750000
+      },
+      "transfers": {
+        "spilloverToJunior": 114806,
+        "spilloverToReserve": 28701,
+        "backstopFromReserve": 0,
+        "backstopFromJunior": 0
+      }
+    },
+    {
+      "epoch": 4,
+      "timestamp": 10368001,
+      "zone": "HEALTHY",
+      "pool": {
+        "usdeReserve": 1176470,
+        "sailReserve": 85000,
+        "sailPrice": 13840,
+        "lpTokenPrice": 7440,
+        "totalLPSupply": 316227
+      },
+      "senior": {
+        "lpAmount": 218791,
+        "value": 1627951,
+        "supply": 1573117,
+        "backingRatio": 103,
+        "rebaseIndex": 1044,
+        "apy": 3
+      },
+      "junior": {
+        "lpAmount": 251874,
+        "value": 1874109,
+        "shares": 1500000
+      },
+      "reserve": {
+        "sailAmount": 76883,
+        "value": 1064126,
+        "shares": 750000
+      },
+      "transfers": {
+        "spilloverToJunior": 0,
+        "spilloverToReserve": 0,
+        "backstopFromReserve": 0,
+        "backstopFromJunior": 0
+      }
+    },
+    {
+      "epoch": 5,
+      "timestamp": 12960001,
+      "zone": "HEALTHY",
+      "pool": {
+        "usdeReserve": 1333333,
+        "sailReserve": 75000,
+        "sailPrice": 17777,
+        "lpTokenPrice": 8432,
+        "totalLPSupply": 316227
+      },
+      "senior": {
+        "lpAmount": 207471,
+        "value": 1749549,
+        "supply": 1592037,
+        "backingRatio": 109,
+        "rebaseIndex": 1056,
+        "apy": 3
+      },
+      "junior": {
+        "lpAmount": 260930,
+        "value": 2200360,
+        "shares": 1500000
+      },
+      "reserve": {
+        "sailAmount": 77957,
+        "value": 1385903,
+        "shares": 750000
+      },
+      "transfers": {
+        "spilloverToJunior": 76369,
+        "spilloverToReserve": 19092,
+        "backstopFromReserve": 0,
+        "backstopFromJunior": 0
+      }
+    },
+    {
+      "epoch": 6,
+      "timestamp": 15552001,
+      "zone": "HEALTHY",
+      "pool": {
+        "usdeReserve": 1587301,
+        "sailReserve": 63000,
+        "sailPrice": 25195,
+        "lpTokenPrice": 10038,
+        "totalLPSupply": 316227
+      },
+      "senior": {
+        "lpAmount": 176371,
+        "value": 1770591,
+        "supply": 1611364,
+        "backingRatio": 109,
+        "rebaseIndex": 1068,
+        "apy": 3
+      },
+      "junior": {
+        "lpAmount": 285810,
+        "value": 2869240,
+        "shares": 1500000
+      },
+      "reserve": {
+        "sailAmount": 80435,
+        "value": 2026589,
+        "shares": 750000
+      },
+      "transfers": {
+        "spilloverToJunior": 249764,
+        "spilloverToReserve": 62441,
+        "backstopFromReserve": 0,
+        "backstopFromJunior": 0
+      }
+    },
+    {
+      "epoch": 7,
+      "timestamp": 18144001,
+      "zone": "HEALTHY",
+      "pool": {
+        "usdeReserve": 1470588,
+        "sailReserve": 68000,
+        "sailPrice": 21626,
+        "lpTokenPrice": 9300,
+        "totalLPSupply": 316227
+      },
+      "senior": {
+        "lpAmount": 176371,
+        "value": 1640401,
+        "supply": 1630536,
+        "backingRatio": 100,
+        "rebaseIndex": 1079,
+        "apy": 3
+      },
+      "junior": {
+        "lpAmount": 285810,
+        "value": 2658267,
+        "shares": 1500000
+      },
+      "reserve": {
+        "sailAmount": 80435,
+        "value": 1739518,
+        "shares": 750000
+      },
+      "transfers": {
+        "spilloverToJunior": 0,
+        "spilloverToReserve": 0,
+        "backstopFromReserve": 0,
+        "backstopFromJunior": 0
+      }
+    },
+    {
+      "epoch": 8,
+      "timestamp": 20736001,
+      "zone": "HEALTHY",
+      "pool": {
+        "usdeReserve": 1724137,
+        "sailReserve": 58000,
+        "sailPrice": 29726,
+        "lpTokenPrice": 10904,
+        "totalLPSupply": 316227
+      },
+      "senior": {
+        "lpAmount": 166300,
+        "value": 1813408,
+        "supply": 1650156,
+        "backingRatio": 109,
+        "rebaseIndex": 1091,
+        "apy": 3
+      },
+      "junior": {
+        "lpAmount": 293867,
+        "value": 3204445,
+        "shares": 1500000
+      },
+      "reserve": {
+        "sailAmount": 81174,
+        "value": 2413026,
+        "shares": 750000
+      },
+      "transfers": {
+        "spilloverToJunior": 87856,
+        "spilloverToReserve": 21964,
+        "backstopFromReserve": 0,
+        "backstopFromJunior": 0
+      }
+    },
+    {
+      "epoch": 9,
+      "timestamp": 23328001,
+      "zone": "HEALTHY",
+      "pool": {
+        "usdeReserve": 2173913,
+        "sailReserve": 46000,
+        "sailPrice": 47258,
+        "lpTokenPrice": 13749,
+        "totalLPSupply": 316227
+      },
+      "senior": {
+        "lpAmount": 133480,
+        "value": 1835228,
+        "supply": 1670295,
+        "backingRatio": 109,
+        "rebaseIndex": 1103,
+        "apy": 3
+      },
+      "junior": {
+        "lpAmount": 320123,
+        "value": 4401382,
+        "shares": 1500000
+      },
+      "reserve": {
+        "sailAmount": 83083,
+        "value": 3926459,
+        "shares": 750000
+      },
+      "transfers": {
+        "spilloverToJunior": 360994,
+        "spilloverToReserve": 90248,
+        "backstopFromReserve": 0,
+        "backstopFromJunior": 0
+      }
+    },
+    {
+      "epoch": 10,
+      "timestamp": 25920001,
+      "zone": "HEALTHY",
+      "pool": {
+        "usdeReserve": 2631578,
+        "sailReserve": 38000,
+        "sailPrice": 69252,
+        "lpTokenPrice": 16643,
+        "totalLPSupply": 316227
+      },
+      "senior": {
+        "lpAmount": 111612,
+        "value": 1857626,
+        "supply": 1690602,
+        "backingRatio": 109,
+        "rebaseIndex": 1116,
+        "apy": 3
+      },
+      "junior": {
+        "lpAmount": 337617,
+        "value": 5619161,
+        "shares": 1500000
+      },
+      "reserve": {
+        "sailAmount": 84135,
+        "value": 5826524,
+        "shares": 750000
+      },
+      "transfers": {
+        "spilloverToJunior": 291172,
+        "spilloverToReserve": 72793,
+        "backstopFromReserve": 0,
+        "backstopFromJunior": 0
+      }
+    },
+    {
+      "epoch": 11,
+      "timestamp": 28512001,
+      "zone": "HEALTHY",
+      "pool": {
+        "usdeReserve": 2439024,
+        "sailReserve": 41000,
+        "sailPrice": 59488,
+        "lpTokenPrice": 15425,
+        "totalLPSupply": 316227
+      },
+      "senior": {
+        "lpAmount": 111612,
+        "value": 1721702,
+        "supply": 1710717,
+        "backingRatio": 100,
+        "rebaseIndex": 1128,
+        "apy": 3
+      },
+      "junior": {
+        "lpAmount": 337617,
+        "value": 5208003,
+        "shares": 1500000
+      },
+      "reserve": {
+        "sailAmount": 84135,
+        "value": 5005057,
+        "shares": 750000
+      },
+      "transfers": {
+        "spilloverToJunior": 0,
+        "spilloverToReserve": 0,
+        "backstopFromReserve": 0,
+        "backstopFromJunior": 0
+      }
+    },
+    {
+      "epoch": 12,
+      "timestamp": 31104001,
+      "zone": "HEALTHY",
+      "pool": {
+        "usdeReserve": 2777777,
+        "sailReserve": 36000,
+        "sailPrice": 77160,
+        "lpTokenPrice": 17568,
+        "totalLPSupply": 316227
+      },
+      "senior": {
+        "lpAmount": 108296,
+        "value": 1902582,
+        "supply": 1731254,
+        "backingRatio": 109,
+        "rebaseIndex": 1140,
+        "apy": 3
+      },
+      "junior": {
+        "lpAmount": 340269,
+        "value": 5977933,
+        "shares": 1500000
+      },
+      "reserve": {
+        "sailAmount": 84285,
+        "value": 6503547,
+        "shares": 750000
+      },
+      "transfers": {
+        "spilloverToJunior": 46596,
+        "spilloverToReserve": 11649,
+        "backstopFromReserve": 0,
+        "backstopFromJunior": 0
+      }
+    }
+  ]
+}

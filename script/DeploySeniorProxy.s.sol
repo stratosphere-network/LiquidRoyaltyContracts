@@ -27,8 +27,8 @@ contract DeploySeniorProxy is Script {
         bytes memory initData = abi.encodeWithSelector(
             UnifiedConcreteSeniorVault.initialize.selector,
             stablecoin,
-            "Senior HONEY",
-            "snrHONEY",
+            "Senior Tranche",
+            "snrUSD",
             juniorVault,
             reserveVault,
             deployer,  // Treasury address (using deployer for now)
