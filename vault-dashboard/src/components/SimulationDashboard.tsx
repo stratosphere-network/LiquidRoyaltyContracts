@@ -14,7 +14,7 @@ import {
   ResponsiveContainer,
   ReferenceLine,
 } from 'recharts';
-import { TrendingUp, TrendingDown, DollarSign, Activity } from 'lucide-react';
+import { TrendingUp, TrendingDown, DollarSign, Activity, Users, Wallet, TrendingDown as ArrowDown, TrendingUp as ArrowUp } from 'lucide-react';
 
 interface PoolData {
   usdeReserve: number;
@@ -42,6 +42,14 @@ interface TransferData {
   backstopFromJunior: number;
 }
 
+interface FeeData {
+  managementFeeTokens: number;
+  performanceFeeTokens: number;
+  totalFeesThisEpoch: number;
+  cumulativeFees: number;
+  feeYieldBps: number;
+}
+
 interface Snapshot {
   epoch: number;
   timestamp: number;
@@ -51,6 +59,22 @@ interface Snapshot {
   junior: VaultData;
   reserve: VaultData;
   transfers: TransferData;
+  fees?: FeeData; // Optional for backward compatibility
+}
+
+interface UserAction {
+  timestamp: number;
+  epoch: number;
+  user: string;
+  actionType: 'DEPOSIT' | 'WITHDRAW' | 'TRADE';
+  vault: string;
+  amount: number;
+  shares: number;
+  reason: string;
+}
+
+interface UserActionsData {
+  userActions: UserAction[];
 }
 
 interface SimulationData {
@@ -70,11 +94,13 @@ const scenarios = [
   { id: 'scenario_bear_stress_test', name: '🔴 Bear Stress Test', color: '#dc2626' },
   { id: 'scenario_stable_yield', name: '💰 Stable Yield', color: '#8b5cf6' },
   { id: 'scenario_flash_crash', name: '⚡ Flash Crash', color: '#f97316' },
+  { id: 'scenario_whale_manipulation', name: '🐋 Whale Manipulation', color: '#dc2626' },
 ];
 
 export function SimulationDashboard() {
   const [selectedScenario, setSelectedScenario] = useState(scenarios[0].id);
   const [simulationData, setSimulationData] = useState<SimulationData | null>(null);
+  const [userActionsData, setUserActionsData] = useState<UserActionsData | null>(null);
   const [loading, setLoading] = useState(false);
 
   useEffect(() => {
@@ -84,9 +110,20 @@ export function SimulationDashboard() {
   const loadScenario = async (scenarioId: string) => {
     setLoading(true);
     try {
+      // Load vault snapshots
       const response = await fetch(`../simulation_output/${scenarioId}.json`);
       const data = await response.json();
       setSimulationData(data);
+      
+      // Try to load user actions (may not exist for old simulations)
+      try {
+        const userActionsResponse = await fetch(`../simulation_output/${scenarioId.replace('.json', '')}_user_actions.json`);
+        const userActions = await userActionsResponse.json();
+        setUserActionsData(userActions);
+      } catch (error) {
+        console.log('No user actions data for this scenario');
+        setUserActionsData(null);
+      }
     } catch (error) {
       console.error('Error loading scenario:', error);
     } finally {
@@ -113,7 +150,7 @@ export function SimulationDashboard() {
     juniorValue: s.junior.value / 1000000,
     reserveValue: s.reserve.value / 1000000,
     backingRatio: s.senior.backingRatio,
-    seniorAPY: s.senior.apy || 0,
+    seniorAPY: s.senior.apy ? (10 + s.senior.apy) : 0, // Map tier 1,2,3 to 11%, 12%, 13%
     // Calculate unstaking ratios (value per share)
     juniorUnstakingRatio: s.junior.shares > 0 ? (s.junior.value / s.junior.shares) : 1,
     reserveUnstakingRatio: s.reserve.shares > 0 ? (s.reserve.value / s.reserve.shares) : 1,
@@ -122,6 +159,8 @@ export function SimulationDashboard() {
     backstopFromReserve: s.transfers.backstopFromReserve / 1000,
     backstopFromJunior: s.transfers.backstopFromJunior / 1000,
     zone: s.zone,
+    // Simulated Post-Rebase Ratio (Protocol Effect)
+    postRebaseRatio: s.zone === 'BACKSTOP' ? 100.9 : (s.zone === 'SPILLOVER' ? 110 : s.senior.backingRatio),
     // Total spillovers and backstops for this epoch
     totalSpillover: (s.transfers.spilloverToJunior + s.transfers.spilloverToReserve) / 1000,
     totalBackstop: (s.transfers.backstopFromReserve + s.transfers.backstopFromJunior) / 1000,
@@ -382,7 +421,9 @@ export function SimulationDashboard() {
       {/* Backing Ratio Chart */}
       <div className="bg-white/5 rounded-xl p-6 backdrop-blur-sm border border-white/10">
         <h3 className="text-lg font-bold text-white mb-4">🛡️ Senior Backing Ratio</h3>
-        <p className="text-sm text-gray-400 mb-3">Determines spillover (&gt;110%) or backstop (&lt;100%) actions</p>
+        <p className="text-sm text-gray-400 mb-3">
+          <span className="text-green-400">● Market Ratio</span> vs <span className="text-white font-bold">― Protocol Target</span> (Peg Restoration)
+        </p>
         <ResponsiveContainer width="100%" height={300}>
           <AreaChart data={chartData}>
             <defs>
@@ -393,15 +434,19 @@ export function SimulationDashboard() {
             </defs>
             <CartesianGrid strokeDasharray="3 3" stroke="#ffffff20" />
             <XAxis dataKey="epoch" stroke="#9ca3af" label={{ value: 'Epoch (Months)', position: 'insideBottom', offset: -5, fill: '#9ca3af' }} />
-            <YAxis stroke="#9ca3af" label={{ value: 'Backing Ratio (%)', angle: -90, position: 'insideLeft', fill: '#9ca3af' }} />
+            <YAxis stroke="#9ca3af" label={{ value: 'Backing Ratio (%)', angle: -90, position: 'insideLeft', fill: '#9ca3af' }} domain={[80, 120]} />
             <Tooltip 
               contentStyle={{ backgroundColor: '#1f2937', border: '1px solid #374151', borderRadius: '8px' }}
               labelStyle={{ color: '#9ca3af' }}
-              formatter={(value: number) => `${value}%`}
+              formatter={(value: number, name: string) => [
+                `${value.toFixed(1)}%`, 
+                name === 'backingRatio' ? 'Market Ratio' : 'Post-Protocol Ratio'
+              ]}
             />
-            <ReferenceLine y={100} stroke="#ef4444" strokeDasharray="3 3" strokeWidth={2} label={{ value: '100% (Min)', fill: '#ef4444', position: 'right' }} />
-            <ReferenceLine y={110} stroke="#f59e0b" strokeDasharray="3 3" strokeWidth={2} label={{ value: '110% (Spillover)', fill: '#f59e0b', position: 'right' }} />
-            <Area type="monotone" dataKey="backingRatio" stroke="#10b981" strokeWidth={3} fillOpacity={1} fill="url(#colorBacking)" />
+            <ReferenceLine y={100} stroke="#ef4444" strokeDasharray="3 3" strokeWidth={2} label={{ value: '100% Trigger', fill: '#ef4444', position: 'right' }} />
+            <ReferenceLine y={110} stroke="#f59e0b" strokeDasharray="3 3" strokeWidth={2} label={{ value: '110% Cap', fill: '#f59e0b', position: 'right' }} />
+            <Area type="monotone" dataKey="backingRatio" stroke="#10b981" strokeWidth={3} fillOpacity={1} fill="url(#colorBacking)" name="backingRatio" />
+            <Line type="step" dataKey="postRebaseRatio" stroke="#ffffff" strokeWidth={2} dot={false} name="postRebaseRatio" strokeDasharray="5 5" />
           </AreaChart>
         </ResponsiveContainer>
       </div>
@@ -411,7 +456,7 @@ export function SimulationDashboard() {
         <h3 className="text-lg font-bold text-white mb-4">📈 Senior APY (Dynamic 11-13%)</h3>
         <p className="text-sm text-gray-400 mb-3">APY dynamically selected based on backing ratio each month</p>
         <ResponsiveContainer width="100%" height={300}>
-          <BarChart data={simulationData.snapshots}>
+          <BarChart data={chartData}>
             <CartesianGrid strokeDasharray="3 3" stroke="#ffffff20" />
             <XAxis dataKey="epoch" stroke="#9ca3af" label={{ value: 'Epoch (Months)', position: 'insideBottom', offset: -5, fill: '#9ca3af' }} />
             <YAxis stroke="#9ca3af" label={{ value: 'APY (%)', angle: -90, position: 'insideLeft', fill: '#9ca3af' }} domain={[0, 15]} />
@@ -420,7 +465,7 @@ export function SimulationDashboard() {
               labelStyle={{ color: '#9ca3af' }}
               formatter={(value: number) => `${value}%`}
             />
-            <Bar dataKey="senior.apy" fill="#10b981" name="Senior APY" />
+            <Bar dataKey="seniorAPY" fill="#10b981" name="Senior APY" />
           </BarChart>
         </ResponsiveContainer>
       </div>
@@ -541,6 +586,271 @@ export function SimulationDashboard() {
         </div>
       </div>
 
+      {/* FEE TRACKING SECTION */}
+      {simulationData.snapshots[0]?.fees && (
+        <>
+          <div className="bg-gradient-to-br from-emerald-500/10 to-green-500/10 rounded-xl p-6 backdrop-blur-sm border border-emerald-500/30 mt-8">
+            <h2 className="text-2xl font-bold text-white mb-4 flex items-center gap-2">
+              <DollarSign className="w-6 h-6 text-emerald-400" />
+              Protocol Fee Revenue
+            </h2>
+            
+            {/* Fee Summary Cards */}
+            <div className="grid grid-cols-2 md:grid-cols-5 gap-4 mb-6">
+              <div className="bg-emerald-500/20 rounded-lg p-4 border border-emerald-500/30">
+                <div className="text-emerald-400 text-xs font-semibold mb-1">TOTAL FEES</div>
+                <div className="text-2xl font-bold text-white">
+                  ${(finalValues.fees?.cumulativeFees || 0).toFixed(2)}
+                </div>
+                <div className="text-xs text-gray-400 mt-1">Over 12 months</div>
+              </div>
+              
+              <div className="bg-blue-500/20 rounded-lg p-4 border border-blue-500/30">
+                <div className="text-blue-400 text-xs font-semibold mb-1">MANAGEMENT FEES</div>
+                <div className="text-xl font-bold text-white">
+                  ${simulationData.snapshots.reduce((sum, s) => sum + (s.fees?.managementFeeTokens || 0), 0).toFixed(2)}
+                </div>
+                <div className="text-xs text-gray-400 mt-1">1% annual</div>
+              </div>
+              
+              <div className="bg-purple-500/20 rounded-lg p-4 border border-purple-500/30">
+                <div className="text-purple-400 text-xs font-semibold mb-1">PERFORMANCE FEES</div>
+                <div className="text-xl font-bold text-white">
+                  ${simulationData.snapshots.reduce((sum, s) => sum + (s.fees?.performanceFeeTokens || 0), 0).toFixed(2)}
+                </div>
+                <div className="text-xs text-gray-400 mt-1">From APY spread</div>
+              </div>
+              
+              <div className="bg-orange-500/20 rounded-lg p-4 border border-orange-500/30">
+                <div className="text-orange-400 text-xs font-semibold mb-1">AVG YIELD</div>
+                <div className="text-2xl font-bold text-white">
+                  {simulationData.snapshots.length > 0 
+                    ? (simulationData.snapshots.reduce((sum, s) => sum + (s.fees?.feeYieldBps || 0), 0) / simulationData.snapshots.length).toFixed(0)
+                    : 0} BPS
+                </div>
+                <div className="text-xs text-gray-400 mt-1">Per epoch</div>
+              </div>
+              
+              <div className="bg-pink-500/20 rounded-lg p-4 border border-pink-500/30">
+                <div className="text-pink-400 text-xs font-semibold mb-1">ANNUAL RATE</div>
+                <div className="text-2xl font-bold text-white">
+                  {simulationData.snapshots.length > 0 && finalValues.senior.value > 0
+                    ? ((finalValues.fees?.cumulativeFees || 0) / (finalValues.senior.value / 1000) * 100).toFixed(2)
+                    : 0}%
+                </div>
+                <div className="text-xs text-gray-400 mt-1">Of AUM</div>
+              </div>
+            </div>
+            
+            {/* Fee Collection Over Time Chart */}
+            <div className="mb-6">
+              <h3 className="text-lg font-bold text-white mb-3">💰 Monthly Fee Collection</h3>
+              <ResponsiveContainer width="100%" height={300}>
+                <BarChart data={simulationData.snapshots.map(s => ({
+                  epoch: s.epoch,
+                  mgmt: s.fees?.managementFeeTokens || 0,
+                  perf: s.fees?.performanceFeeTokens || 0,
+                  total: s.fees?.totalFeesThisEpoch || 0,
+                }))}>
+                  <CartesianGrid strokeDasharray="3 3" stroke="#ffffff20" />
+                  <XAxis dataKey="epoch" stroke="#9ca3af" label={{ value: 'Epoch (Months)', position: 'insideBottom', offset: -5, fill: '#9ca3af' }} />
+                  <YAxis stroke="#9ca3af" label={{ value: 'Fees (USD)', angle: -90, position: 'insideLeft', fill: '#9ca3af' }} />
+                  <Tooltip 
+                    contentStyle={{ backgroundColor: '#1f2937', border: '1px solid #374151', borderRadius: '8px' }}
+                    labelStyle={{ color: '#9ca3af' }}
+                    formatter={(value: number) => `$${value.toFixed(2)}`}
+                  />
+                  <Legend />
+                  <Bar dataKey="mgmt" stackId="a" fill="#3b82f6" name="Management Fee" />
+                  <Bar dataKey="perf" stackId="a" fill="#8b5cf6" name="Performance Fee" />
+                </BarChart>
+              </ResponsiveContainer>
+            </div>
+            
+            {/* Cumulative Fees Chart */}
+            <div>
+              <h3 className="text-lg font-bold text-white mb-3">📈 Cumulative Fee Revenue</h3>
+              <ResponsiveContainer width="100%" height={250}>
+                <AreaChart data={simulationData.snapshots.map(s => ({
+                  epoch: s.epoch,
+                  cumulative: s.fees?.cumulativeFees || 0,
+                }))}>
+                  <defs>
+                    <linearGradient id="colorFees" x1="0" y1="0" x2="0" y2="1">
+                      <stop offset="5%" stopColor="#10b981" stopOpacity={0.8}/>
+                      <stop offset="95%" stopColor="#10b981" stopOpacity={0}/>
+                    </linearGradient>
+                  </defs>
+                  <CartesianGrid strokeDasharray="3 3" stroke="#ffffff20" />
+                  <XAxis dataKey="epoch" stroke="#9ca3af" label={{ value: 'Epoch (Months)', position: 'insideBottom', offset: -5, fill: '#9ca3af' }} />
+                  <YAxis stroke="#9ca3af" label={{ value: 'Total Fees (USD)', angle: -90, position: 'insideLeft', fill: '#9ca3af' }} />
+                  <Tooltip 
+                    contentStyle={{ backgroundColor: '#1f2937', border: '1px solid #374151', borderRadius: '8px' }}
+                    labelStyle={{ color: '#9ca3af' }}
+                    formatter={(value: number) => `$${value.toFixed(2)}`}
+                  />
+                  <Area type="monotone" dataKey="cumulative" stroke="#10b981" strokeWidth={3} fillOpacity={1} fill="url(#colorFees)" />
+                </AreaChart>
+              </ResponsiveContainer>
+            </div>
+          </div>
+        </>
+      )}
+
+      {/* USER ACTIONS SECTION */}
+      {userActionsData && userActionsData.userActions.length > 0 && (
+        <>
+          <div className="bg-gradient-to-br from-blue-500/10 to-purple-500/10 rounded-xl p-6 backdrop-blur-sm border border-blue-500/30 mt-8">
+            <h2 className="text-2xl font-bold text-white mb-4 flex items-center gap-2">
+              <Users className="w-6 h-6 text-blue-400" />
+              User Wallet Activity
+            </h2>
+            
+            {/* Activity Summary */}
+            <div className="grid grid-cols-2 md:grid-cols-6 gap-4 mb-6">
+              {(() => {
+                const deposits = userActionsData.userActions.filter(a => a.actionType === 'DEPOSIT');
+                const withdrawals = userActionsData.userActions.filter(a => a.actionType === 'WITHDRAW');
+                const trades = userActionsData.userActions.filter(a => a.actionType === 'TRADE');
+                const whales = new Set(userActionsData.userActions.filter(a => a.user.includes('1111') || a.user.includes('2222')).map(a => a.user));
+                const retail = new Set(userActionsData.userActions.filter(a => !a.user.includes('1111') && !a.user.includes('2222')).map(a => a.user));
+                
+                return (
+                  <>
+                    <div className="bg-green-500/20 rounded-lg p-4 border border-green-500/30">
+                      <div className="text-green-400 text-xs font-semibold mb-1">DEPOSITS</div>
+                      <div className="text-2xl font-bold text-white">{deposits.length}</div>
+                      <div className="text-xs text-gray-400 mt-1">${(deposits.reduce((sum, a) => sum + a.amount, 0)).toFixed(0)}</div>
+                    </div>
+                    
+                    <div className="bg-red-500/20 rounded-lg p-4 border border-red-500/30">
+                      <div className="text-red-400 text-xs font-semibold mb-1">WITHDRAWALS</div>
+                      <div className="text-2xl font-bold text-white">{withdrawals.length}</div>
+                      <div className="text-xs text-gray-400 mt-1">${(withdrawals.reduce((sum, a) => sum + a.amount, 0)).toFixed(0)}</div>
+                    </div>
+                    
+                    <div className="bg-orange-500/20 rounded-lg p-4 border border-orange-500/30">
+                      <div className="text-orange-400 text-xs font-semibold mb-1">TRADES</div>
+                      <div className="text-2xl font-bold text-white">{trades.length}</div>
+                      <div className="text-xs text-gray-400 mt-1">SAIL swaps</div>
+                    </div>
+                    
+                    <div className="bg-purple-500/20 rounded-lg p-4 border border-purple-500/30">
+                      <div className="text-purple-400 text-xs font-semibold mb-1">WHALES</div>
+                      <div className="text-2xl font-bold text-white">{whales.size}</div>
+                      <div className="text-xs text-gray-400 mt-1">{userActionsData.userActions.filter(a => a.user.includes('1111') || a.user.includes('2222')).length} actions</div>
+                    </div>
+                    
+                    <div className="bg-blue-500/20 rounded-lg p-4 border border-blue-500/30">
+                      <div className="text-blue-400 text-xs font-semibold mb-1">RETAIL</div>
+                      <div className="text-2xl font-bold text-white">{retail.size}</div>
+                      <div className="text-xs text-gray-400 mt-1">{userActionsData.userActions.filter(a => !a.user.includes('1111') && !a.user.includes('2222')).length} actions</div>
+                    </div>
+                    
+                    <div className="bg-pink-500/20 rounded-lg p-4 border border-pink-500/30">
+                      <div className="text-pink-400 text-xs font-semibold mb-1">TOTAL ACTIONS</div>
+                      <div className="text-2xl font-bold text-white">{userActionsData.userActions.length}</div>
+                      <div className="text-xs text-gray-400 mt-1">All activity</div>
+                    </div>
+                  </>
+                );
+              })()}
+            </div>
+            
+            {/* User Action Timeline */}
+            <div className="mb-6">
+              <h3 className="text-lg font-bold text-white mb-3">📅 Action Timeline</h3>
+              <div className="bg-black/20 rounded-lg p-4 max-h-96 overflow-y-auto border border-white/10">
+                {userActionsData.userActions.map((action, idx) => {
+                  const isWhale = action.user.includes('1111') || action.user.includes('2222');
+                  const userLabel = action.user.includes('1111') ? 'WHALE 1' : 
+                                   action.user.includes('2222') ? 'WHALE 2' :
+                                   action.user.includes('3333') ? 'RETAIL 1' :
+                                   action.user.includes('4444') ? 'RETAIL 2' :
+                                   action.user.includes('5555') ? 'RETAIL 3' : 'USER';
+                  
+                  const actionColor = action.actionType === 'DEPOSIT' ? 'text-green-400' :
+                                     action.actionType === 'WITHDRAW' ? 'text-red-400' :
+                                     'text-orange-400';
+                  
+                  const actionIcon = action.actionType === 'DEPOSIT' ? '💰' :
+                                    action.actionType === 'WITHDRAW' ? '📤' :
+                                    '🔄';
+                  
+                  return (
+                    <div key={idx} className="flex items-start gap-3 p-3 hover:bg-white/5 rounded-lg transition-colors border-b border-white/5">
+                      <div className="text-2xl">{actionIcon}</div>
+                      <div className="flex-1">
+                        <div className="flex items-center gap-2 mb-1">
+                          <span className={`font-semibold ${isWhale ? 'text-purple-400' : 'text-blue-400'}`}>
+                            {userLabel}
+                          </span>
+                          <span className="text-gray-500">•</span>
+                          <span className={`font-semibold ${actionColor}`}>
+                            {action.actionType}
+                          </span>
+                          {action.vault !== 'POOL' && (
+                            <>
+                              <span className="text-gray-500">→</span>
+                              <span className="text-gray-300">{action.vault}</span>
+                            </>
+                          )}
+                          <span className="text-gray-500 text-xs ml-auto">Epoch {action.epoch}</span>
+                        </div>
+                        <div className="text-sm text-gray-400 mb-1">
+                          {action.reason}
+                        </div>
+                        <div className="flex gap-4 text-xs">
+                          <span className="text-gray-500">
+                            Amount: <span className="text-white font-semibold">${action.amount.toFixed(2)}</span>
+                          </span>
+                          {action.shares > 0 && (
+                            <span className="text-gray-500">
+                              Shares: <span className="text-white font-semibold">{action.shares.toFixed(2)}</span>
+                            </span>
+                          )}
+                        </div>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+            
+            {/* Activity By Vault Chart */}
+            <div>
+              <h3 className="text-lg font-bold text-white mb-3">📊 Activity by Vault</h3>
+              <ResponsiveContainer width="100%" height={250}>
+                <BarChart data={(() => {
+                  const byVault = userActionsData.userActions.reduce((acc, action) => {
+                    if (!acc[action.vault]) {
+                      acc[action.vault] = { vault: action.vault, deposits: 0, withdrawals: 0, trades: 0 };
+                    }
+                    if (action.actionType === 'DEPOSIT') acc[action.vault].deposits++;
+                    if (action.actionType === 'WITHDRAW') acc[action.vault].withdrawals++;
+                    if (action.actionType === 'TRADE') acc[action.vault].trades++;
+                    return acc;
+                  }, {} as Record<string, any>);
+                  return Object.values(byVault);
+                })()}>
+                  <CartesianGrid strokeDasharray="3 3" stroke="#ffffff20" />
+                  <XAxis dataKey="vault" stroke="#9ca3af" />
+                  <YAxis stroke="#9ca3af" label={{ value: 'Actions', angle: -90, position: 'insideLeft', fill: '#9ca3af' }} />
+                  <Tooltip 
+                    contentStyle={{ backgroundColor: '#1f2937', border: '1px solid #374151', borderRadius: '8px' }}
+                    labelStyle={{ color: '#9ca3af' }}
+                  />
+                  <Legend />
+                  <Bar dataKey="deposits" fill="#10b981" name="Deposits" />
+                  <Bar dataKey="withdrawals" fill="#ef4444" name="Withdrawals" />
+                  <Bar dataKey="trades" fill="#f59e0b" name="Trades" />
+                </BarChart>
+              </ResponsiveContainer>
+            </div>
+          </div>
+        </>
+      )}
+
       {/* Detailed Monthly Metrics Table */}
       <div className="bg-white/5 rounded-xl p-6 backdrop-blur-sm border border-white/10">
         <h3 className="text-lg font-bold text-white mb-4">
@@ -560,6 +870,13 @@ export function SimulationDashboard() {
                 <th className="text-right p-2">Junior Ratio</th>
                 <th className="text-right p-2">Reserve TVL</th>
                 <th className="text-right p-2">Reserve Ratio</th>
+                {simulationData.snapshots[0]?.fees && (
+                  <>
+                    <th className="text-right p-2">Mgmt Fee</th>
+                    <th className="text-right p-2">Perf Fee</th>
+                    <th className="text-right p-2">Fee Yield</th>
+                  </>
+                )}
                 <th className="text-center p-2">Zone</th>
               </tr>
             </thead>
@@ -581,6 +898,13 @@ export function SimulationDashboard() {
                     <td className="p-2 text-right text-blue-400">{juniorRatio}</td>
                     <td className="p-2 text-right text-purple-300">${(snapshot.reserve.value / 1000000).toFixed(2)}M</td>
                     <td className="p-2 text-right text-purple-400">{reserveRatio}</td>
+                    {snapshot.fees && (
+                      <>
+                        <td className="p-2 text-right text-blue-300">${snapshot.fees.managementFeeTokens.toFixed(2)}</td>
+                        <td className="p-2 text-right text-purple-300">${snapshot.fees.performanceFeeTokens.toFixed(2)}</td>
+                        <td className="p-2 text-right text-emerald-400">{snapshot.fees.feeYieldBps} BPS</td>
+                      </>
+                    )}
                     <td className={`p-2 text-center text-xs font-semibold ${zoneColor}`}>{snapshot.zone}</td>
                   </tr>
                 );

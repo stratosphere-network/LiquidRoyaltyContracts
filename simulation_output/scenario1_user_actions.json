@@ -1,0 +1,254 @@
+{
+  "userActions": [
+    {
+      "timestamp": 1,
+      "epoch": 0,
+      "user": "0x0000000000000000000000000000000000001111",
+      "actionType": "DEPOSIT",
+      "vault": "SENIOR",
+      "amount": 50000,
+      "shares": 50000,
+      "reason": "Whale 1 initial Senior position"
+    },
+    {
+      "timestamp": 1,
+      "epoch": 0,
+      "user": "0x0000000000000000000000000000000000002222",
+      "actionType": "DEPOSIT",
+      "vault": "JUNIOR",
+      "amount": 30000,
+      "shares": 30000,
+      "reason": "Whale 2 initial Junior position"
+    },
+    {
+      "timestamp": 1,
+      "epoch": 0,
+      "user": "0x0000000000000000000000000000000000003333",
+      "actionType": "DEPOSIT",
+      "vault": "SENIOR",
+      "amount": 5000,
+      "shares": 5000,
+      "reason": "Retail 1 initial Senior position"
+    },
+    {
+      "timestamp": 1,
+      "epoch": 0,
+      "user": "0x0000000000000000000000000000000000004444",
+      "actionType": "DEPOSIT",
+      "vault": "RESERVE",
+      "amount": 10000,
+      "shares": 100000,
+      "reason": "Retail 2 initial Reserve position (SAIL)"
+    },
+    {
+      "timestamp": 1,
+      "epoch": 0,
+      "user": "0x0000000000000000000000000000000000001111",
+      "actionType": "TRADE",
+      "vault": "POOL",
+      "amount": 3000,
+      "shares": 0,
+      "reason": "Whale 1 buying SAIL (bullish)"
+    },
+    {
+      "timestamp": 1,
+      "epoch": 0,
+      "user": "0x0000000000000000000000000000000000005555",
+      "actionType": "DEPOSIT",
+      "vault": "SENIOR",
+      "amount": 2000,
+      "shares": 2000,
+      "reason": "Retail 3 entering Senior vault"
+    },
+    {
+      "timestamp": 2592001,
+      "epoch": 1,
+      "user": "0x0000000000000000000000000000000000002222",
+      "actionType": "TRADE",
+      "vault": "POOL",
+      "amount": 4000,
+      "shares": 0,
+      "reason": "Whale 2 accumulating SAIL"
+    },
+    {
+      "timestamp": 2592001,
+      "epoch": 1,
+      "user": "0x0000000000000000000000000000000000003333",
+      "actionType": "DEPOSIT",
+      "vault": "JUNIOR",
+      "amount": 3000,
+      "shares": 2845,
+      "reason": "Retail 1 adding to Junior for higher yield"
+    },
+    {
+      "timestamp": 5184001,
+      "epoch": 2,
+      "user": "0x0000000000000000000000000000000000004444",
+      "actionType": "TRADE",
+      "vault": "POOL",
+      "amount": 2000,
+      "shares": 0,
+      "reason": "Retail 2 taking profit"
+    },
+    {
+      "timestamp": 7776001,
+      "epoch": 3,
+      "user": "0x0000000000000000000000000000000000001111",
+      "actionType": "TRADE",
+      "vault": "POOL",
+      "amount": 5000,
+      "shares": 0,
+      "reason": "Whale 1 buying the dip"
+    },
+    {
+      "timestamp": 7776001,
+      "epoch": 3,
+      "user": "0x0000000000000000000000000000000000001111",
+      "actionType": "DEPOSIT",
+      "vault": "SENIOR",
+      "amount": 10000,
+      "shares": 10000,
+      "reason": "Whale 1 increasing Senior position"
+    },
+    {
+      "timestamp": 10368001,
+      "epoch": 4,
+      "user": "0x0000000000000000000000000000000000002222",
+      "actionType": "TRADE",
+      "vault": "POOL",
+      "amount": 6000,
+      "shares": 0,
+      "reason": "Whale 2 aggressive buy"
+    },
+    {
+      "timestamp": 10368001,
+      "epoch": 4,
+      "user": "0x0000000000000000000000000000000000005555",
+      "actionType": "DEPOSIT",
+      "vault": "JUNIOR",
+      "amount": 1500,
+      "shares": 1287,
+      "reason": "Retail 3 diversifying to Junior"
+    },
+    {
+      "timestamp": 12960001,
+      "epoch": 5,
+      "user": "0x0000000000000000000000000000000000003333",
+      "actionType": "TRADE",
+      "vault": "POOL",
+      "amount": 3000,
+      "shares": 0,
+      "reason": "Retail 1 profit taking"
+    },
+    {
+      "timestamp": 12960001,
+      "epoch": 5,
+      "user": "0x0000000000000000000000000000000000004444",
+      "actionType": "WITHDRAW",
+      "vault": "RESERVE",
+      "amount": 182,
+      "shares": 2000,
+      "reason": "Retail 2 partial exit"
+    },
+    {
+      "timestamp": 15552001,
+      "epoch": 6,
+      "user": "0x0000000000000000000000000000000000001111",
+      "actionType": "TRADE",
+      "vault": "POOL",
+      "amount": 7000,
+      "shares": 0,
+      "reason": "Whale 1 all in on rally"
+    },
+    {
+      "timestamp": 15552001,
+      "epoch": 6,
+      "user": "0x0000000000000000000000000000000000004444",
+      "actionType": "DEPOSIT",
+      "vault": "SENIOR",
+      "amount": 5000,
+      "shares": 5000,
+      "reason": "Retail 2 re-entering Senior"
+    },
+    {
+      "timestamp": 18144001,
+      "epoch": 7,
+      "user": "0x0000000000000000000000000000000000002222",
+      "actionType": "TRADE",
+      "vault": "POOL",
+      "amount": 5000,
+      "shares": 0,
+      "reason": "Whale 2 continuing accumulation"
+    },
+    {
+      "timestamp": 20736001,
+      "epoch": 8,
+      "user": "0x0000000000000000000000000000000000005555",
+      "actionType": "TRADE",
+      "vault": "POOL",
+      "amount": 2000,
+      "shares": 0,
+      "reason": "Retail 3 taking chips off table"
+    },
+    {
+      "timestamp": 23328001,
+      "epoch": 9,
+      "user": "0x0000000000000000000000000000000000001111",
+      "actionType": "TRADE",
+      "vault": "POOL",
+      "amount": 8000,
+      "shares": 0,
+      "reason": "Whale 1 euphoria buy"
+    },
+    {
+      "timestamp": 23328001,
+      "epoch": 9,
+      "user": "0x0000000000000000000000000000000000002222",
+      "actionType": "DEPOSIT",
+      "vault": "JUNIOR",
+      "amount": 15000,
+      "shares": 10148,
+      "reason": "Whale 2 max leverage in Junior"
+    },
+    {
+      "timestamp": 25920001,
+      "epoch": 10,
+      "user": "0x0000000000000000000000000000000000002222",
+      "actionType": "TRADE",
+      "vault": "POOL",
+      "amount": 10000,
+      "shares": 0,
+      "reason": "Whale 2 FOMO buying"
+    },
+    {
+      "timestamp": 25920001,
+      "epoch": 10,
+      "user": "0x0000000000000000000000000000000000003333",
+      "actionType": "DEPOSIT",
+      "vault": "SENIOR",
+      "amount": 8000,
+      "shares": 8000,
+      "reason": "Retail 1 chasing gains"
+    },
+    {
+      "timestamp": 28512001,
+      "epoch": 11,
+      "user": "0x0000000000000000000000000000000000001111",
+      "actionType": "TRADE",
+      "vault": "POOL",
+      "amount": 8000,
+      "shares": 0,
+      "reason": "Whale 1 top signal"
+    },
+    {
+      "timestamp": 28512001,
+      "epoch": 11,
+      "user": "0x0000000000000000000000000000000000002222",
+      "actionType": "WITHDRAW",
+      "vault": "JUNIOR",
+      "amount": 11261,
+      "shares": 5000,
+      "reason": "Whale 2 taking profit at top"
+    }
+  ]
+}

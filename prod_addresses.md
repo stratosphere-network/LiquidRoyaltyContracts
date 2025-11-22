@@ -20,11 +20,11 @@ These are the upgradeable blueprint contracts (Current Version - v2):
 
 ## Vault Proxy Contracts
 
-These are the actual vault contracts users interact with (Upgraded to v2):
+These are the actual vault contracts users interact with (v3 - New Senior Vault):
 
 | Vault | Name | Symbol | Address |
 |-------|------|--------|---------|
-| **Senior Vault** | Senior Tranche | `snrUSD` | `0xBC65274F211b6e3a8bf112B1519935B31403A84f` |
+| **Senior Vault** | Senior Tranche | `snrUSD` | `0x49298F4314eb127041b814A2616c25687Db6b650` |
 | **Junior Vault** | Junior Tranche | `jnr` | `0x3a0A97dCa5E6caCc258490D5eCe453412f8e1883` |
 | **Reserve Vault** | Alar | `alar` | `0x7754272C866892CAd4a414C76f060645BDc27203` |
 
@@ -32,11 +32,11 @@ These are the actual vault contracts users interact with (Upgraded to v2):
 
 ## Hook Contracts
 
-Hooks manage Kodiak LP tokens for each vault:
+Hooks manage Kodiak LP tokens for each vault (v3 - New Senior Hook):
 
 | Hook | Address |
 |------|---------|
-| **Senior Hook** | `0xa5Af193E027bE91EFF4CC042cC79E0782F5472AC` |
+| **Senior Hook** | `0x1108E5FF12Cf7904bFe46BFaa70d41E321c54dfa` |
 | **Junior Hook** | `0xC6A224385e14dED076D86c69a91E42142698D1f1` |
 | **Reserve Hook** | `0xBe01A06f99f8366f8803A61332e110d1235E5f3C` |
 
@@ -65,10 +65,12 @@ External tokens used by the protocol:
 
 ## Authorized Seeders
 
-These addresses can seed vaults with initial liquidity:
+These addresses can seed vaults with initial liquidity (All Vaults):
 
 1. `0x10f4f9325b3f170f4E2c049567C19c4e877D48FA`
 2. `0xd81055ac2782453ccc7fd4f0bc811eef17d12dd7`
+3. `0xe17bc155aacf979cf6dff688ad284834b711fce0`
+4. `0x5cc2946b8b73f4b9674bc12cb208c7417c40f774`
 
 ---
 
@@ -82,13 +84,13 @@ export SENIOR_IMPL=0xC9Eb65414650927dd9e8839CA7c696437e982547
 export JUNIOR_IMPL=0xdFCdD986F2a5E412671afC81537BA43D1f6A328b
 export RESERVE_IMPL=0x657613E8265e07e542D42802515677A1199989B2
 
-# Vault Proxies (Upgraded to v2)
-export SENIOR_VAULT=0xBC65274F211b6e3a8bf112B1519935B31403A84f
+# Vault Proxies (v3 - New Senior Vault)
+export SENIOR_VAULT=0x49298F4314eb127041b814A2616c25687Db6b650
 export JUNIOR_VAULT=0x3a0A97dCa5E6CaCC258490d5ece453412f8E1883
 export RESERVE_VAULT=0x7754272C866892CAd4a414C76f060645BDc27203
 
-# Hooks
-export SENIOR_HOOK=0xa5Af193E027bE91EFF4CC042cC79E0782F5472AC
+# Hooks (v3 - New Senior Hook)
+export SENIOR_HOOK=0x1108E5FF12Cf7904bFe46BFaa70d41E321c54dfa
 export JUNIOR_HOOK=0xC6A224385e14dED076D86c69a91E42142698D1f1
 export RESERVE_HOOK=0xBe01A06f99f8366f8803A61332e110d1235E5f3C
 
@@ -101,9 +103,11 @@ export KODIAK_ISLAND_ADDRESS=0xB350944Be03cf5f795f48b63eAA542df6A3c8505
 export KODIAK_ROUTER_ADDRESS=0x679a7C63FC83b6A4D9C1F931891d705483d4791F
 export TREASURY=0x23fd5f6e2b07970c9b00d1da8e85c201711b7b74
 
-# Seeders
+# Seeders (All Vaults)
 export SEEDER1=0x10f4f9325b3f170f4E2c049567C19c4e877D48FA
 export SEEDER2=0xd81055ac2782453ccc7fd4f0bc811eef17d12dd7
+export SEEDER3=0xe17bc155aacf979cf6dff688ad284834b711fce0
+export SEEDER4=0x5cc2946b8b73f4b9674bc12cb208c7417c40f774
 ```
 
 ---
@@ -112,8 +116,8 @@ export SEEDER2=0xd81055ac2782453ccc7fd4f0bc811eef17d12dd7
 
 **Block Explorer**: Berascan (berascan.com)
 
-### Vault Proxies (v2 - Upgraded)
-- [Senior Vault](https://berascan.com/address/0xBC65274F211b6e3a8bf112B1519935B31403A84f)
+### Vault Proxies (v3 - New Senior Vault)
+- [Senior Vault](https://berascan.com/address/0x49298F4314eb127041b814A2616c25687Db6b650)
 - [Junior Vault](https://berascan.com/address/0x3a0A97dCa5E6CaCC258490d5ece453412f8E1883)
 - [Reserve Vault](https://berascan.com/address/0x7754272C866892CAd4a414C76f060645BDc27203)
 
@@ -128,22 +132,47 @@ export SEEDER2=0xd81055ac2782453ccc7fd4f0bc811eef17d12dd7
 
 - [x] All implementations deployed (v2 - Nov 22, 2025)
 - [x] All proxies deployed with custom names
-- [x] All proxies upgraded to v2 implementations
-- [x] All hooks deployed and connected
-- [x] Vaults connected to each other
-- [x] Hooks configured with Kodiak Island & Router
+- [x] New Senior Vault deployed (v3 - Nov 22, 2025)
+- [x] New Senior Hook deployed and connected
+- [x] Junior and Reserve reconnected to new Senior Vault
+- [x] All hooks configured with Kodiak Island & Router
 - [x] LP tokens whitelisted
 - [x] Treasury configured
 - [x] Fee schedules set (30 days)
-- [x] Seeders authorized
+- [x] 4 Seeders authorized on all vaults
 - [x] Reserve vault Kodiak Router set
 - [x] All v2 implementations verified on Berascan
 
-**System Status**: Fully Operational (v2)
+**System Status**: Fully Operational (v3 - New Senior Vault)
 
 ---
 
 ## Upgrade History
+
+### v3 - November 22, 2025
+**New Senior Vault Deployment (Admin Recovery)**
+
+**What Happened:**
+- **Issue**: v2 upgrade corrupted Senior Vault's admin/deployer storage (`0x0`)
+- **Cause**: Storage layout mismatch during UUPS upgrade
+- **Solution**: Deployed fresh Senior Vault proxy with v2 implementation
+
+**New Deployments:**
+- New Senior Vault Proxy: `0x49298F4314eb127041b814A2616c25687Db6b650` 🆕
+- New Senior Hook: `0x1108E5FF12Cf7904bFe46BFaa70d41E321c54dfa` 🆕
+
+**Configuration Applied:**
+- ✅ Admin set to deployer wallet
+- ✅ Junior and Reserve vaults connected
+- ✅ Treasury configured
+- ✅ New Kodiak hook set and whitelisted
+- ✅ LP token whitelisted
+- ✅ 4 seeders authorized
+- ✅ Junior and Reserve updated to point to new Senior Vault
+
+**Old (Broken) Addresses:**
+- ❌ Old Senior Vault: `0xBC65274F211b6e3a8bf112B1519935B31403A84f` (DO NOT USE)
+- ❌ Old Senior Hook: `0xa5Af193E027bE91EFF4CC042cC79E0782F5472AC` (DO NOT USE)
 
 ### v2 - November 22, 2025
 **Code Cleanup & Optimization**
@@ -159,7 +188,8 @@ export SEEDER2=0xd81055ac2782453ccc7fd4f0bc811eef17d12dd7
 - Cleaner, more maintainable code
 - No functional changes - all existing features work the same
 - Lower deployment gas costs for future deployments
-- All proxies successfully upgraded via UUPS pattern
+- Junior and Reserve successfully upgraded via UUPS pattern
+- **Senior Vault upgrade corrupted storage** (fixed in v3)
 
 **New Implementation Addresses:**
 - Senior: `0xC9Eb65414650927dd9e8839CA7c696437e982547` ✅ Verified
@@ -174,13 +204,14 @@ Initial deployment with full functionality
 ## Notes
 
 - **Network**: Berachain Testnet
-- **Current Version**: v2 (Upgraded Nov 22, 2025)
+- **Current Version**: v3 (New Senior Vault - Nov 22, 2025)
 - **Deployment Method**: Foundry scripts with UUPS proxies
-- **Admin**: Same as deployer wallet
+- **Admin**: Same as deployer wallet (`0x6fa2149E69DbCBDCf6F16F755E08c10E53c40605`)
 - **Architecture**: Unified vault system with spillover mechanics
 - **Fee Structure**: 
   - Senior: 1% management + ~2% performance + 1% withdrawal + 20% early penalty
   - Junior/Reserve: 1% of supply (30-day schedule) + 1% withdrawal
+- **Important**: Use **NEW** Senior Vault address (`0x49298...`), not old one (`0xBC652...`)
 
 ---
 

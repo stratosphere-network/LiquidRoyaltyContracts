@@ -18,61 +18,92 @@ contract SimulationScenarios is RebaseSimulation {
         console.log("\n======================================");
         console.log("SCENARIO 1: MODERATE BULL MARKET");
         console.log("SAIL: $10 -> $16 (realistic range)");
+        console.log("WITH USER ACTIONS");
         console.log("======================================\n");
         
+        // Initial user positions (day 1)
+        simulateDeposit(WHALE_1, "SENIOR", 50_000e18, "Whale 1 initial Senior position");
+        simulateDeposit(WHALE_2, "JUNIOR", 30_000e18, "Whale 2 initial Junior position");
+        simulateDeposit(RETAIL_1, "SENIOR", 5_000e18, "Retail 1 initial Senior position");
+        simulateDeposit(RETAIL_2, "RESERVE", 10_000e18, "Retail 2 initial Reserve position (SAIL)");
+        
         // Month 1: +3% (buy 3K SAIL) - $10 → $10.30
-        simulateTrade(-3_000e18, 300);
+        simulateTradeWithUser(WHALE_1, -3_000e18, "Whale 1 buying SAIL (bullish)");
+        simulateDeposit(RETAIL_3, "SENIOR", 2_000e18, "Retail 3 entering Senior vault");
         executeRebase();
         
         // Month 2: +4% (buy 4K SAIL) - $10.30 → $10.71
-        simulateTrade(-4_000e18, 400);
+        simulateTradeWithUser(WHALE_2, -4_000e18, "Whale 2 accumulating SAIL");
+        simulateDeposit(RETAIL_1, "JUNIOR", 3_000e18, "Retail 1 adding to Junior for higher yield");
         executeRebase();
         
         // Month 3: -2% pullback (sell 2K SAIL) - $10.71 → $10.49
-        simulateTrade(2_000e18, -200);
+        simulateTradeWithUser(RETAIL_2, 2_000e18, "Retail 2 taking profit");
         executeRebase();
         
         // Month 4: +5% (buy 5K SAIL) - $10.49 → $11.02
-        simulateTrade(-5_000e18, 500);
+        simulateTradeWithUser(WHALE_1, -5_000e18, "Whale 1 buying the dip");
+        simulateDeposit(WHALE_1, "SENIOR", 10_000e18, "Whale 1 increasing Senior position");
         executeRebase();
         
         // Month 5: +6% (buy 6K SAIL) - $11.02 → $11.68
-        simulateTrade(-6_000e18, 600);
+        simulateTradeWithUser(WHALE_2, -6_000e18, "Whale 2 aggressive buy");
+        simulateDeposit(RETAIL_3, "JUNIOR", 1_500e18, "Retail 3 diversifying to Junior");
         executeRebase();
         
         // Month 6: -3% correction (sell 3K SAIL) - $11.68 → $11.33
-        simulateTrade(3_000e18, -300);
+        simulateTradeWithUser(RETAIL_1, 3_000e18, "Retail 1 profit taking");
+        simulateWithdraw(RETAIL_2, "RESERVE", 2_000e18, "Retail 2 partial exit");
         executeRebase();
         
         // Month 7: +7% rally (buy 7K SAIL) - $11.33 → $12.12
-        simulateTrade(-7_000e18, 700);
+        simulateTradeWithUser(WHALE_1, -7_000e18, "Whale 1 all in on rally");
+        simulateDeposit(RETAIL_2, "SENIOR", 5_000e18, "Retail 2 re-entering Senior");
         executeRebase();
         
         // Month 8: +5% (buy 5K SAIL) - $12.12 → $12.73
-        simulateTrade(-5_000e18, 500);
+        simulateTradeWithUser(WHALE_2, -5_000e18, "Whale 2 continuing accumulation");
         executeRebase();
         
         // Month 9: -2% consolidation (sell 2K SAIL) - $12.73 → $12.47
-        simulateTrade(2_000e18, -200);
+        simulateTradeWithUser(RETAIL_3, 2_000e18, "Retail 3 taking chips off table");
         executeRebase();
         
         // Month 10: +8% surge (buy 8K SAIL) - $12.47 → $13.47
-        simulateTrade(-8_000e18, 800);
+        simulateTradeWithUser(WHALE_1, -8_000e18, "Whale 1 euphoria buy");
+        simulateDeposit(WHALE_2, "JUNIOR", 15_000e18, "Whale 2 max leverage in Junior");
         executeRebase();
         
         // Month 11: +10% final push (buy 10K SAIL) - $13.47 → $14.82
-        simulateTrade(-10_000e18, 1000);
+        simulateTradeWithUser(WHALE_2, -10_000e18, "Whale 2 FOMO buying");
+        simulateDeposit(RETAIL_1, "SENIOR", 8_000e18, "Retail 1 chasing gains");
         executeRebase();
         
         // Month 12: +8% peak (buy 8K SAIL) - $14.82 → $16.00
-        simulateTrade(-8_000e18, 800);
+        simulateTradeWithUser(WHALE_1, -8_000e18, "Whale 1 top signal");
+        simulateWithdraw(WHALE_2, "JUNIOR", 5_000e18, "Whale 2 taking profit at top");
         executeRebase();
         
-        // Export to JSON
+        // Export vault snapshots to JSON
         string memory json = exportToJSON();
         vm.writeFile("./simulation_output/scenario1_bull_market.json", json);
         
-        console.log("\nScenario 1 complete. Output: simulation_output/scenario1_bull_market.json\n");
+        // Export user actions to separate JSON file
+        string memory userJson = exportUserActionsToJSON();
+        vm.writeFile("./simulation_output/scenario1_user_actions.json", userJson);
+        
+        // Print fee summary
+        (uint256 totalMgmt, uint256 totalPerf, uint256 cumulative, uint256 avgYieldBps) = getFeeSummary();
+        console.log("\n=== FEE SUMMARY ===");
+        console.log("Total Management Fees:", totalMgmt / 1e18);
+        console.log("Total Performance Fees:", totalPerf / 1e18);
+        console.log("Cumulative Fees:", cumulative / 1e18);
+        console.log("Average Fee Yield (BPS):", avgYieldBps);
+        console.log("Total User Actions:", getUserActionCount());
+        
+        console.log("\nScenario 1 complete.");
+        console.log("  Snapshots: simulation_output/scenario1_bull_market.json");
+        console.log("  User Actions: simulation_output/scenario1_user_actions.json\n");
     }
     
     /**
@@ -83,26 +114,37 @@ contract SimulationScenarios is RebaseSimulation {
         console.log("\n======================================");
         console.log("SCENARIO 2: MODERATE BEAR MARKET");
         console.log("SAIL: $10 -> $6 (realistic range)");
+        console.log("WITH USER PANIC & CAPITULATION");
         console.log("======================================\n");
         
+        // Initial positions
+        simulateDeposit(WHALE_1, "SENIOR", 100_000e18, "Whale 1 large Senior position");
+        simulateDeposit(WHALE_2, "JUNIOR", 50_000e18, "Whale 2 Junior position");
+        simulateDeposit(RETAIL_1, "SENIOR", 10_000e18, "Retail 1 in Senior");
+        simulateDeposit(RETAIL_2, "JUNIOR", 5_000e18, "Retail 2 in Junior");
+        simulateDeposit(RETAIL_3, "RESERVE", 8_000e18, "Retail 3 in Reserve (SAIL)");
+        
         // Month 1: -5% (sell 5K SAIL) - $10 → $9.50
-        simulateTrade(5_000e18, -500);
+        simulateTradeWithUser(RETAIL_1, 5_000e18, "Retail 1 selling SAIL (bearish)");
+        simulateWithdraw(RETAIL_2, "JUNIOR", 1_000e18, "Retail 2 nervous exit");
         executeRebase();
         
         // Month 2: -6% (sell 6K SAIL) - $9.50 → $8.93
-        simulateTrade(6_000e18, -600);
+        simulateTradeWithUser(WHALE_2, 6_000e18, "Whale 2 panic selling");
+        simulateWithdraw(RETAIL_1, "SENIOR", 3_000e18, "Retail 1 fear exit");
         executeRebase();
         
         // Month 3: +3% relief rally (buy 3K SAIL) - $8.93 → $9.20
-        simulateTrade(-3_000e18, 300);
+        simulateTradeWithUser(WHALE_1, -3_000e18, "Whale 1 buying the dip");
         executeRebase();
         
         // Month 4: -7% selloff (sell 7K SAIL) - $9.20 → $8.56
-        simulateTrade(7_000e18, -700);
+        simulateTradeWithUser(RETAIL_2, 7_000e18, "Retail 2 capitulation");
+        simulateWithdraw(WHALE_2, "JUNIOR", 10_000e18, "Whale 2 cutting losses");
         executeRebase();
         
         // Month 5: -4% (sell 4K SAIL) - $8.56 → $8.22
-        simulateTrade(4_000e18, -400);
+        simulateTradeWithUser(RETAIL_3, 4_000e18, "Retail 3 panic sell");
         executeRebase();
         
         // Month 6: +2% dead cat bounce (buy 2K SAIL) - $8.22 → $8.38
@@ -110,34 +152,53 @@ contract SimulationScenarios is RebaseSimulation {
         executeRebase();
         
         // Month 7: -8% capitulation (sell 8K SAIL) - $8.38 → $7.71
-        simulateTrade(8_000e18, -800);
+        simulateTradeWithUser(WHALE_2, 8_000e18, "Whale 2 full capitulation");
+        simulateWithdraw(RETAIL_2, "JUNIOR", 2_000e18, "Retail 2 exit");
         executeRebase();
         
         // Month 8: -5% (sell 5K SAIL) - $7.71 → $7.32
-        simulateTrade(5_000e18, -500);
+        simulateTradeWithUser(RETAIL_1, 5_000e18, "Retail 1 giving up");
         executeRebase();
         
         // Month 9: +4% relief (buy 4K SAIL) - $7.32 → $7.61
-        simulateTrade(-4_000e18, 400);
+        simulateTradeWithUser(WHALE_1, -4_000e18, "Whale 1 brave dip buy");
+        simulateDeposit(WHALE_1, "SENIOR", 20_000e18, "Whale 1 accumulating at bottom");
         executeRebase();
         
         // Month 10: -6% (sell 6K SAIL) - $7.61 → $7.15
-        simulateTrade(6_000e18, -600);
+        simulateTradeWithUser(RETAIL_3, 6_000e18, "Retail 3 final sell");
+        simulateWithdraw(RETAIL_3, "RESERVE", 3_000e18, "Retail 3 full exit");
         executeRebase();
         
         // Month 11: -8% final leg down (sell 8K SAIL) - $7.15 → $6.58
-        simulateTrade(8_000e18, -800);
+        simulateTradeWithUser(RETAIL_2, 8_000e18, "Retail 2 selling at bottom");
         executeRebase();
         
         // Month 12: -4% bottom (sell 4K SAIL) - $6.58 → $6.32
-        simulateTrade(4_000e18, -400);
+        simulateTradeWithUser(WHALE_2, 4_000e18, "Whale 2 final capitulation");
+        simulateDeposit(WHALE_1, "JUNIOR", 30_000e18, "Whale 1 contrarian bet at bottom");
         executeRebase();
         
-        // Export to JSON
+        // Export vault snapshots to JSON
         string memory json = exportToJSON();
         vm.writeFile("./simulation_output/scenario2_bear_market.json", json);
         
-        console.log("\nScenario 2 complete. Output: simulation_output/scenario2_bear_market.json\n");
+        // Export user actions to separate JSON file
+        string memory userJson = exportUserActionsToJSON();
+        vm.writeFile("./simulation_output/scenario2_user_actions.json", userJson);
+        
+        // Print fee summary
+        (uint256 totalMgmt, uint256 totalPerf, uint256 cumulative, uint256 avgYieldBps) = getFeeSummary();
+        console.log("\n=== FEE SUMMARY ===");
+        console.log("Total Management Fees:", totalMgmt / 1e18);
+        console.log("Total Performance Fees:", totalPerf / 1e18);
+        console.log("Cumulative Fees:", cumulative / 1e18);
+        console.log("Average Fee Yield (BPS):", avgYieldBps);
+        console.log("Total User Actions:", getUserActionCount());
+        
+        console.log("\nScenario 2 complete.");
+        console.log("  Snapshots: simulation_output/scenario2_bear_market.json");
+        console.log("  User Actions: simulation_output/scenario2_user_actions.json\n");
     }
     
     /**

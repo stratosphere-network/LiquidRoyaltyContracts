@@ -1,0 +1,234 @@
+{
+  "userActions": [
+    {
+      "timestamp": 1,
+      "epoch": 0,
+      "user": "0x0000000000000000000000000000000000001111",
+      "actionType": "DEPOSIT",
+      "vault": "SENIOR",
+      "amount": 100000,
+      "shares": 100000,
+      "reason": "Whale 1 large Senior position"
+    },
+    {
+      "timestamp": 1,
+      "epoch": 0,
+      "user": "0x0000000000000000000000000000000000002222",
+      "actionType": "DEPOSIT",
+      "vault": "JUNIOR",
+      "amount": 50000,
+      "shares": 50000,
+      "reason": "Whale 2 Junior position"
+    },
+    {
+      "timestamp": 1,
+      "epoch": 0,
+      "user": "0x0000000000000000000000000000000000003333",
+      "actionType": "DEPOSIT",
+      "vault": "SENIOR",
+      "amount": 10000,
+      "shares": 10000,
+      "reason": "Retail 1 in Senior"
+    },
+    {
+      "timestamp": 1,
+      "epoch": 0,
+      "user": "0x0000000000000000000000000000000000004444",
+      "actionType": "DEPOSIT",
+      "vault": "JUNIOR",
+      "amount": 5000,
+      "shares": 5000,
+      "reason": "Retail 2 in Junior"
+    },
+    {
+      "timestamp": 1,
+      "epoch": 0,
+      "user": "0x0000000000000000000000000000000000005555",
+      "actionType": "DEPOSIT",
+      "vault": "RESERVE",
+      "amount": 8000,
+      "shares": 80000,
+      "reason": "Retail 3 in Reserve (SAIL)"
+    },
+    {
+      "timestamp": 1,
+      "epoch": 0,
+      "user": "0x0000000000000000000000000000000000003333",
+      "actionType": "TRADE",
+      "vault": "POOL",
+      "amount": 5000,
+      "shares": 0,
+      "reason": "Retail 1 selling SAIL (bearish)"
+    },
+    {
+      "timestamp": 1,
+      "epoch": 0,
+      "user": "0x0000000000000000000000000000000000004444",
+      "actionType": "WITHDRAW",
+      "vault": "JUNIOR",
+      "amount": 918,
+      "shares": 1000,
+      "reason": "Retail 2 nervous exit"
+    },
+    {
+      "timestamp": 2592001,
+      "epoch": 1,
+      "user": "0x0000000000000000000000000000000000002222",
+      "actionType": "TRADE",
+      "vault": "POOL",
+      "amount": 6000,
+      "shares": 0,
+      "reason": "Whale 2 panic selling"
+    },
+    {
+      "timestamp": 2592001,
+      "epoch": 1,
+      "user": "0x0000000000000000000000000000000000003333",
+      "actionType": "WITHDRAW",
+      "vault": "SENIOR",
+      "amount": 3000,
+      "shares": 3000,
+      "reason": "Retail 1 fear exit"
+    },
+    {
+      "timestamp": 5184001,
+      "epoch": 2,
+      "user": "0x0000000000000000000000000000000000001111",
+      "actionType": "TRADE",
+      "vault": "POOL",
+      "amount": 3000,
+      "shares": 0,
+      "reason": "Whale 1 buying the dip"
+    },
+    {
+      "timestamp": 7776001,
+      "epoch": 3,
+      "user": "0x0000000000000000000000000000000000004444",
+      "actionType": "TRADE",
+      "vault": "POOL",
+      "amount": 7000,
+      "shares": 0,
+      "reason": "Retail 2 capitulation"
+    },
+    {
+      "timestamp": 7776001,
+      "epoch": 3,
+      "user": "0x0000000000000000000000000000000000002222",
+      "actionType": "WITHDRAW",
+      "vault": "JUNIOR",
+      "amount": 7844,
+      "shares": 10000,
+      "reason": "Whale 2 cutting losses"
+    },
+    {
+      "timestamp": 10368001,
+      "epoch": 4,
+      "user": "0x0000000000000000000000000000000000005555",
+      "actionType": "TRADE",
+      "vault": "POOL",
+      "amount": 4000,
+      "shares": 0,
+      "reason": "Retail 3 panic sell"
+    },
+    {
+      "timestamp": 15552001,
+      "epoch": 6,
+      "user": "0x0000000000000000000000000000000000002222",
+      "actionType": "TRADE",
+      "vault": "POOL",
+      "amount": 8000,
+      "shares": 0,
+      "reason": "Whale 2 full capitulation"
+    },
+    {
+      "timestamp": 15552001,
+      "epoch": 6,
+      "user": "0x0000000000000000000000000000000000004444",
+      "actionType": "WITHDRAW",
+      "vault": "JUNIOR",
+      "amount": 1008,
+      "shares": 2000,
+      "reason": "Retail 2 exit"
+    },
+    {
+      "timestamp": 18144001,
+      "epoch": 7,
+      "user": "0x0000000000000000000000000000000000003333",
+      "actionType": "TRADE",
+      "vault": "POOL",
+      "amount": 5000,
+      "shares": 0,
+      "reason": "Retail 1 giving up"
+    },
+    {
+      "timestamp": 20736001,
+      "epoch": 8,
+      "user": "0x0000000000000000000000000000000000001111",
+      "actionType": "TRADE",
+      "vault": "POOL",
+      "amount": 4000,
+      "shares": 0,
+      "reason": "Whale 1 brave dip buy"
+    },
+    {
+      "timestamp": 20736001,
+      "epoch": 8,
+      "user": "0x0000000000000000000000000000000000001111",
+      "actionType": "DEPOSIT",
+      "vault": "SENIOR",
+      "amount": 20000,
+      "shares": 20000,
+      "reason": "Whale 1 accumulating at bottom"
+    },
+    {
+      "timestamp": 23328001,
+      "epoch": 9,
+      "user": "0x0000000000000000000000000000000000005555",
+      "actionType": "TRADE",
+      "vault": "POOL",
+      "amount": 6000,
+      "shares": 0,
+      "reason": "Retail 3 final sell"
+    },
+    {
+      "timestamp": 23328001,
+      "epoch": 9,
+      "user": "0x0000000000000000000000000000000000005555",
+      "actionType": "WITHDRAW",
+      "vault": "RESERVE",
+      "amount": 0,
+      "shares": 3000,
+      "reason": "Retail 3 full exit"
+    },
+    {
+      "timestamp": 25920001,
+      "epoch": 10,
+      "user": "0x0000000000000000000000000000000000004444",
+      "actionType": "TRADE",
+      "vault": "POOL",
+      "amount": 8000,
+      "shares": 0,
+      "reason": "Retail 2 selling at bottom"
+    },
+    {
+      "timestamp": 28512001,
+      "epoch": 11,
+      "user": "0x0000000000000000000000000000000000002222",
+      "actionType": "TRADE",
+      "vault": "POOL",
+      "amount": 4000,
+      "shares": 0,
+      "reason": "Whale 2 final capitulation"
+    },
+    {
+      "timestamp": 28512001,
+      "epoch": 11,
+      "user": "0x0000000000000000000000000000000000001111",
+      "actionType": "DEPOSIT",
+      "vault": "JUNIOR",
+      "amount": 30000,
+      "shares": 155615,
+      "reason": "Whale 1 contrarian bet at bottom"
+    }
+  ]
+}
