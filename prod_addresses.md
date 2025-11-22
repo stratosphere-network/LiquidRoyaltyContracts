@@ -1,31 +1,32 @@
 # Production Deployment Addresses
 
 > **Deployed on Berachain Testnet**  
-> Deployment Date: November 21, 2025
+> Deployment Date: November 21, 2025  
+> Last Upgraded: November 22, 2025 (Code cleanup - removed unused depositor whitelist)
 
 ---
 
 ## Implementation Contracts
 
-These are the upgradeable blueprint contracts:
+These are the upgradeable blueprint contracts (Current Version - v2):
 
 | Contract | Address |
 |----------|---------|
-| **Senior Implementation** | `0xbc65274F211b6E3A8bf112b1519935b31403a84F` |
-| **Junior Implementation** | `0x09788C38906Ed9fE422Bc4AEcA6F24F27924a962` |
-| **Alar Implementation** | `0x7d1005d24E49883d38B375d762dfbfEFbd5d3A5C` |
+| **Senior Implementation** | `0xC9Eb65414650927dd9e8839CA7c696437e982547` |
+| **Junior Implementation** | `0xdFCdD986F2a5E412671afC81537BA43D1f6A328b` |
+| **Alar Implementation** | `0x657613E8265e07e542D42802515677A1199989B2` |
 
 ---
 
 ## Vault Proxy Contracts
 
-These are the actual vault contracts users interact with:
+These are the actual vault contracts users interact with (Upgraded to v2):
 
 | Vault | Name | Symbol | Address |
 |-------|------|--------|---------|
-| **Senior Vault** | Senior Tranche | `snrUSD` | `0x78a352318C4aD88ca14f84b200962E797e80D033` |
-| **Junior Vault** | Junior Tranche | `jnr` | `0x3a0A97DcA5e6CaCC258490d5ece453412f8E1883` |
-| **Reserve Vault** | Alar | `alar` | `0x7754272c866892CaD4a414C76f060645bDc27203` |
+| **Senior Vault** | Senior Tranche | `snrUSD` | `0xBC65274F211b6e3a8bf112B1519935B31403A84f` |
+| **Junior Vault** | Junior Tranche | `jnr` | `0x3a0A97dCa5E6caCc258490D5eCe453412f8e1883` |
+| **Reserve Vault** | Alar | `alar` | `0x7754272C866892CAd4a414C76f060645BDc27203` |
 
 ---
 
@@ -76,15 +77,15 @@ These addresses can seed vaults with initial liquidity:
 Copy-paste ready environment variables:
 
 ```bash
-# Implementations
-export SENIOR_IMPL=0xbc65274F211b6E3A8bf112b1519935b31403a84F
-export JUNIOR_IMPL=0x09788C38906Ed9fE422Bc4AEcA6F24F27924a962
-export RESERVE_IMPL=0x7d1005d24E49883d38B375d762dfbfEFbd5d3A5C
+# Implementations (v2 - Upgraded Nov 22, 2025)
+export SENIOR_IMPL=0xC9Eb65414650927dd9e8839CA7c696437e982547
+export JUNIOR_IMPL=0xdFCdD986F2a5E412671afC81537BA43D1f6A328b
+export RESERVE_IMPL=0x657613E8265e07e542D42802515677A1199989B2
 
-# Vault Proxies
-export SENIOR_VAULT=0x78a352318C4aD88ca14f84b200962E797e80D033
-export JUNIOR_VAULT=0x3a0A97DcA5e6CaCC258490d5ece453412f8E1883
-export RESERVE_VAULT=0x7754272c866892CaD4a414C76f060645bDc27203
+# Vault Proxies (Upgraded to v2)
+export SENIOR_VAULT=0xBC65274F211b6e3a8bf112B1519935B31403A84f
+export JUNIOR_VAULT=0x3a0A97dCa5E6CaCC258490d5ece453412f8E1883
+export RESERVE_VAULT=0x7754272C866892CAd4a414C76f060645BDc27203
 
 # Hooks
 export SENIOR_HOOK=0xa5Af193E027bE91EFF4CC042cC79E0782F5472AC
@@ -109,18 +110,25 @@ export SEEDER2=0xd81055ac2782453ccc7fd4f0bc811eef17d12dd7
 
 ## Verification Links
 
-**Block Explorer**: [Add your block explorer URL]
+**Block Explorer**: Berascan (berascan.com)
 
-- [Senior Vault](https://explorer.berachain.com/address/0x78a352318C4aD88ca14f84b200962E797e80D033)
-- [Junior Vault](https://explorer.berachain.com/address/0x3a0A97DcA5e6CaCC258490d5ece453412f8E1883)
-- [Reserve Vault](https://explorer.berachain.com/address/0x7754272c866892CaD4a414C76f060645bDc27203)
+### Vault Proxies (v2 - Upgraded)
+- [Senior Vault](https://berascan.com/address/0xBC65274F211b6e3a8bf112B1519935B31403A84f)
+- [Junior Vault](https://berascan.com/address/0x3a0A97dCa5E6CaCC258490d5ece453412f8E1883)
+- [Reserve Vault](https://berascan.com/address/0x7754272C866892CAd4a414C76f060645BDc27203)
+
+### Implementations (v2 - Current)
+- [Senior Implementation](https://berascan.com/address/0xC9Eb65414650927dd9e8839CA7c696437e982547)
+- [Junior Implementation](https://berascan.com/address/0xdFCdD986F2a5E412671afC81537BA43D1f6A328b)
+- [Reserve Implementation](https://berascan.com/address/0x657613E8265e07e542D42802515677A1199989B2)
 
 ---
 
 ## Deployment Status
 
-- [x] All implementations deployed
+- [x] All implementations deployed (v2 - Nov 22, 2025)
 - [x] All proxies deployed with custom names
+- [x] All proxies upgraded to v2 implementations
 - [x] All hooks deployed and connected
 - [x] Vaults connected to each other
 - [x] Hooks configured with Kodiak Island & Router
@@ -129,14 +137,44 @@ export SEEDER2=0xd81055ac2782453ccc7fd4f0bc811eef17d12dd7
 - [x] Fee schedules set (30 days)
 - [x] Seeders authorized
 - [x] Reserve vault Kodiak Router set
+- [x] All v2 implementations verified on Berascan
 
-**System Status**: Fully Operational
+**System Status**: Fully Operational (v2)
+
+---
+
+## Upgrade History
+
+### v2 - November 22, 2025
+**Code Cleanup & Optimization**
+
+**What Changed:**
+- Removed unused depositor whitelist system from `BaseVault.sol` (~40 lines)
+- Removed unused depositor whitelist from `UnifiedSeniorVault.sol`
+- Fixed variable shadowing issues in `UnifiedSeniorVault.sol`
+- Removed duplicate `getLPBalance()` function
+- Removed buggy `getLPHoldings()` function
+
+**Impact:**
+- Cleaner, more maintainable code
+- No functional changes - all existing features work the same
+- Lower deployment gas costs for future deployments
+- All proxies successfully upgraded via UUPS pattern
+
+**New Implementation Addresses:**
+- Senior: `0xC9Eb65414650927dd9e8839CA7c696437e982547` ✅ Verified
+- Junior: `0xdFCdD986F2a5E412671afC81537BA43D1f6A328b` ✅ Verified
+- Reserve: `0x657613E8265e07e542D42802515677A1199989B2` ✅ Verified
+
+### v1 - November 21, 2025
+Initial deployment with full functionality
 
 ---
 
 ## Notes
 
 - **Network**: Berachain Testnet
+- **Current Version**: v2 (Upgraded Nov 22, 2025)
 - **Deployment Method**: Foundry scripts with UUPS proxies
 - **Admin**: Same as deployer wallet
 - **Architecture**: Unified vault system with spillover mechanics
@@ -152,7 +190,29 @@ export SEEDER2=0xd81055ac2782453ccc7fd4f0bc811eef17d12dd7
 - Treasury address set on all vaults
 - All connections verified
 - All configurations tested
+- UUPS upgrade mechanism secured (only admin can upgrade)
+- All upgrades tested and verified on Berascan
 
+---
+
+## How the Upgrade Works
+
+The vault system uses the UUPS (Universal Upgradeable Proxy Standard) pattern:
+
+1. **Proxy Addresses Never Change** - Users always interact with the same addresses
+2. **Implementation Can Be Upgraded** - The underlying logic can be improved
+3. **State Persists** - All balances, shares, and configuration remain intact
+4. **Admin-Only Upgrades** - Only the admin wallet can upgrade implementations
+
+**Example Upgrade Command:**
+```bash
+cast send $SENIOR_VAULT \
+  "upgradeToAndCall(address,bytes)" \
+  $NEW_IMPLEMENTATION_ADDRESS \
+  0x \
+  --private-key $PRIVATE_KEY \
+  --rpc-url $RPC_URL
+```
 
 ---
 
