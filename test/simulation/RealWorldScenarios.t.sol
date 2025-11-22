@@ -304,5 +304,69 @@ contract RealWorldScenarios is RebaseSimulation {
         vm.writeFile("./simulation_output/scenario_flash_crash.json", json);
         console.log("Exported to: scenario_flash_crash.json");
     }
+
+    /**
+     * @notice Scenario: Whale Manipulation Stress Test (Bryan's Question)
+     * "What happens if a whale triggers spillover and backstop back and forth every month?"
+     */
+    function test_Scenario_WhaleManipulation() public {
+        console.log("\n========================================");
+        console.log("REAL WORLD: WHALE MANIPULATION STRESS TEST");
+        console.log("Simulating oscillating Spillover <-> Backstop cycles");
+        console.log("========================================\n");
+        
+        // Initial Whale setup
+        simulateDeposit(WHALE_1, "RESERVE", 100_000e18, "Whale entering to manipulate");
+        simulateDeposit(RETAIL_1, "SENIOR", 50_000e18, "Retail victim");
+        
+        // Cycle 1: Pump to Spillover
+        console.log("\n=== CYCLE 1: PUMP (Force Spillover) ===");
+        simulateTradeWithUser(WHALE_1, -20_000e18, "Whale 1 massive buy (Pump)");
+        executeRebase();
+        console.log("** SPILLOVER TRIGGERED **");
+        
+        // Cycle 2: Dump to Backstop
+        console.log("\n=== CYCLE 2: DUMP (Force Backstop) ===");
+        simulateTradeWithUser(WHALE_1, 20_000e18, "Whale 1 massive sell (Dump)");
+        executeRebase();
+        console.log("** BACKSTOP TRIGGERED **");
+        
+        // Cycle 3: Pump again
+        console.log("\n=== CYCLE 3: PUMP AGAIN ===");
+        simulateTradeWithUser(WHALE_1, -25_000e18, "Whale 1 pumps harder");
+        executeRebase();
+        
+        // Cycle 4: Dump again
+        console.log("\n=== CYCLE 4: DUMP AGAIN ===");
+        simulateTradeWithUser(WHALE_1, 25_000e18, "Whale 1 dumps harder");
+        executeRebase();
+        
+        // Cycle 5: Pump
+        console.log("\n=== CYCLE 5: PUMP ===");
+        simulateTradeWithUser(WHALE_1, -30_000e18, "Whale 1 persistent pump");
+        executeRebase();
+        
+        // Cycle 6: Dump
+        console.log("\n=== CYCLE 6: DUMP ===");
+        simulateTradeWithUser(WHALE_1, 30_000e18, "Whale 1 persistent dump");
+        executeRebase();
+        
+        // Final State
+        console.log("\n========================================");
+        console.log("=== MANIPULATION RESULTS ===");
+        console.log("Senior Backing Ratio: ", vaults.seniorBackingRatio * 100 / 1e18, "%");
+        console.log("Reserve Value: $", vaults.reserveValue / 1e18);
+        console.log("Whale 1 Balance: $", (reserveBalances[WHALE_1] * vaults.reserveValue / vaults.reserveShares) / 1e18);
+        console.log("Did Protocol Break? ", vaults.seniorBackingRatio < 1e18 ? "YES (Bad)" : "NO (Good)");
+        console.log("========================================\n");
+        
+        // Export to JSON
+        string memory json = exportToJSON();
+        vm.writeFile("./simulation_output/scenario_whale_manipulation.json", json);
+        
+        // Export user actions
+        string memory userJson = exportUserActionsToJSON();
+        vm.writeFile("./simulation_output/scenario_whale_manipulation_user_actions.json", userJson);
+    }
 }
 

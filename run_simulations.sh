@@ -1,94 +1,41 @@
 #!/bin/bash
-# Quick-start script for running rebase simulations
 
-set -e
+# Colors for output
+GREEN='\033[0;32m'
+BLUE='\033[0;34m'
+RED='\033[0;31m'
+NC='\033[0m' # No Color
 
-echo "🚀 Rebase Simulation Runner"
-echo "=========================="
-echo ""
+echo -e "${BLUE}=============================================${NC}"
+echo -e "${BLUE}   🚀 LIQUID ROYALTY SIMULATION RUNNER 🚀    ${NC}"
+echo -e "${BLUE}=============================================${NC}"
 
-# Check if foundry is installed
-if ! command -v forge &> /dev/null; then
-    echo "❌ Foundry not found. Installing..."
-    curl -L https://foundry.paradigm.xyz | bash
-    foundryup
-fi
-
-# Create output directory
-echo "📁 Creating output directory..."
+# Create output directories if they don't exist
 mkdir -p simulation_output
+mkdir -p vault-dashboard/public/simulation_output
 
-# Run simulations
-echo ""
-echo "🧪 Running all simulation scenarios..."
-echo "This will take a few minutes..."
-echo ""
+echo -e "\n${GREEN}[1/3] Running Market Scenarios...${NC}"
+# Run the main scenarios (Bull/Bear) which have detailed user actions
+forge test --match-test "test_Scenario1_BullMarket|test_Scenario2_BearMarket" -vv
 
-# Run each scenario individually to avoid memory issues
-echo "Running Scenario 1: Bull Market..."
-forge test --match-test test_Scenario1_BullMarket -vv
+echo -e "\n${GREEN}[2/3] Running Stress Tests & Real World Scenarios...${NC}"
+# Run the whale manipulation and other real world tests
+forge test --match-contract RealWorldScenarios -vv
 
-echo "Running Scenario 2: Bear Market..."
-forge test --match-test test_Scenario2_BearMarket -vv
+echo -e "\n${GREEN}[3/3] Deploying Data to Dashboard...${NC}"
 
-echo "Running Scenario 3: Volatile Market..."
-forge test --match-test test_Scenario3_VolatileMarket -vv
+# Copy ALL generated JSON files to the dashboard public folder
+cp simulation_output/*.json vault-dashboard/public/simulation_output/
 
-echo "Running Scenario 4: Stable Market..."
-forge test --match-test test_Scenario4_StableMarket -vv
+# Count files copied
+COUNT=$(ls simulation_output/*.json | wc -l)
+echo -e "✅ Copied ${COUNT} simulation files to dashboard."
 
-echo "Running Scenario 5: Flash Crash & Recovery..."
-forge test --match-test test_Scenario5_FlashCrashRecovery -vv
-
-echo "Running Scenario 6: Slow Bleed (24 Months)..."
-forge test --match-test test_Scenario6_SlowBleed_24Months -vv
-
-echo "Running Scenario 7: Parabolic Bull Run..."
-forge test --match-test test_Scenario7_ParabolicBullRun -vv
-
-echo ""
-echo "========================================="
-echo "🌍 Running REAL WORLD Scenarios..."
-echo "========================================="
-
-echo "Running Real World: Complete 12-Month Lifecycle..."
-forge test --match-test test_Scenario_CompleteLifecycle -vv
-
-echo "Running Real World: Bear Market Stress Test..."
-forge test --match-test test_Scenario_BearMarketStress -vv
-
-echo "Running Real World: Stable Yield Market..."
-forge test --match-test test_Scenario_StableYield -vv
-
-echo "Running Real World: Flash Crash Event..."
-forge test --match-test test_Scenario_FlashCrash -vv
-
-# Check if Node.js/TypeScript is available for analysis
-if command -v ts-node &> /dev/null; then
-    echo ""
-    echo "📊 Running analysis..."
-    cd simulation_output
-    ts-node analyze.ts
-    cd ..
-elif command -v node &> /dev/null; then
-    echo ""
-    echo "📊 Compiling and running analysis..."
-    cd simulation_output
-    npx tsc analyze.ts && node analyze.js
-    cd ..
-else
-    echo "⚠️  Node.js not found. Skipping analysis."
-    echo "   Install Node.js and run: cd simulation_output && ts-node analyze.ts"
-fi
-
-echo ""
-echo "✅ All simulations complete!"
-echo ""
-echo "📁 Output files in: ./simulation_output/"
-echo "   - JSON files: Complete time-series data"
-echo "   - CSV files: Tabular format for analysis"
-echo ""
-echo "📖 See simulation_output/README.md for details"
-echo "💡 Tip: Import CSV files into Excel/Google Sheets for visualization"
-echo ""
-
+echo -e "\n${BLUE}=============================================${NC}"
+echo -e "${GREEN}   🎉 SIMULATIONS COMPLETE! 🎉    ${NC}"
+echo -e "${BLUE}=============================================${NC}"
+echo -e "To view results:"
+echo -e "  1. cd vault-dashboard"
+echo -e "  2. npm run dev"
+echo -e "  3. Open http://localhost:5173"
+echo -e "${BLUE}=============================================${NC}"

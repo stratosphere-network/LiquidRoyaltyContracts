@@ -35,6 +35,13 @@
         "spilloverToReserve": 0,
         "backstopFromReserve": 0,
         "backstopFromJunior": 0
+      },
+      "fees": {
+        "managementFeeTokens": 0,
+        "performanceFeeTokens": 0,
+        "totalFeesThisEpoch": 0,
+        "cumulativeFees": 0,
+        "feeYieldBps": 0
       }
     },
     {
@@ -71,6 +78,13 @@
         "spilloverToReserve": 0,
         "backstopFromReserve": 85344,
         "backstopFromJunior": 0
+      },
+      "fees": {
+        "managementFeeTokens": 1201,
+        "performanceFeeTokens": 275,
+        "totalFeesThisEpoch": 1476,
+        "cumulativeFees": 1476,
+        "feeYieldBps": 9
       }
     },
     {
@@ -107,6 +121,13 @@
         "spilloverToReserve": 0,
         "backstopFromReserve": 167013,
         "backstopFromJunior": 0
+      },
+      "fees": {
+        "managementFeeTokens": 1146,
+        "performanceFeeTokens": 277,
+        "totalFeesThisEpoch": 1424,
+        "cumulativeFees": 2901,
+        "feeYieldBps": 9
       }
     },
     {
@@ -143,6 +164,13 @@
         "spilloverToReserve": 0,
         "backstopFromReserve": 156887,
         "backstopFromJunior": 0
+      },
+      "fees": {
+        "managementFeeTokens": 1168,
+        "performanceFeeTokens": 280,
+        "totalFeesThisEpoch": 1448,
+        "cumulativeFees": 4350,
+        "feeYieldBps": 9
       }
     },
     {
@@ -179,6 +207,13 @@
         "spilloverToReserve": 0,
         "backstopFromReserve": 219001,
         "backstopFromJunior": 28086
+      },
+      "fees": {
+        "managementFeeTokens": 1106,
+        "performanceFeeTokens": 283,
+        "totalFeesThisEpoch": 1389,
+        "cumulativeFees": 5740,
+        "feeYieldBps": 8
       }
     },
     {
@@ -215,6 +250,13 @@
         "spilloverToReserve": 0,
         "backstopFromReserve": 0,
         "backstopFromJunior": 281192
+      },
+      "fees": {
+        "managementFeeTokens": 1090,
+        "performanceFeeTokens": 286,
+        "totalFeesThisEpoch": 1377,
+        "cumulativeFees": 7117,
+        "feeYieldBps": 8
       }
     },
     {
@@ -251,6 +293,13 @@
         "spilloverToReserve": 0,
         "backstopFromReserve": 0,
         "backstopFromJunior": 0
+      },
+      "fees": {
+        "managementFeeTokens": 1360,
+        "performanceFeeTokens": 341,
+        "totalFeesThisEpoch": 1701,
+        "cumulativeFees": 8819,
+        "feeYieldBps": 10
       }
     },
     {
@@ -287,6 +336,13 @@
         "spilloverToReserve": 0,
         "backstopFromReserve": 0,
         "backstopFromJunior": 61845
+      },
+      "fees": {
+        "managementFeeTokens": 1303,
+        "performanceFeeTokens": 292,
+        "totalFeesThisEpoch": 1595,
+        "cumulativeFees": 10414,
+        "feeYieldBps": 9
       }
     },
     {
@@ -323,6 +379,13 @@
         "spilloverToReserve": 0,
         "backstopFromReserve": 0,
         "backstopFromJunior": 69387
+      },
+      "fees": {
+        "managementFeeTokens": 1310,
+        "performanceFeeTokens": 295,
+        "totalFeesThisEpoch": 1606,
+        "cumulativeFees": 12020,
+        "feeYieldBps": 9
       }
     },
     {
@@ -359,6 +422,13 @@
         "spilloverToReserve": 0,
         "backstopFromReserve": 0,
         "backstopFromJunior": 0
+      },
+      "fees": {
+        "managementFeeTokens": 1390,
+        "performanceFeeTokens": 352,
+        "totalFeesThisEpoch": 1743,
+        "cumulativeFees": 13764,
+        "feeYieldBps": 10
       }
     },
     {
@@ -395,6 +465,13 @@
         "spilloverToReserve": 0,
         "backstopFromReserve": 0,
         "backstopFromJunior": 88149
+      },
+      "fees": {
+        "managementFeeTokens": 1325,
+        "performanceFeeTokens": 302,
+        "totalFeesThisEpoch": 1627,
+        "cumulativeFees": 15392,
+        "feeYieldBps": 9
       }
     },
     {
@@ -431,6 +508,13 @@
         "spilloverToReserve": 0,
         "backstopFromReserve": 0,
         "backstopFromJunior": 68293
+      },
+      "fees": {
+        "managementFeeTokens": 1355,
+        "performanceFeeTokens": 305,
+        "totalFeesThisEpoch": 1661,
+        "cumulativeFees": 17053,
+        "feeYieldBps": 9
       }
     },
     {
@@ -467,6 +551,13 @@
         "spilloverToReserve": 0,
         "backstopFromReserve": 0,
         "backstopFromJunior": 0
+      },
+      "fees": {
+        "managementFeeTokens": 1423,
+        "performanceFeeTokens": 364,
+        "totalFeesThisEpoch": 1788,
+        "cumulativeFees": 18841,
+        "feeYieldBps": 10
       }
     }
   ]

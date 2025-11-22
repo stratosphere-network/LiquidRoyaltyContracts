@@ -35,12 +35,19 @@
         "spilloverToReserve": 0,
         "backstopFromReserve": 0,
         "backstopFromJunior": 0
+      },
+      "fees": {
+        "managementFeeTokens": 0,
+        "performanceFeeTokens": 0,
+        "totalFeesThisEpoch": 0,
+        "cumulativeFees": 0,
+        "feeYieldBps": 0
       }
     },
     {
       "epoch": 1,
       "timestamp": 2592001,
-      "zone": "HEALTHY",
+      "zone": "BACKSTOP",
       "pool": {
         "usdeReserve": 961538,
         "sailReserve": 104000,
@@ -52,7 +59,7 @@
         "lpAmount": 237170,
         "value": 1527651,
         "supply": 1515227,
-        "backingRatio": 100,
+        "backingRatio": 95,
         "rebaseIndex": 1009,
         "apy": 1
       },
@@ -71,12 +78,19 @@
         "spilloverToReserve": 0,
         "backstopFromReserve": 85344,
         "backstopFromJunior": 0
+      },
+      "fees": {
+        "managementFeeTokens": 1201,
+        "performanceFeeTokens": 275,
+        "totalFeesThisEpoch": 1476,
+        "cumulativeFees": 1476,
+        "feeYieldBps": 9
       }
     },
     {
       "epoch": 2,
       "timestamp": 5184001,
-      "zone": "HEALTHY",
+      "zone": "BACKSTOP",
       "pool": {
         "usdeReserve": 917431,
         "sailReserve": 109000,
@@ -88,7 +102,7 @@
         "lpAmount": 237170,
         "value": 1543159,
         "supply": 1530542,
-        "backingRatio": 100,
+        "backingRatio": 89,
         "rebaseIndex": 1018,
         "apy": 1
       },
@@ -107,12 +121,19 @@
         "spilloverToReserve": 0,
         "backstopFromReserve": 167013,
         "backstopFromJunior": 0
+      },
+      "fees": {
+        "managementFeeTokens": 1146,
+        "performanceFeeTokens": 277,
+        "totalFeesThisEpoch": 1424,
+        "cumulativeFees": 2901,
+        "feeYieldBps": 9
       }
     },
     {
       "epoch": 3,
       "timestamp": 7776001,
-      "zone": "HEALTHY",
+      "zone": "BACKSTOP",
       "pool": {
         "usdeReserve": 934579,
         "sailReserve": 107000,
@@ -124,7 +145,7 @@
         "lpAmount": 237170,
         "value": 1558756,
         "supply": 1546021,
-        "backingRatio": 100,
+        "backingRatio": 90,
         "rebaseIndex": 1028,
         "apy": 1
       },
@@ -143,12 +164,19 @@
         "spilloverToReserve": 0,
         "backstopFromReserve": 156887,
         "backstopFromJunior": 0
+      },
+      "fees": {
+        "managementFeeTokens": 1168,
+        "performanceFeeTokens": 280,
+        "totalFeesThisEpoch": 1448,
+        "cumulativeFees": 4350,
+        "feeYieldBps": 9
       }
     },
     {
       "epoch": 4,
       "timestamp": 10368001,
-      "zone": "HEALTHY",
+      "zone": "BACKSTOP",
       "pool": {
         "usdeReserve": 884955,
         "sailReserve": 113000,
@@ -160,7 +188,7 @@
         "lpAmount": 242189,
         "value": 1574521,
         "supply": 1561583,
-        "backingRatio": 100,
+        "backingRatio": 85,
         "rebaseIndex": 1037,
         "apy": 1
       },
@@ -179,12 +207,19 @@
         "spilloverToReserve": 0,
         "backstopFromReserve": 219001,
         "backstopFromJunior": 28086
+      },
+      "fees": {
+        "managementFeeTokens": 1106,
+        "performanceFeeTokens": 283,
+        "totalFeesThisEpoch": 1389,
+        "cumulativeFees": 5740,
+        "feeYieldBps": 8
       }
     },
     {
       "epoch": 5,
       "timestamp": 12960001,
-      "zone": "HEALTHY",
+      "zone": "BACKSTOP",
       "pool": {
         "usdeReserve": 854700,
         "sailReserve": 117000,
@@ -196,7 +231,7 @@
         "lpAmount": 294207,
         "value": 1590370,
         "supply": 1577275,
-        "backingRatio": 100,
+        "backingRatio": 83,
         "rebaseIndex": 1047,
         "apy": 1
       },
@@ -215,6 +250,13 @@
         "spilloverToReserve": 0,
         "backstopFromReserve": 0,
         "backstopFromJunior": 281192
+      },
+      "fees": {
+        "managementFeeTokens": 1090,
+        "performanceFeeTokens": 286,
+        "totalFeesThisEpoch": 1377,
+        "cumulativeFees": 7117,
+        "feeYieldBps": 8
       }
     },
     {
@@ -251,12 +293,19 @@
         "spilloverToReserve": 0,
         "backstopFromReserve": 0,
         "backstopFromJunior": 0
+      },
+      "fees": {
+        "managementFeeTokens": 1360,
+        "performanceFeeTokens": 341,
+        "totalFeesThisEpoch": 1701,
+        "cumulativeFees": 8819,
+        "feeYieldBps": 10
       }
     },
     {
       "epoch": 7,
       "timestamp": 18144001,
-      "zone": "HEALTHY",
+      "zone": "BACKSTOP",
       "pool": {
         "usdeReserve": 840336,
         "sailReserve": 119000,
@@ -268,7 +317,7 @@
         "lpAmount": 305844,
         "value": 1625486,
         "supply": 1612291,
-        "backingRatio": 100,
+        "backingRatio": 97,
         "rebaseIndex": 1069,
         "apy": 1
       },
@@ -287,12 +336,19 @@
         "spilloverToReserve": 0,
         "backstopFromReserve": 0,
         "backstopFromJunior": 61845
+      },
+      "fees": {
+        "managementFeeTokens": 1303,
+        "performanceFeeTokens": 292,
+        "totalFeesThisEpoch": 1595,
+        "cumulativeFees": 10414,
+        "feeYieldBps": 9
       }
     },
     {
       "epoch": 8,
       "timestamp": 20736001,
-      "zone": "HEALTHY",
+      "zone": "BACKSTOP",
       "pool": {
         "usdeReserve": 813008,
         "sailReserve": 123000,
@@ -304,7 +360,7 @@
         "lpAmount": 319338,
         "value": 1642012,
         "supply": 1628677,
-        "backingRatio": 100,
+        "backingRatio": 96,
         "rebaseIndex": 1079,
         "apy": 1
       },
@@ -323,6 +379,13 @@
         "spilloverToReserve": 0,
         "backstopFromReserve": 0,
         "backstopFromJunior": 69387
+      },
+      "fees": {
+        "managementFeeTokens": 1310,
+        "performanceFeeTokens": 295,
+        "totalFeesThisEpoch": 1606,
+        "cumulativeFees": 12020,
+        "feeYieldBps": 9
       }
     },
     {
@@ -359,12 +422,19 @@
         "spilloverToReserve": 0,
         "backstopFromReserve": 0,
         "backstopFromJunior": 0
+      },
+      "fees": {
+        "managementFeeTokens": 1390,
+        "performanceFeeTokens": 352,
+        "totalFeesThisEpoch": 1743,
+        "cumulativeFees": 13764,
+        "feeYieldBps": 10
       }
     },
     {
       "epoch": 10,
       "timestamp": 25920001,
-      "zone": "HEALTHY",
+      "zone": "BACKSTOP",
       "pool": {
         "usdeReserve": 787401,
         "sailReserve": 127000,
@@ -376,7 +446,7 @@
         "lpAmount": 337039,
         "value": 1678445,
         "supply": 1664799,
-        "backingRatio": 100,
+        "backingRatio": 95,
         "rebaseIndex": 1101,
         "apy": 1
       },
@@ -395,12 +465,19 @@
         "spilloverToReserve": 0,
         "backstopFromReserve": 0,
         "backstopFromJunior": 88149
+      },
+      "fees": {
+        "managementFeeTokens": 1325,
+        "performanceFeeTokens": 302,
+        "totalFeesThisEpoch": 1627,
+        "cumulativeFees": 15392,
+        "feeYieldBps": 9
       }
     },
     {
       "epoch": 11,
       "timestamp": 28512001,
-      "zone": "HEALTHY",
+      "zone": "BACKSTOP",
       "pool": {
         "usdeReserve": 763358,
         "sailReserve": 131000,
@@ -412,7 +489,7 @@
         "lpAmount": 351185,
         "value": 1695489,
         "supply": 1681722,
-        "backingRatio": 100,
+        "backingRatio": 96,
         "rebaseIndex": 1111,
         "apy": 1
       },
@@ -431,6 +508,13 @@
         "spilloverToReserve": 0,
         "backstopFromReserve": 0,
         "backstopFromJunior": 68293
+      },
+      "fees": {
+        "managementFeeTokens": 1355,
+        "performanceFeeTokens": 305,
+        "totalFeesThisEpoch": 1661,
+        "cumulativeFees": 17053,
+        "feeYieldBps": 9
       }
     },
     {
@@ -467,6 +551,13 @@
         "spilloverToReserve": 0,
         "backstopFromReserve": 0,
         "backstopFromJunior": 0
+      },
+      "fees": {
+        "managementFeeTokens": 1423,
+        "performanceFeeTokens": 364,
+        "totalFeesThisEpoch": 1788,
+        "cumulativeFees": 18841,
+        "feeYieldBps": 10
       }
     }
   ]

@@ -35,6 +35,13 @@
         "spilloverToReserve": 0,
         "backstopFromReserve": 0,
         "backstopFromJunior": 0
+      },
+      "fees": {
+        "managementFeeTokens": 0,
+        "performanceFeeTokens": 0,
+        "totalFeesThisEpoch": 0,
+        "cumulativeFees": 0,
+        "feeYieldBps": 0
       }
     },
     {
@@ -50,27 +57,34 @@
       },
       "senior": {
         "lpAmount": 237170,
-        "value": 1527651,
-        "supply": 1515215,
-        "backingRatio": 94,
+        "value": 1639679,
+        "supply": 1626244,
+        "backingRatio": 87,
         "rebaseIndex": 1009,
         "apy": 1
       },
       "junior": {
         "lpAmount": 237170,
-        "value": 1428571,
-        "shares": 1500000
+        "value": 1427652,
+        "shares": 1554000
       },
       "reserve": {
-        "sailAmount": 64076,
-        "value": 581191,
-        "shares": 750000
+        "sailAmount": 59725,
+        "value": 541726,
+        "shares": 830000
       },
       "transfers": {
         "spilloverToJunior": 0,
         "spilloverToReserve": 0,
-        "backstopFromReserve": 99080,
+        "backstopFromReserve": 211108,
         "backstopFromJunior": 0
+      },
+      "fees": {
+        "managementFeeTokens": 1190,
+        "performanceFeeTokens": 295,
+        "totalFeesThisEpoch": 1485,
+        "cumulativeFees": 1485,
+        "feeYieldBps": 9
       }
     },
     {
@@ -86,27 +100,34 @@
       },
       "senior": {
         "lpAmount": 237170,
-        "value": 1543148,
-        "supply": 1530509,
-        "backingRatio": 88,
+        "value": 1653168,
+        "supply": 1639546,
+        "backingRatio": 82,
         "rebaseIndex": 1018,
         "apy": 1
       },
       "junior": {
         "lpAmount": 237170,
         "value": 1351351,
-        "shares": 1500000
+        "shares": 1554000
       },
       "reserve": {
-        "sailAmount": 40445,
-        "value": 328261,
-        "shares": 750000
+        "sailAmount": 22168,
+        "value": 179927,
+        "shares": 830000
       },
       "transfers": {
         "spilloverToJunior": 0,
         "spilloverToReserve": 0,
-        "backstopFromReserve": 191796,
+        "backstopFromReserve": 304816,
         "backstopFromJunior": 0
+      },
+      "fees": {
+        "managementFeeTokens": 1123,
+        "performanceFeeTokens": 297,
+        "totalFeesThisEpoch": 1421,
+        "cumulativeFees": 2906,
+        "feeYieldBps": 8
       }
     },
     {
@@ -121,28 +142,35 @@
         "totalLPSupply": 316227
       },
       "senior": {
-        "lpAmount": 237170,
-        "value": 1558724,
-        "supply": 1545978,
-        "backingRatio": 89,
+        "lpAmount": 252679,
+        "value": 1669770,
+        "supply": 1656033,
+        "backingRatio": 83,
         "rebaseIndex": 1028,
         "apy": 1
       },
       "junior": {
-        "lpAmount": 237170,
-        "value": 1388888,
-        "shares": 1500000
+        "lpAmount": 221662,
+        "value": 1298069,
+        "shares": 1554000
       },
       "reserve": {
-        "sailAmount": 20635,
-        "value": 176916,
-        "shares": 750000
+        "sailAmount": 0,
+        "value": 0,
+        "shares": 830000
       },
       "transfers": {
         "spilloverToJunior": 0,
         "spilloverToReserve": 0,
-        "backstopFromReserve": 169835,
-        "backstopFromJunior": 0
+        "backstopFromReserve": 190062,
+        "backstopFromJunior": 90819
+      },
+      "fees": {
+        "managementFeeTokens": 1157,
+        "performanceFeeTokens": 300,
+        "totalFeesThisEpoch": 1458,
+        "cumulativeFees": 4364,
+        "feeYieldBps": 8
       }
     },
     {
@@ -157,28 +185,35 @@
         "totalLPSupply": 316227
       },
       "senior": {
-        "lpAmount": 257916,
-        "value": 1574477,
-        "supply": 1561520,
+        "lpAmount": 306669,
+        "value": 1686561,
+        "supply": 1672676,
         "backingRatio": 83,
         "rebaseIndex": 1037,
         "apy": 1
       },
       "junior": {
-        "lpAmount": 216424,
-        "value": 1190252,
-        "shares": 1500000
+        "lpAmount": 167672,
+        "value": 914289,
+        "shares": 1544000
       },
       "reserve": {
         "sailAmount": 0,
         "value": 0,
-        "shares": 750000
+        "shares": 830000
       },
       "transfers": {
         "spilloverToJunior": 0,
         "spilloverToReserve": 0,
-        "backstopFromReserve": 156034,
-        "backstopFromJunior": 114095
+        "backstopFromReserve": 0,
+        "backstopFromJunior": 296922
+      },
+      "fees": {
+        "managementFeeTokens": 1158,
+        "performanceFeeTokens": 303,
+        "totalFeesThisEpoch": 1461,
+        "cumulativeFees": 5826,
+        "feeYieldBps": 8
       }
     },
     {
@@ -193,28 +228,35 @@
         "totalLPSupply": 316227
       },
       "senior": {
-        "lpAmount": 299224,
-        "value": 1590306,
-        "supply": 1577263,
-        "backingRatio": 86,
+        "lpAmount": 320525,
+        "value": 1703511,
+        "supply": 1689674,
+        "backingRatio": 96,
         "rebaseIndex": 1047,
         "apy": 1
       },
       "junior": {
-        "lpAmount": 175116,
-        "value": 930702,
-        "shares": 1500000
+        "lpAmount": 153816,
+        "value": 817497,
+        "shares": 1544000
       },
       "reserve": {
         "sailAmount": 0,
         "value": 0,
-        "shares": 750000
+        "shares": 830000
       },
       "transfers": {
         "spilloverToJunior": 0,
         "spilloverToReserve": 0,
         "backstopFromReserve": 0,
-        "backstopFromJunior": 219541
+        "backstopFromJunior": 73640
+      },
+      "fees": {
+        "managementFeeTokens": 1358,
+        "performanceFeeTokens": 306,
+        "totalFeesThisEpoch": 1664,
+        "cumulativeFees": 7491,
+        "feeYieldBps": 9
       }
     },
     {
@@ -229,28 +271,35 @@
         "totalLPSupply": 316227
       },
       "senior": {
-        "lpAmount": 299224,
-        "value": 1617491,
-        "supply": 1596039,
+        "lpAmount": 320525,
+        "value": 1732631,
+        "supply": 1709788,
         "backingRatio": 101,
         "rebaseIndex": 1059,
         "apy": 3
       },
       "junior": {
-        "lpAmount": 175116,
-        "value": 946611,
-        "shares": 1500000
+        "lpAmount": 153816,
+        "value": 831471,
+        "shares": 1544000
       },
       "reserve": {
         "sailAmount": 0,
         "value": 0,
-        "shares": 750000
+        "shares": 830000
       },
       "transfers": {
         "spilloverToJunior": 0,
         "spilloverToReserve": 0,
         "backstopFromReserve": 0,
         "backstopFromJunior": 0
+      },
+      "fees": {
+        "managementFeeTokens": 1443,
+        "performanceFeeTokens": 366,
+        "totalFeesThisEpoch": 1809,
+        "cumulativeFees": 9301,
+        "feeYieldBps": 10
       }
     },
     {
@@ -265,28 +314,35 @@
         "totalLPSupply": 316227
       },
       "senior": {
-        "lpAmount": 321260,
-        "value": 1625461,
-        "supply": 1612224,
+        "lpAmount": 344156,
+        "value": 1741307,
+        "supply": 1727127,
         "backingRatio": 93,
         "rebaseIndex": 1069,
         "apy": 1
       },
       "junior": {
-        "lpAmount": 153081,
-        "value": 774538,
-        "shares": 1500000
+        "lpAmount": 130185,
+        "value": 657684,
+        "shares": 1542000
       },
       "reserve": {
         "sailAmount": 0,
         "value": 0,
-        "shares": 750000
+        "shares": 830000
       },
       "transfers": {
         "spilloverToJunior": 0,
         "spilloverToReserve": 0,
         "backstopFromReserve": 0,
-        "backstopFromJunior": 111490
+        "backstopFromJunior": 119565
+      },
+      "fees": {
+        "managementFeeTokens": 1351,
+        "performanceFeeTokens": 313,
+        "totalFeesThisEpoch": 1664,
+        "cumulativeFees": 10966,
+        "feeYieldBps": 9
       }
     },
     {
@@ -301,28 +357,35 @@
         "totalLPSupply": 316227
       },
       "senior": {
-        "lpAmount": 337498,
-        "value": 1641945,
-        "supply": 1628602,
+        "lpAmount": 361552,
+        "value": 1758966,
+        "supply": 1744671,
         "backingRatio": 96,
         "rebaseIndex": 1079,
         "apy": 1
       },
       "junior": {
-        "lpAmount": 136842,
-        "value": 665746,
-        "shares": 1500000
+        "lpAmount": 112789,
+        "value": 548726,
+        "shares": 1542000
       },
       "reserve": {
         "sailAmount": 0,
         "value": 0,
-        "shares": 750000
+        "shares": 830000
       },
       "transfers": {
         "spilloverToJunior": 0,
         "spilloverToReserve": 0,
         "backstopFromReserve": 0,
-        "backstopFromJunior": 79001
+        "backstopFromJunior": 84631
+      },
+      "fees": {
+        "managementFeeTokens": 1395,
+        "performanceFeeTokens": 316,
+        "totalFeesThisEpoch": 1711,
+        "cumulativeFees": 12678,
+        "feeYieldBps": 9
       }
     },
     {
@@ -337,28 +400,35 @@
         "totalLPSupply": 316227
       },
       "senior": {
-        "lpAmount": 337498,
-        "value": 1694070,
-        "supply": 1648009,
+        "lpAmount": 361552,
+        "value": 1834806,
+        "supply": 1785699,
         "backingRatio": 102,
         "rebaseIndex": 1091,
         "apy": 3
       },
       "junior": {
-        "lpAmount": 136842,
-        "value": 686881,
-        "shares": 1500000
+        "lpAmount": 112789,
+        "value": 566146,
+        "shares": 1542000
       },
       "reserve": {
         "sailAmount": 0,
         "value": 0,
-        "shares": 750000
+        "shares": 830000
       },
       "transfers": {
         "spilloverToJunior": 0,
         "spilloverToReserve": 0,
         "backstopFromReserve": 0,
         "backstopFromJunior": 0
+      },
+      "fees": {
+        "managementFeeTokens": 1529,
+        "performanceFeeTokens": 382,
+        "totalFeesThisEpoch": 1911,
+        "cumulativeFees": 14589,
+        "feeYieldBps": 10
       }
     },
     {
@@ -373,28 +443,35 @@
         "totalLPSupply": 316227
       },
       "senior": {
-        "lpAmount": 350297,
-        "value": 1678389,
-        "supply": 1664766,
-        "backingRatio": 97,
+        "lpAmount": 379564,
+        "value": 1818618,
+        "supply": 1803840,
+        "backingRatio": 96,
         "rebaseIndex": 1101,
         "apy": 1
       },
       "junior": {
-        "lpAmount": 124044,
-        "value": 594337,
-        "shares": 1500000
+        "lpAmount": 94777,
+        "value": 454108,
+        "shares": 1542000
       },
       "reserve": {
         "sailAmount": 0,
         "value": 0,
-        "shares": 750000
+        "shares": 827000
       },
       "transfers": {
         "spilloverToJunior": 0,
         "spilloverToReserve": 0,
         "backstopFromReserve": 0,
-        "backstopFromJunior": 61322
+        "backstopFromJunior": 86303
+      },
+      "fees": {
+        "managementFeeTokens": 1443,
+        "performanceFeeTokens": 327,
+        "totalFeesThisEpoch": 1770,
+        "cumulativeFees": 16360,
+        "feeYieldBps": 9
       }
     },
     {
@@ -409,28 +486,35 @@
         "totalLPSupply": 316227
       },
       "senior": {
-        "lpAmount": 375305,
-        "value": 1695455,
-        "supply": 1681651,
+        "lpAmount": 406657,
+        "value": 1837093,
+        "supply": 1822135,
         "backingRatio": 94,
         "rebaseIndex": 1111,
         "apy": 1
       },
       "junior": {
-        "lpAmount": 99036,
-        "value": 447401,
-        "shares": 1500000
+        "lpAmount": 67683,
+        "value": 305763,
+        "shares": 1542000
       },
       "reserve": {
         "sailAmount": 0,
         "value": 0,
-        "shares": 750000
+        "shares": 827000
       },
       "transfers": {
         "spilloverToJunior": 0,
         "spilloverToReserve": 0,
         "backstopFromReserve": 0,
-        "backstopFromJunior": 112973
+        "backstopFromJunior": 122395
+      },
+      "fees": {
+        "managementFeeTokens": 1428,
+        "performanceFeeTokens": 330,
+        "totalFeesThisEpoch": 1759,
+        "cumulativeFees": 18120,
+        "feeYieldBps": 9
       }
     },
     {
@@ -445,28 +529,35 @@
         "totalLPSupply": 316227
       },
       "senior": {
-        "lpAmount": 389943,
-        "value": 1712651,
-        "supply": 1698748,
+        "lpAmount": 422519,
+        "value": 1855725,
+        "supply": 1840661,
         "backingRatio": 97,
         "rebaseIndex": 1121,
         "apy": 1
       },
       "junior": {
-        "lpAmount": 84398,
-        "value": 370681,
-        "shares": 1500000
+        "lpAmount": 51822,
+        "value": 257607,
+        "shares": 1697615
       },
       "reserve": {
         "sailAmount": 0,
         "value": 0,
-        "shares": 750000
+        "shares": 827000
       },
       "transfers": {
         "spilloverToJunior": 0,
         "spilloverToReserve": 0,
         "backstopFromReserve": 0,
-        "backstopFromJunior": 64292
+        "backstopFromJunior": 69663
+      },
+      "fees": {
+        "managementFeeTokens": 1488,
+        "performanceFeeTokens": 334,
+        "totalFeesThisEpoch": 1822,
+        "cumulativeFees": 19942,
+        "feeYieldBps": 9
       }
     }
   ]
