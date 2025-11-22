@@ -87,9 +87,6 @@ abstract contract UnifiedSeniorVault is ISeniorVault, IERC20, AdminControlled, P
     /// @dev Reference: Parameters (τ - cooldown period = 7 days)
     mapping(address => uint256) internal _cooldownStart; // t_c^(i) - user cooldown time
     
-    /// @dev Whitelisted depositors
-    mapping(address => bool) internal _whitelistedDepositors;
-    
     /// @dev Whitelisted LPs (Liquidity Providers/Protocols) Kodiak hook should be here.
     address[] internal _whitelistedLPs;
     address[] internal _whitelistedLPTokens;
@@ -127,8 +124,6 @@ abstract contract UnifiedSeniorVault is ISeniorVault, IERC20, AdminControlled, P
     /// @dev Events (ERC20 Transfer and Approval inherited from IERC20)
     event Rebase(uint256 indexed epoch, uint256 oldIndex, uint256 newIndex, uint256 newTotalSupply);
     event EmergencyWithdraw(address indexed to, uint256 amount);
-    event DepositorWhitelisted(address indexed depositor);
-    event DepositorRemoved(address indexed depositor);
     event MinRebaseIntervalUpdated(uint256 oldInterval, uint256 newInterval);
     event LPInvestment(address indexed lp, uint256 amount);
     event LPTokensWithdrawn(address indexed lpToken, address indexed lp, uint256 amount);
@@ -173,7 +168,6 @@ abstract contract UnifiedSeniorVault is ISeniorVault, IERC20, AdminControlled, P
     error InvalidRecipient();
     error InsufficientAllowance();
     error JuniorReserveAlreadySet();
-    error OnlyWhitelistedDepositor();
     error WhitelistedLPNotFound();
     error LPAlreadyWhitelisted();
     error WrongVault();
@@ -189,11 +183,6 @@ abstract contract UnifiedSeniorVault is ISeniorVault, IERC20, AdminControlled, P
     /// @dev Modifiers
     modifier whenNotPausedOrAdmin() {
         if (paused() && msg.sender != admin()) revert EnforcedPause();
-        _;
-    }
-    
-    modifier onlyWhitelisted() {
-        if (!_whitelistedDepositors[msg.sender]) revert OnlyWhitelistedDepositor();
         _;
     }
     
@@ -269,30 +258,6 @@ abstract contract UnifiedSeniorVault is ISeniorVault, IERC20, AdminControlled, P
         _reserveVault = IReserveVault(reserveVault_);
     }
     
-    /**
-     * @notice Add address to whitelist for deposits
-     * @dev Only admin can whitelist depositors
-     * @param depositor Address to whitelist
-     */
-    function addWhitelistedDepositor(address depositor) external onlyAdmin {
-        if (depositor == address(0)) revert AdminControlled.ZeroAddress();
-        _whitelistedDepositors[depositor] = true;
-        emit DepositorWhitelisted(depositor);
-    }
-    
-    /**
-     * @notice Remove address from whitelist
-     * @dev Only admin can remove depositors
-     * @param depositor Address to remove
-     */
-    function removeWhitelistedDepositor(address depositor) external onlyAdmin {
-        _whitelistedDepositors[depositor] = false;
-        emit DepositorRemoved(depositor);
-    }
-
-
-
-
     /**
      * @notice Add LP to whitelist
      * @dev Only admin can whitelist LPs
@@ -389,38 +354,6 @@ abstract contract UnifiedSeniorVault is ISeniorVault, IERC20, AdminControlled, P
         return _whitelistedLPs;
     }
     
-    /**
-     * @notice Get vault's LP holdings for all whitelisted LPs
-     * @dev Returns array of LP tokens and their balances held by this vault
-     * @return holdings Array of LPHolding structs containing LP address and amount
-     */
-    function getLPHoldings() external view returns (LPHolding[] memory holdings) {
-        uint256 lpCount = _whitelistedLPs.length;
-        holdings = new LPHolding[](lpCount);
-        
-        for (uint256 i = 0; i < lpCount; i++) {
-            address lpToken = _whitelistedLPs[i];
-            uint256 balance = IERC20(lpToken).balanceOf(address(this));
-            
-            holdings[i] = LPHolding({
-                lpToken: lpToken,
-                amount: balance
-            });
-        }
-        
-        return holdings;
-    }
-    
-    /**
-     * @notice Get vault's balance of a specific LP token
-     * @dev Gas-efficient way to check single LP balance
-     * @param lpToken Address of the LP token to check
-     * @return balance Amount of LP tokens held by this vault
-     */
-    function getLPBalance(address lpToken) external view returns (uint256) {
-        return IERC20(lpToken).balanceOf(address(this));
-    }
-
     // ============================================
     // LP Token Management
     // ============================================
@@ -659,15 +592,6 @@ abstract contract UnifiedSeniorVault is ISeniorVault, IERC20, AdminControlled, P
     }
     
     /**
-     * @notice Check if address is whitelisted
-     * @param depositor Address to check
-     * @return isWhitelisted True if address can deposit
-     */
-    function isWhitelistedDepositor(address depositor) external view returns (bool) {
-        return _whitelistedDepositors[depositor];
-    }
-    
-    /**
      * @notice Update the minimum rebase interval
      * @dev Only admin can update this value
      * @param newInterval New minimum time between rebases (in seconds)
@@ -773,28 +697,28 @@ abstract contract UnifiedSeniorVault is ISeniorVault, IERC20, AdminControlled, P
      * @param lpPrice Price of LP token in USD (18 decimals)
      */
     function approveLPDeposit(uint256 depositId, uint256 lpPrice) external onlyAdmin {
-        PendingLPDeposit storage deposit = _pendingDeposits[depositId];
+        PendingLPDeposit storage pendingDeposit = _pendingDeposits[depositId];
         
-        if (deposit.depositor == address(0)) revert DepositNotFound();
-        if (deposit.status != DepositStatus.PENDING) revert DepositNotPending();
-        if (block.timestamp > deposit.expiresAt) revert DepositExpired();
+        if (pendingDeposit.depositor == address(0)) revert DepositNotFound();
+        if (pendingDeposit.status != DepositStatus.PENDING) revert DepositNotPending();
+        if (block.timestamp > pendingDeposit.expiresAt) revert DepositExpired();
         if (lpPrice == 0) revert InvalidLPPrice();
         
         // Calculate value and shares (Senior: 1:1 with USD)
-        uint256 valueAdded = (deposit.amount * lpPrice) / 1e18;
+        uint256 valueAdded = (pendingDeposit.amount * lpPrice) / 1e18;
         uint256 sharesToMint = valueAdded; // Senior mints 1:1
         
         // Mint shares to depositor
-        _mint(deposit.depositor, sharesToMint);
+        _mint(pendingDeposit.depositor, sharesToMint);
         
         // Update vault value
         _vaultValue += valueAdded;
         _lastUpdateTime = block.timestamp;
         
         // Update status
-        deposit.status = DepositStatus.APPROVED;
+        pendingDeposit.status = DepositStatus.APPROVED;
         
-        emit PendingLPDepositApproved(depositId, deposit.depositor, lpPrice, sharesToMint);
+        emit PendingLPDepositApproved(depositId, pendingDeposit.depositor, lpPrice, sharesToMint);
     }
     
     /**
@@ -804,18 +728,18 @@ abstract contract UnifiedSeniorVault is ISeniorVault, IERC20, AdminControlled, P
      * @param reason Reason for rejection
      */
     function rejectLPDeposit(uint256 depositId, string calldata reason) external onlyAdmin {
-        PendingLPDeposit storage deposit = _pendingDeposits[depositId];
+        PendingLPDeposit storage pendingDeposit = _pendingDeposits[depositId];
         
-        if (deposit.depositor == address(0)) revert DepositNotFound();
-        if (deposit.status != DepositStatus.PENDING) revert DepositNotPending();
+        if (pendingDeposit.depositor == address(0)) revert DepositNotFound();
+        if (pendingDeposit.status != DepositStatus.PENDING) revert DepositNotPending();
         
         // Transfer LP back from hook to depositor
-        kodiakHook.transferIslandLP(deposit.depositor, deposit.amount);
+        kodiakHook.transferIslandLP(pendingDeposit.depositor, pendingDeposit.amount);
         
         // Update status
-        deposit.status = DepositStatus.REJECTED;
+        pendingDeposit.status = DepositStatus.REJECTED;
         
-        emit PendingLPDepositRejected(depositId, deposit.depositor, reason);
+        emit PendingLPDepositRejected(depositId, pendingDeposit.depositor, reason);
     }
     
     /**
@@ -824,19 +748,19 @@ abstract contract UnifiedSeniorVault is ISeniorVault, IERC20, AdminControlled, P
      * @param depositId ID of pending deposit
      */
     function cancelPendingDeposit(uint256 depositId) external {
-        PendingLPDeposit storage deposit = _pendingDeposits[depositId];
+        PendingLPDeposit storage pendingDeposit = _pendingDeposits[depositId];
         
-        if (deposit.depositor == address(0)) revert DepositNotFound();
-        if (deposit.depositor != msg.sender) revert NotDepositor();
-        if (deposit.status != DepositStatus.PENDING) revert DepositNotPending();
+        if (pendingDeposit.depositor == address(0)) revert DepositNotFound();
+        if (pendingDeposit.depositor != msg.sender) revert NotDepositor();
+        if (pendingDeposit.status != DepositStatus.PENDING) revert DepositNotPending();
         
         // Transfer LP back from hook to depositor
-        kodiakHook.transferIslandLP(deposit.depositor, deposit.amount);
+        kodiakHook.transferIslandLP(pendingDeposit.depositor, pendingDeposit.amount);
         
         // Update status
-        deposit.status = DepositStatus.CANCELLED;
+        pendingDeposit.status = DepositStatus.CANCELLED;
         
-        emit PendingLPDepositCancelled(depositId, deposit.depositor);
+        emit PendingLPDepositCancelled(depositId, pendingDeposit.depositor);
     }
     
     /**
@@ -845,19 +769,19 @@ abstract contract UnifiedSeniorVault is ISeniorVault, IERC20, AdminControlled, P
      * @param depositId ID of pending deposit
      */
     function claimExpiredDeposit(uint256 depositId) external {
-        PendingLPDeposit storage deposit = _pendingDeposits[depositId];
+        PendingLPDeposit storage pendingDeposit = _pendingDeposits[depositId];
         
-        if (deposit.depositor == address(0)) revert DepositNotFound();
-        if (deposit.status != DepositStatus.PENDING) revert DepositNotPending();
-        if (block.timestamp <= deposit.expiresAt) revert DepositNotExpired();
+        if (pendingDeposit.depositor == address(0)) revert DepositNotFound();
+        if (pendingDeposit.status != DepositStatus.PENDING) revert DepositNotPending();
+        if (block.timestamp <= pendingDeposit.expiresAt) revert DepositNotExpired();
         
         // Transfer LP back from hook to original depositor
-        kodiakHook.transferIslandLP(deposit.depositor, deposit.amount);
+        kodiakHook.transferIslandLP(pendingDeposit.depositor, pendingDeposit.amount);
         
         // Update status
-        deposit.status = DepositStatus.EXPIRED;
+        pendingDeposit.status = DepositStatus.EXPIRED;
         
-        emit PendingLPDepositExpired(depositId, deposit.depositor);
+        emit PendingLPDepositExpired(depositId, pendingDeposit.depositor);
     }
     
     /**
@@ -872,14 +796,14 @@ abstract contract UnifiedSeniorVault is ISeniorVault, IERC20, AdminControlled, P
         uint256 expiresAt,
         DepositStatus status
     ) {
-        PendingLPDeposit memory deposit = _pendingDeposits[depositId];
+        PendingLPDeposit memory pendingDeposit = _pendingDeposits[depositId];
         return (
-            deposit.depositor,
-            deposit.lpToken,
-            deposit.amount,
-            deposit.timestamp,
-            deposit.expiresAt,
-            deposit.status
+            pendingDeposit.depositor,
+            pendingDeposit.lpToken,
+            pendingDeposit.amount,
+            pendingDeposit.timestamp,
+            pendingDeposit.expiresAt,
+            pendingDeposit.status
         );
     }
     

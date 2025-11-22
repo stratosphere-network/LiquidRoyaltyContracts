@@ -42,19 +42,16 @@ abstract contract BaseVault is ERC4626Upgradeable, IVault, AdminControlled, UUPS
     /// @dev Stablecoin held by vault (the "asset" in ERC4626 terms)
     IERC20 internal _stablecoin;
     
-    /// @dev Whitelisted LPs (Liquidity Providers/Protocols)
+    /// @dev Whitelisted LPs (Liquidity Pools/Protocols/Kodiak Islands)
     address[] internal _whitelistedLPs;
     mapping(address => bool) internal _isWhitelistedLP;
     
-    /// @dev Whitelisted LP Tokens (ERC20 tokens received from LPs)
+    /// @dev Whitelisted LP Tokens (ERC20 tokens received from LPs/Kodiak Islands)
     address[] internal _whitelistedLPTokens;
     mapping(address => bool) internal _isWhitelistedLPToken;
     
-    /// @dev Senior vault address (for circular dependency fix)
+    /// @dev Senior vault address )
     address internal _seniorVault;
-    
-    /// @dev Whitelisted depositors
-    mapping(address => bool) internal _whitelistedDepositors;
     
     /// @dev Kodiak integration
     IKodiakVaultHook public kodiakHook;
@@ -71,8 +68,6 @@ abstract contract BaseVault is ERC4626Upgradeable, IVault, AdminControlled, UUPS
     int256 internal constant MAX_PROFIT_BPS = 10000;  // +100% maximum
     
     /// @dev Events
-    event DepositorWhitelisted(address indexed depositor);
-    event DepositorRemoved(address indexed depositor);
     event WhitelistedLPAdded(address indexed lp);
     event WhitelistedLPRemoved(address indexed lp);
     event WhitelistedLPTokenAdded(address indexed lpToken);
@@ -136,7 +131,6 @@ abstract contract BaseVault is ERC4626Upgradeable, IVault, AdminControlled, UUPS
     error InvalidProfitRange();
     error SeniorVaultAlreadySet();
     error OnlySeniorVault();
-    error OnlyWhitelistedDepositor();
     error WhitelistedLPNotFound();
     error LPAlreadyWhitelisted();
     error KodiakHookNotSet();
@@ -152,11 +146,6 @@ abstract contract BaseVault is ERC4626Upgradeable, IVault, AdminControlled, UUPS
     /// @dev Modifiers
     modifier onlySeniorVault() {
         if (msg.sender != _seniorVault) revert OnlySeniorVault();
-        _;
-    }
-    
-    modifier onlyWhitelisted() {
-        if (!_whitelistedDepositors[msg.sender]) revert OnlyWhitelistedDepositor();
         _;
     }
     
@@ -193,14 +182,14 @@ abstract contract BaseVault is ERC4626Upgradeable, IVault, AdminControlled, UUPS
     
 
     /**
-     * @notice Add LP protocol to whitelist
-     * @dev Only admin can whitelist LP protocols
-     * @param lp Address of LP protocol to whitelist
+     * @notice Add LP pool/protocol/Kodiak Island to whitelist
+     * @dev Only admin can whitelist Liquidity Pools/Protocols/Kodiak Islands
+     * @param lp Address of Liquidity Pool/Protocol/Kodiak Island to whitelist
      */
     function addWhitelistedLP(address lp) external onlyAdmin {
         if (lp == address(0)) revert AdminControlled.ZeroAddress();
         if (_isWhitelistedLP[lp]) revert LPAlreadyWhitelisted();
-        
+         
         _whitelistedLPs.push(lp);
         _isWhitelistedLP[lp] = true;
         
@@ -208,9 +197,9 @@ abstract contract BaseVault is ERC4626Upgradeable, IVault, AdminControlled, UUPS
     }
 
     /**
-     * @notice Remove LP protocol from whitelist
-     * @dev Only admin can remove LP protocols
-     * @param lp Address of LP protocol to remove
+     * @notice Remove LP pool/protocol/Kodiak Island from whitelist
+     * @dev Only admin can remove Liquidity Pools/Protocols/Kodiak Islands
+     * @param lp Address of Liquidity Pool/Protocol/Kodiak Island to remove
      */
     function removeWhitelistedLP(address lp) external onlyAdmin {
         if (lp == address(0)) revert AdminControlled.ZeroAddress();
@@ -232,17 +221,17 @@ abstract contract BaseVault is ERC4626Upgradeable, IVault, AdminControlled, UUPS
     }
     
     /**
-     * @notice Check if LP protocol is whitelisted
+     * @notice Check if LP pool/protocol/Kodiak Island is whitelisted
      * @param lp Address to check
-     * @return isWhitelisted True if LP protocol is whitelisted
+     * @return isWhitelisted True if LP pool/protocol/Kodiak Island  is whitelisted
      */
     function isWhitelistedLP(address lp) external view returns (bool) {
         return _isWhitelistedLP[lp];
     }
     
     /**
-     * @notice Get all whitelisted LP protocols
-     * @return lps Array of whitelisted LP protocol addresses
+     * @notice Get all whitelisted LP pools/protocols/Kodiak Islands
+     * @return lps Array of whitelisted LP pools/protocols/Kodiak Islands addresses
      */
     function getWhitelistedLPs() external view returns (address[] memory) {
         return _whitelistedLPs;
@@ -556,36 +545,6 @@ abstract contract BaseVault is ERC4626Upgradeable, IVault, AdminControlled, UUPS
         if (seniorVault_ == address(0)) revert AdminControlled.ZeroAddress();
         
         _seniorVault = seniorVault_;
-    }
-    
-    /**
-     * @notice Add address to whitelist for deposits
-     * @dev Only admin can whitelist depositors
-     * @param depositor Address to whitelist
-     */
-    function addWhitelistedDepositor(address depositor) external onlyAdmin {
-        if (depositor == address(0)) revert AdminControlled.ZeroAddress();
-        _whitelistedDepositors[depositor] = true;
-        emit DepositorWhitelisted(depositor);
-    }
-    
-    /**
-     * @notice Remove address from whitelist
-     * @dev Only admin can remove depositors
-     * @param depositor Address to remove
-     */
-    function removeWhitelistedDepositor(address depositor) external onlyAdmin {
-        _whitelistedDepositors[depositor] = false;
-        emit DepositorRemoved(depositor);
-    }
-    
-    /**
-     * @notice Check if address is whitelisted
-     * @param depositor Address to check
-     * @return isWhitelisted True if address can deposit
-     */
-    function isWhitelistedDepositor(address depositor) external view returns (bool) {
-        return _whitelistedDepositors[depositor];
     }
     
     // ============================================
