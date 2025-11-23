@@ -12,7 +12,9 @@ import {Initializable} from "@openzeppelin/contracts-upgradeable/proxy/utils/Ini
  * @dev Upgradeable version using Initializable
  */
 abstract contract AdminControlled is Initializable {
-    /// @dev Roles
+    /// @dev Roles (ORIGINAL - DO NOT MODIFY ORDER)
+    /// NEVER add new storage variables here - it will break all inheriting contracts!
+    /// Add new storage only in concrete contracts at the END
     address private _deployer;
     address private _admin;
     mapping(address => bool) private _seeders;
@@ -22,15 +24,26 @@ abstract contract AdminControlled is Initializable {
     event AdminTransferred(address indexed previousAdmin, address indexed newAdmin);
     event SeederAdded(address indexed seeder);
     event SeederRevoked(address indexed seeder);
-    
+    event LiquidityManagerSet(address indexed liquidityManager);
+    event PriceFeedManagerSet(address indexed priceFeedManager);
+    event ContractUpdaterSet(address indexed contractUpdater);
     /// @dev Errors
     error OnlyDeployer();
     error OnlyAdmin();
     error OnlySeeder();
     error ZeroAddress();
     error AdminAlreadySet();
+    error LiquidityManagerAlreadySet();
+    error PriceFeedManagerAlreadySet();
+    error ContractUpdaterAlreadySet();
     error SeederAlreadyAdded();
     error SeederNotFound();
+    error LiquidityManagerNotSet();
+    error PriceFeedManagerNotSet();
+    error ContractUpdaterNotSet();
+    error OnlyLiquidityManager();
+    error OnlyPriceFeedManager();
+    error OnlyContractUpdater();
     
     /// @dev Modifiers
     modifier onlyDeployer() {
@@ -47,7 +60,21 @@ abstract contract AdminControlled is Initializable {
         if (!_seeders[msg.sender]) revert OnlySeeder();
         _;
     }
-    
+
+    modifier onlyLiquidityManager() {
+        if (msg.sender != liquidityManager()) revert OnlyLiquidityManager();
+        _;
+    }
+
+    modifier onlyPriceFeedManager() {
+        if (msg.sender != priceFeedManager()) revert OnlyPriceFeedManager();
+        _;
+    }
+
+    modifier onlyContractUpdater() {
+        if (msg.sender != contractUpdater()) revert OnlyContractUpdater();
+        _;
+    }
     /**
      * @notice Initialize with deployer (replaces constructor)
      * @dev Deployer is set to msg.sender, admin must be set separately
@@ -55,6 +82,7 @@ abstract contract AdminControlled is Initializable {
     function __AdminControlled_init() internal onlyInitializing {
         _deployer = msg.sender;
     }
+    
     
     /**
      * @notice Set admin address (one-time operation by deployer)
@@ -135,6 +163,34 @@ abstract contract AdminControlled is Initializable {
      */
     function isSeeder(address account) public view returns (bool) {
         return _seeders[account];
+    }
+    
+    // ============================================
+    // Role Management (Virtual - Implemented in Concrete Contracts)
+    // ============================================
+    
+    /**
+     * @notice Get liquidity manager address
+     * @dev Must be overridden in concrete contracts
+     */
+    function liquidityManager() public view virtual returns (address) {
+        return address(0);
+    }
+    
+    /**
+     * @notice Get price feed manager address
+     * @dev Must be overridden in concrete contracts
+     */
+    function priceFeedManager() public view virtual returns (address) {
+        return address(0);
+    }
+    
+    /**
+     * @notice Get contract updater address
+     * @dev Must be overridden in concrete contracts
+     */
+    function contractUpdater() public view virtual returns (address) {
+        return address(0);
     }
 }
 

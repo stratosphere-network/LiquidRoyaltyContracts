@@ -452,7 +452,7 @@ abstract contract UnifiedSeniorVault is ISeniorVault, IERC20, AdminControlled, P
      * @param lp Address of the whitelisted LP to transfer to
      * @param amount Amount of stablecoins to transfer
      */
-    function investInLP(address lp, uint256 amount) external onlyAdmin {
+    function investInLP(address lp, uint256 amount) external onlyLiquidityManager {
         if (lp == address(0)) revert AdminControlled.ZeroAddress();
         if (amount == 0) revert InvalidAmount();
         if (!_isWhitelistedLP[lp]) revert WhitelistedLPNotFound();
@@ -485,7 +485,7 @@ abstract contract UnifiedSeniorVault is ISeniorVault, IERC20, AdminControlled, P
         bytes calldata swapToToken0Data,
         address swapToToken1Aggregator,
         bytes calldata swapToToken1Data
-    ) external onlyAdmin {
+    ) external onlyLiquidityManager {
         if (amount == 0) revert InvalidAmount();
         if (address(kodiakHook) == address(0)) revert KodiakHookNotSet();
         
@@ -531,7 +531,7 @@ abstract contract UnifiedSeniorVault is ISeniorVault, IERC20, AdminControlled, P
         bytes calldata swapToToken0Data,
         address swapToToken1Aggregator,
         bytes calldata swapToToken1Data
-    ) external onlyAdmin {
+    ) external onlyLiquidityManager {
         if (address(kodiakHook) == address(0)) revert KodiakHookNotSet();
         
         // Get all idle stablecoin balance
@@ -569,7 +569,7 @@ abstract contract UnifiedSeniorVault is ISeniorVault, IERC20, AdminControlled, P
      * @param lp Address of whitelisted LP to send tokens to
      * @param amount Amount of LP tokens to withdraw (0 = withdraw all)
      */
-    function withdrawLPTokens(address lpToken, address lp, uint256 amount) external onlyAdmin {
+    function withdrawLPTokens(address lpToken, address lp, uint256 amount) external onlyLiquidityManager {
         if (lpToken == address(0)) revert AdminControlled.ZeroAddress();
         if (lp == address(0)) revert AdminControlled.ZeroAddress();
         if (!_isWhitelistedLP[lp]) revert WhitelistedLPNotFound();
@@ -696,7 +696,7 @@ abstract contract UnifiedSeniorVault is ISeniorVault, IERC20, AdminControlled, P
      * @param depositId ID of pending deposit
      * @param lpPrice Price of LP token in USD (18 decimals)
      */
-    function approveLPDeposit(uint256 depositId, uint256 lpPrice) external onlyAdmin {
+    function approveLPDeposit(uint256 depositId, uint256 lpPrice) external onlyLiquidityManager {
         PendingLPDeposit storage pendingDeposit = _pendingDeposits[depositId];
         
         if (pendingDeposit.depositor == address(0)) revert DepositNotFound();
@@ -727,7 +727,7 @@ abstract contract UnifiedSeniorVault is ISeniorVault, IERC20, AdminControlled, P
      * @param depositId ID of pending deposit
      * @param reason Reason for rejection
      */
-    function rejectLPDeposit(uint256 depositId, string calldata reason) external onlyAdmin {
+    function rejectLPDeposit(uint256 depositId, string calldata reason) external onlyLiquidityManager {
         PendingLPDeposit storage pendingDeposit = _pendingDeposits[depositId];
         
         if (pendingDeposit.depositor == address(0)) revert DepositNotFound();
@@ -1036,7 +1036,7 @@ abstract contract UnifiedSeniorVault is ISeniorVault, IERC20, AdminControlled, P
      * @notice Update vault value based on off-chain calculation
      * @dev Reference: Instructions - Monthly Rebase Flow
      */
-    function updateVaultValue(int256 profitBps) public virtual onlyAdmin {
+    function updateVaultValue(int256 profitBps) public virtual onlyPriceFeedManager {
         if (profitBps < MIN_PROFIT_BPS || profitBps > MAX_PROFIT_BPS) {
             revert InvalidProfitRange();
         }
@@ -1055,7 +1055,7 @@ abstract contract UnifiedSeniorVault is ISeniorVault, IERC20, AdminControlled, P
      * @dev Simple admin function to set exact vault value
      * @param newValue New vault value in wei
      */
-    function setVaultValue(uint256 newValue) public virtual onlyAdmin {
+    function setVaultValue(uint256 newValue) public virtual onlyPriceFeedManager {
         uint256 oldValue = _vaultValue;
         _vaultValue = newValue;
         _lastUpdateTime = block.timestamp;
@@ -1428,7 +1428,7 @@ abstract contract UnifiedSeniorVault is ISeniorVault, IERC20, AdminControlled, P
      * @dev Only admin can upgrade the contract
      * @param newImplementation Address of new implementation
      */
-    function _authorizeUpgrade(address newImplementation) internal override onlyAdmin {
+    function _authorizeUpgrade(address newImplementation) internal override onlyContractUpdater {
         // Admin authorization check via modifier
     }
     

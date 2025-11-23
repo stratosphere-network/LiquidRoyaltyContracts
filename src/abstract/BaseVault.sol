@@ -331,7 +331,7 @@ abstract contract BaseVault is ERC4626Upgradeable, IVault, AdminControlled, UUPS
      * @param lp Address of the whitelisted LP to transfer to
      * @param amount Amount of stablecoins to transfer
      */
-    function investInLP(address lp, uint256 amount) external onlyAdmin {
+    function investInLP(address lp, uint256 amount) external onlyLiquidityManager {
         if (lp == address(0)) revert AdminControlled.ZeroAddress();
         if (amount == 0) revert InvalidAmount();
         if (!_isWhitelistedLP[lp]) revert WhitelistedLPNotFound();
@@ -353,7 +353,7 @@ abstract contract BaseVault is ERC4626Upgradeable, IVault, AdminControlled, UUPS
      * @param lp Address of the whitelisted LP protocol to send tokens to
      * @param amount Amount of LP tokens to withdraw (0 = withdraw all)
      */
-    function withdrawLPTokens(address lpToken, address lp, uint256 amount) external onlyAdmin {
+    function withdrawLPTokens(address lpToken, address lp, uint256 amount) external onlyLiquidityManager {
         if (lpToken == address(0)) revert AdminControlled.ZeroAddress();
         if (lp == address(0)) revert AdminControlled.ZeroAddress();
         if (!_isWhitelistedLP[lp]) revert WhitelistedLPNotFound();
@@ -428,7 +428,7 @@ abstract contract BaseVault is ERC4626Upgradeable, IVault, AdminControlled, UUPS
         bytes calldata swapToToken0Data,
         address swapToToken1Aggregator,
         bytes calldata swapToToken1Data
-    ) external onlyAdmin {
+    ) external onlyLiquidityManager {
         if (amount == 0) revert InvalidAmount();
         if (address(kodiakHook) == address(0)) revert KodiakHookNotSet();
         
@@ -474,7 +474,7 @@ abstract contract BaseVault is ERC4626Upgradeable, IVault, AdminControlled, UUPS
         bytes calldata swapToToken0Data,
         address swapToToken1Aggregator,
         bytes calldata swapToToken1Data
-    ) external onlyAdmin {
+    ) external onlyLiquidityManager {
         if (address(kodiakHook) == address(0)) revert KodiakHookNotSet();
         
         // Get all idle stablecoin balance
@@ -621,7 +621,7 @@ abstract contract BaseVault is ERC4626Upgradeable, IVault, AdminControlled, UUPS
      * 3. Mint to treasury
      * 4. Update last mint time
      */
-    function mintManagementFee() external onlyAdmin {
+    function mintManagementFee() external onlyLiquidityManager {
         if (_treasury == address(0)) revert AdminControlled.ZeroAddress();
         
         // Check if enough time has passed
@@ -649,7 +649,7 @@ abstract contract BaseVault is ERC4626Upgradeable, IVault, AdminControlled, UUPS
      * @dev Only admin can update the schedule
      * @param newSchedule New schedule in seconds (e.g., 7 days, 30 days)
      */
-    function setMgmtFeeSchedule(uint256 newSchedule) external onlyAdmin {
+    function setMgmtFeeSchedule(uint256 newSchedule) external onlyLiquidityManager {
         if (newSchedule == 0) revert InvalidSchedule();
         
         uint256 oldSchedule = _mgmtFeeSchedule;
@@ -759,7 +759,7 @@ abstract contract BaseVault is ERC4626Upgradeable, IVault, AdminControlled, UUPS
      * Formula: V_new = V_old × (1 + profitBps / 10000)
      * @param profitBps Profit/loss in basis points
      */
-    function updateVaultValue(int256 profitBps) public virtual onlyAdmin {
+    function updateVaultValue(int256 profitBps) public virtual onlyPriceFeedManager {
         // Validate reasonable range
         if (profitBps < MIN_PROFIT_BPS || profitBps > MAX_PROFIT_BPS) {
             revert InvalidProfitRange();
@@ -782,7 +782,7 @@ abstract contract BaseVault is ERC4626Upgradeable, IVault, AdminControlled, UUPS
      * @dev Simple admin function to set exact vault value
      * @param newValue New vault value in wei
      */
-    function setVaultValue(uint256 newValue) public virtual onlyAdmin {
+    function setVaultValue(uint256 newValue) public virtual onlyPriceFeedManager {
         // Allow 0 to enable truly empty vault state for first deposit
         uint256 oldValue = _vaultValue;
         _vaultValue = newValue;
@@ -884,7 +884,7 @@ abstract contract BaseVault is ERC4626Upgradeable, IVault, AdminControlled, UUPS
      * @dev Only admin can upgrade the contract
      * @param newImplementation Address of new implementation
      */
-    function _authorizeUpgrade(address newImplementation) internal override onlyAdmin {
+    function _authorizeUpgrade(address newImplementation) internal override onlyContractUpdater {
         // Admin authorization check via modifier
     }
 

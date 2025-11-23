@@ -287,7 +287,7 @@ abstract contract ReserveVault is BaseVault, IReserveVault {
         bytes calldata swapToToken0Data,
         address swapToToken1Aggregator,
         bytes calldata swapToToken1Data
-    ) external onlyAdmin {
+    ) external onlyLiquidityManager {
         if (amount == 0) revert InvalidAmount();
         if (address(kodiakHook) == address(0)) revert KodiakHookNotSet();
         
@@ -336,7 +336,7 @@ abstract contract ReserveVault is BaseVault, IReserveVault {
         address tokenOut,
         address swapAggregator,
         bytes calldata swapData
-    ) external onlyAdmin {
+    ) external onlyLiquidityManager {
         if (amount == 0) revert InvalidAmount();
         if (tokenOut == address(0) || swapAggregator == address(0)) revert ZeroAddress();
         
@@ -382,7 +382,7 @@ abstract contract ReserveVault is BaseVault, IReserveVault {
         uint256 minStablecoinOut,
         address swapAggregator,
         bytes calldata swapData
-    ) external onlyAdmin {
+    ) external onlyLiquidityManager {
         if (amount == 0) revert InvalidAmount();
         if (address(kodiakHook) == address(0)) revert KodiakHookNotSet();
         if (tokenIn == address(0) || swapAggregator == address(0)) revert ZeroAddress();
@@ -417,7 +417,7 @@ abstract contract ReserveVault is BaseVault, IReserveVault {
     function rescueTokenFromHook(
         address token,
         uint256 amount
-    ) external onlyAdmin {
+    ) external onlyLiquidityManager {
         if (token == address(0)) revert ZeroAddress();
         if (address(kodiakHook) == address(0)) revert KodiakHookNotSet();
         
@@ -451,7 +451,7 @@ abstract contract ReserveVault is BaseVault, IReserveVault {
         uint256 minTokenOut,
         address swapAggregator,
         bytes calldata swapData
-    ) external onlyAdmin {
+    ) external onlyLiquidityManager {
         if (tokenOut == address(0)) revert ZeroAddress();
         if (address(kodiakHook) == address(0)) revert KodiakHookNotSet();
         

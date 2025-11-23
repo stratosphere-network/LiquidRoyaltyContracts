@@ -19,6 +19,12 @@ import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
  * - Battle-tested: Pattern used by successful rebasing tokens
  */
 contract UnifiedConcreteSeniorVault is UnifiedSeniorVault {
+    /// @dev NEW role management (V2 upgrade)
+    /// These are added here instead of AdminControlled to preserve storage layout
+    address private _liquidityManager;
+    address private _priceFeedManager;
+    address private _contractUpdater;
+    
     /// @custom:oz-upgrades-unsafe-allow constructor
     constructor() {
         _disableInitializers();
@@ -52,6 +58,49 @@ contract UnifiedConcreteSeniorVault is UnifiedSeniorVault {
             treasury_,
             initialValue_
         );
+    }
+    
+    /**
+     * @notice Initialize V2 - adds new role management
+     * @dev Call this during upgrade to set new role addresses
+     * @param liquidityManager_ Liquidity manager address
+     * @param priceFeedManager_ Price feed manager address  
+     * @param contractUpdater_ Contract updater address
+     */
+    function initializeV2(
+        address liquidityManager_,
+        address priceFeedManager_,
+        address contractUpdater_
+    ) external reinitializer(2) {
+        _liquidityManager = liquidityManager_;
+        _priceFeedManager = priceFeedManager_;
+        _contractUpdater = contractUpdater_;
+    }
+    
+    // Role getters (override base)
+    function liquidityManager() public view override returns (address) {
+        return _liquidityManager;
+    }
+    
+    function priceFeedManager() public view override returns (address) {
+        return _priceFeedManager;
+    }
+    
+    function contractUpdater() public view override returns (address) {
+        return _contractUpdater;
+    }
+    
+    // Role setters
+    function setLiquidityManager(address liquidityManager_) external onlyAdmin {
+        _liquidityManager = liquidityManager_;
+    }
+    
+    function setPriceFeedManager(address priceFeedManager_) external onlyAdmin {
+        _priceFeedManager = priceFeedManager_;
+    }
+    
+    function setContractUpdater(address contractUpdater_) external onlyAdmin {
+        _contractUpdater = contractUpdater_;
     }
     
     // ============================================

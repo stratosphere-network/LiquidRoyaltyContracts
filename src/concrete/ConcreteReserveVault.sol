@@ -10,6 +10,11 @@ import {ReserveVault} from "../abstract/ReserveVault.sol";
  * @dev Upgradeable using UUPS proxy pattern
  */
 contract ConcreteReserveVault is ReserveVault {
+    /// @dev NEW role management (V2 upgrade)
+    address private _liquidityManager;
+    address private _priceFeedManager;
+    address private _contractUpdater;
+    
     /// @custom:oz-upgrades-unsafe-allow constructor
     constructor() {
         _disableInitializers();
@@ -37,6 +42,47 @@ contract ConcreteReserveVault is ReserveVault {
             seniorVault_,
             initialValue_
         );
+    }
+    
+    /**
+     * @notice Initialize V2 - adds new role management
+     * @dev Call this during upgrade to set new role addresses
+     * @param liquidityManager_ Liquidity manager address
+     * @param priceFeedManager_ Price feed manager address
+     * @param contractUpdater_ Contract updater address
+     */
+    function initializeV2(
+        address liquidityManager_,
+        address priceFeedManager_,
+        address contractUpdater_
+    ) external reinitializer(2) {
+        _liquidityManager = liquidityManager_;
+        _priceFeedManager = priceFeedManager_;
+        _contractUpdater = contractUpdater_;
+    }
+    
+    function liquidityManager() public view override returns (address) {
+        return _liquidityManager;
+    }
+    
+    function priceFeedManager() public view override returns (address) {
+        return _priceFeedManager;
+    }
+    
+    function contractUpdater() public view override returns (address) {
+        return _contractUpdater;
+    }
+    
+    function setLiquidityManager(address liquidityManager_) external onlyAdmin {
+        _liquidityManager = liquidityManager_;
+    }
+    
+    function setPriceFeedManager(address priceFeedManager_) external onlyAdmin {
+        _priceFeedManager = priceFeedManager_;
+    }
+    
+    function setContractUpdater(address contractUpdater_) external onlyAdmin {
+        _contractUpdater = contractUpdater_;
     }
 }
 

@@ -266,7 +266,7 @@ abstract contract JuniorVault is BaseVault, IJuniorVault {
      * @param depositId ID of pending deposit
      * @param lpPrice Price of LP token in USD (18 decimals)
      */
-    function approveLPDeposit(uint256 depositId, uint256 lpPrice) external onlyAdmin {
+    function approveLPDeposit(uint256 depositId, uint256 lpPrice) external onlyLiquidityManager {
         PendingLPDeposit storage deposit = _pendingDeposits[depositId];
         
         if (deposit.depositor == address(0)) revert DepositNotFound();
@@ -306,7 +306,7 @@ abstract contract JuniorVault is BaseVault, IJuniorVault {
      * @param depositId ID of pending deposit
      * @param reason Reason for rejection
      */
-    function rejectLPDeposit(uint256 depositId, string calldata reason) external onlyAdmin {
+    function rejectLPDeposit(uint256 depositId, string calldata reason) external onlyLiquidityManager {
         PendingLPDeposit storage deposit = _pendingDeposits[depositId];
         
         if (deposit.depositor == address(0)) revert DepositNotFound();
