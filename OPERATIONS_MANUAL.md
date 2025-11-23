@@ -1,315 +1,128 @@
 # Admin Operations by Category
 
-## Operations Categorized by Function
+## Core Protocol Operations
 
-| Category | Operation | Vault | Frequency | Risk Level | Command Pattern |
-|----------|-----------|-------|-----------|------------|-----------------|
-| **Core Protocol** | Rebase Senior Vault | Senior | Monthly | Critical | `rebase(uint256 lpPrice)` |
-| **Core Protocol** | Mint Management Fee | Junior/Reserve | Per Schedule | Medium | `mintManagementFee()` |
-| **Core Protocol** | Update Vault Value | Junior/Reserve | Weekly | Medium | `updateValue(uint256 newValue)` |
-| **Liquidity Management** | Deploy HONEY to Kodiak | Senior/Junior/Reserve | After Deposits | Medium | `deployToKodiak(...)` |
-| **Liquidity Management** | Invest Assets in Kodiak | Reserve | As Needed | Medium | `investInKodiak(...)` |
-| **Liquidity Management** | Rescue HONEY Dust | All Hooks | Weekly | Low | `rescueHoneyToVault()` |
-| **Liquidity Management** | Swap WBTC Dust to Vault | All Hooks | Weekly | Low | `swapAndRescue(...)` |
-| **Access Control** | Whitelist New Aggregator | All Hooks | Once per Aggregator | High | `setAggregatorWhitelisted(address, bool)` |
-| **Access Control** | Whitelist New LP Token | All Vaults | Once per Token | High | `addWhitelistedLPToken(address)` |
-| **Access Control** | Add Whitelisted LP Recipient | All Vaults | As Needed | Medium | `addWhitelistedLP(address)` |
-| **Access Control** | Add Seeder | All Vaults | As Needed | Medium | `addSeeder(address)` |
-| **Access Control** | Change Admin | All Vaults | Rare | Critical | `changeAdmin(address)` |
-| **User Deposits** | Approve LP Deposit | Senior/Junior | Daily | Medium | `approveLPDeposit(uint256, uint256)` |
-| **User Deposits** | Reject LP Deposit | Senior/Junior | As Needed | Medium | `rejectLPDeposit(uint256, string)` |
-| **Initial Setup** | Seed Vault with LP Tokens | All Vaults | Once | Critical | `seedVault(address, uint256, address, uint256)` |
-| **Initial Setup** | Seed Reserve with Token | Reserve | Once | Critical | `seedReserveWithToken(...)` |
-| **Initial Setup** | Set Treasury | All Vaults | Once | Critical | `setTreasury(address)` |
-| **Initial Setup** | Set Fee Schedule | Junior/Reserve | Once | Medium | `setMgmtFeeSchedule(uint256)` |
-| **Initial Setup** | Set Kodiak Router | Reserve | Once | High | `setKodiakRouter(address)` |
-| **Emergency** | Pause Vault | All Vaults | Emergency Only | Critical | `pause()` |
-| **Emergency** | Unpause Vault | All Vaults | After Fix | Critical | `unpause()` |
-| **Upgrades** | Upgrade Vault Implementation | All Proxies | When Needed | Critical | `upgradeToAndCall(address, bytes)` |
-| **Configuration** | Set Router | All Hooks | Once/Rare | High | `setRouter(address)` |
-| **Configuration** | Set Island | All Hooks | Once/Rare | High | `setIsland(address)` |
-| **Configuration** | Set WBERA | All Hooks | Once/Rare | Medium | `setWBERA(address)` |
-| **Configuration** | Set Slippage | All Hooks | Rare | Medium | `setSlippage(uint256, uint256)` |
-| **Configuration** | Set Safety Multiplier | All Hooks | Rare | Medium | `setSafetyMultiplier(uint256)` |
+| Operation | Vault | Frequency | Risk | Command |
+|-----------|-------|-----------|------|---------|
+| Rebase Senior Vault | Senior | Monthly | Critical | `cast send $SENIOR_VAULT "rebase(uint256)" $LP_PRICE --private-key $PRIVATE_KEY --rpc-url $RPC_URL --gas-limit 3000000 --legacy` |
+| Mint Management Fee | Junior/Reserve | Per Schedule | Medium | `cast send $VAULT "mintManagementFee()" --private-key $PRIVATE_KEY --rpc-url $RPC_URL --legacy` |
+| Update Vault Value | Junior/Reserve | Weekly | Medium | `cast send $VAULT "updateValue(uint256)" $NEW_VALUE --private-key $PRIVATE_KEY --rpc-url $RPC_URL --legacy` |
 
 ---
 
-## Operations by Risk Level
+## Liquidity Management Operations
 
-### Critical Risk (Requires Multisig)
-
-| Operation | Why Critical | Mitigation |
-|-----------|-------------|------------|
-| Rebase Senior Vault | Triggers spillover/backstop, affects all vaults | Verify LP price from multiple sources, test in simulation |
-| Change Admin | Transfers protocol control | Use multisig, verify address multiple times |
-| Pause Vault | Stops all user activity | Only for emergencies, have recovery plan |
-| Unpause Vault | Resumes user activity | Verify fix is complete, monitor closely |
-| Upgrade Implementation | Changes contract logic | Audit code, test thoroughly, storage layout check |
-| Seed Vault | Initial capitalization | Verify provider approval, check price accuracy |
-| Set Treasury | Controls fee destination | Use multisig address, verify before setting |
-
-### High Risk (Requires Careful Review)
-
-| Operation | Why High Risk | Mitigation |
-|-----------|--------------|------------|
-| Whitelist Aggregator | Security attack vector | Audit aggregator contract, test swaps |
-| Whitelist LP Token | Enables new assets | Verify token contract, check liquidity |
-| Set Kodiak Router | Controls trading route | Verify router address, test functionality |
-| Set Router/Island (Hook) | Changes DeFi integration | Verify addresses, test deposit/withdraw |
-
-### Medium Risk (Standard Admin)
-
-| Operation | Notes |
-|-----------|-------|
-| Approve LP Deposit | Verify LP price, check depositor |
-| Mint Management Fee | Automated by schedule, dilutes holders |
-| Update Vault Value | Affects unstaking ratio, use accurate prices |
-| Deploy to Kodiak | Check swap data, verify aggregator whitelisted |
-| Add Seeder | Limited to seeding function only |
-
-### Low Risk (Routine Maintenance)
-
-| Operation | Notes |
-|-----------|-------|
-| Rescue HONEY Dust | Small amounts, minimal impact |
-| Swap WBTC Dust | Cleanup operation, low value |
-| Reject LP Deposit | Returns funds to user |
+| Operation | Vault | Frequency | Risk | Command |
+|-----------|-------|-----------|------|---------|
+| Deploy HONEY to Kodiak | All | After Deposits | Medium | `cast send $VAULT "deployToKodiak(uint256,uint256,address,bytes,address,bytes)" $AMOUNT $MIN_LP $AGG0 $DATA0 $AGG1 $DATA1 --private-key $PRIVATE_KEY --rpc-url $RPC_URL --gas-limit 2000000 --legacy` |
+| Invest Assets in Kodiak | Reserve | As Needed | Medium | `cast send $RESERVE_VAULT "investInKodiak(address,address,uint256,uint256,address,bytes,address,bytes)" $ISLAND $TOKEN $AMOUNT $MIN_LP $AGG0 $DATA0 $AGG1 $DATA1 --private-key $PRIVATE_KEY --rpc-url $RPC_URL --gas-limit 2000000 --legacy` |
+| Rescue HONEY Dust from Hook | All Hooks | Weekly | Low | `cast send $HOOK "rescueHoneyToVault()" --private-key $PRIVATE_KEY --rpc-url $RPC_URL --legacy` |
+| Swap WBTC Dust to Vault | All Hooks | Weekly | Low | `cast send $HOOK "swapAndRescue(uint256,address,bytes)" $AMOUNT $AGG $DATA --private-key $PRIVATE_KEY --rpc-url $RPC_URL --gas-limit 1000000 --legacy` |
 
 ---
 
-## Operations by Frequency
+## Access Control Operations
 
-### One-Time (Initial Setup)
-
-```
-1. Set Treasury (all vaults)
-2. Set Fee Schedule (Junior/Reserve)
-3. Set Kodiak Router (Reserve)
-4. Whitelist Enso Aggregator (all hooks)
-5. Whitelist Kodiak Island LP (all vaults)
-6. Seed Vaults (initial capitalization)
-7. Set Router/Island/WBERA (all hooks)
-```
-
-### Monthly Operations
-
-```
-1. Rebase Senior Vault (1st of month, 12:00 UTC)
-2. Mint Performance Fee if schedule = monthly
-```
-
-### Weekly Operations
-
-```
-1. Update Junior/Reserve Values (Monday 08:00 UTC)
-2. Rescue Dust from Hooks (Friday 16:00 UTC)
-```
-
-### Daily Operations
-
-```
-1. Approve/Reject Pending LP Deposits (10:00 & 16:00 UTC)
-2. Health Checks (06:00 & 18:00 UTC)
-```
-
-### As-Needed Operations
-
-```
-1. Deploy Capital to Kodiak (after large deposits)
-2. Add Seeder (new seed provider)
-3. Whitelist New LP Token (new pool)
-4. Whitelist New Aggregator (new DEX)
-```
-
-### Emergency Only
-
-```
-1. Pause Vault (critical bug detected)
-2. Unpause Vault (after fix verified)
-3. Upgrade Implementation (security patch)
-```
+| Operation | Vault | Frequency | Risk | Command |
+|-----------|-------|-----------|------|---------|
+| Whitelist New Aggregator | All Hooks | Once per Aggregator | High | `cast send $HOOK "setAggregatorWhitelisted(address,bool)" $AGGREGATOR true --private-key $PRIVATE_KEY --rpc-url $RPC_URL --legacy` |
+| Whitelist New LP Token | All Vaults | Once per Token | High | `cast send $VAULT "addWhitelistedLPToken(address)" $LP_TOKEN --private-key $PRIVATE_KEY --rpc-url $RPC_URL --legacy` |
+| Add Whitelisted LP Recipient | All Vaults | As Needed | Medium | `cast send $VAULT "addWhitelistedLP(address)" $RECIPIENT --private-key $PRIVATE_KEY --rpc-url $RPC_URL --legacy` |
+| Add Seeder | All Vaults | As Needed | Medium | `cast send $VAULT "addSeeder(address)" $SEEDER --private-key $PRIVATE_KEY --rpc-url $RPC_URL --legacy` |
+| Change Admin | All Vaults | Rare | Critical | `cast send $VAULT "changeAdmin(address)" $NEW_ADMIN --private-key $PRIVATE_KEY --rpc-url $RPC_URL --legacy` |
 
 ---
 
-## Operations by Vault Type
+## User Deposit Operations
 
-### Senior Vault Only
-
-| Operation | Function | Notes |
-|-----------|----------|-------|
-| Rebase | `rebase(uint256)` | Triggers spillover/backstop, mints fees |
-| No Token Seeding | N/A | Senior only accepts HONEY or LP |
-
-### Junior/Reserve Vaults Only
-
-| Operation | Function | Notes |
-|-----------|----------|-------|
-| Mint Management Fee | `mintManagementFee()` | 1% supply inflation to treasury |
-| Set Fee Schedule | `setMgmtFeeSchedule(uint256)` | Controls mint frequency |
-| Update Value | `updateValue(uint256)` | Affects unstaking ratio |
-
-### Reserve Vault Only
-
-| Operation | Function | Notes |
-|-----------|----------|-------|
-| Seed with Token | `seedReserveWithToken(...)` | Accept WBTC/non-stablecoin |
-| Invest in Kodiak | `investInKodiak(...)` | Convert WBTC to LP |
-| Set Kodiak Router | `setKodiakRouter(address)` | Required for investInKodiak |
-
-### All Vaults
-
-| Operation | Function | Notes |
-|-----------|----------|-------|
-| Deploy to Kodiak | `deployToKodiak(...)` | Convert HONEY to LP |
-| Seed with LP | `seedVault(...)` | Bootstrap with existing LP |
-| Whitelist LP Token | `addWhitelistedLPToken(address)` | Enable new LP acceptance |
-| Add Seeder | `addSeeder(address)` | Grant seeding permission |
-| Set Treasury | `setTreasury(address)` | Configure fee recipient |
-| Pause/Unpause | `pause()` / `unpause()` | Emergency controls |
-| Change Admin | `changeAdmin(address)` | Transfer control |
-| Approve/Reject LP Deposit | `approveLPDeposit(...)` / `rejectLPDeposit(...)` | Process user LP deposits |
+| Operation | Vault | Frequency | Risk | Command |
+|-----------|-------|-----------|------|---------|
+| Approve LP Deposit | Senior/Junior | Daily | Medium | `cast send $VAULT "approveLPDeposit(uint256,uint256)" $DEPOSIT_ID $LP_PRICE --private-key $PRIVATE_KEY --rpc-url $RPC_URL --legacy` |
+| Reject LP Deposit | Senior/Junior | As Needed | Medium | `cast send $VAULT "rejectLPDeposit(uint256,string)" $DEPOSIT_ID "reason" --private-key $PRIVATE_KEY --rpc-url $RPC_URL --legacy` |
 
 ---
 
-## Operations by Actor
+## Initial Setup Operations
 
-### Admin (EOA or Multisig)
-
-All operations except user-facing functions. Admin has full control over:
-- Protocol configuration
-- Fee management
-- Access control
-- Emergency procedures
-- Upgrades
-
-### Seeder (Whitelisted Address)
-
-| Operation | Function | Notes |
-|-----------|----------|-------|
-| Seed Vault | `seedVault(...)` | Bootstrap vaults with LP |
-| Seed Reserve with Token | `seedReserveWithToken(...)` | Reserve only, WBTC |
-
-### User (Anyone)
-
-| Operation | Function | Notes |
-|-----------|----------|-------|
-| Deposit HONEY | `deposit(uint256, address)` | Standard ERC4626 |
-| Deposit LP | `depositLP(address, uint256)` | Creates pending deposit |
-| Cancel Pending Deposit | `cancelPendingDeposit(uint256)` | Before admin approval |
-| Withdraw | `withdraw(...)` | After cooldown (Senior) or anytime (Jr/Res) |
-| Redeem | `redeem(...)` | Burn shares for HONEY |
-| Initiate Cooldown | `initiateCooldown()` | Senior only, 7 days |
-
-### Anyone (Good Samaritan)
-
-| Operation | Function | Notes |
-|-----------|----------|-------|
-| Claim Expired Deposit | `claimExpiredDeposit(uint256)` | Return LP after 48h expiry |
+| Operation | Vault | Frequency | Risk | Command |
+|-----------|-------|-----------|------|---------|
+| Seed Vault with LP Tokens | All Vaults | Once | Critical | `cast send $VAULT "seedVault(address,uint256,address,uint256)" $LP_TOKEN $AMOUNT $PROVIDER $LP_PRICE --private-key $PRIVATE_KEY --rpc-url $RPC_URL --legacy` |
+| Seed Reserve with Token | Reserve | Once | Critical | `cast send $RESERVE_VAULT "seedReserveWithToken(address,uint256,address,uint256)" $TOKEN $AMOUNT $PROVIDER $TOKEN_PRICE --private-key $PRIVATE_KEY --rpc-url $RPC_URL --legacy` |
+| Set Treasury | All Vaults | Once | Critical | `cast send $VAULT "setTreasury(address)" $TREASURY --private-key $PRIVATE_KEY --rpc-url $RPC_URL --legacy` |
+| Set Fee Schedule | Junior/Reserve | Once | Medium | `cast send $VAULT "setMgmtFeeSchedule(uint256)" $INTERVAL --private-key $PRIVATE_KEY --rpc-url $RPC_URL --legacy` |
+| Set Kodiak Router | Reserve | Once | High | `cast send $RESERVE_VAULT "setKodiakRouter(address)" $ROUTER --private-key $PRIVATE_KEY --rpc-url $RPC_URL --legacy` |
 
 ---
 
-## Recommended Access Control Setup
+## Emergency Operations
 
-### Production Deployment
-
-```
-Admin Role:     Gnosis Safe 3/5 Multisig
-Deployer Role:  Gnosis Safe 3/5 Multisig (same as Admin)
-Treasury:       Gnosis Safe 2/3 Multisig (different signers)
-Seeders:        2-3 trusted EOAs or contracts
-Hook Admin:     Same multisig as Vault Admin
-```
-
-### Operation Approval Requirements
-
-| Risk Level | Signers Required | Timelock |
-|------------|------------------|----------|
-| Critical | 4/5 | 48 hours |
-| High | 3/5 | 24 hours |
-| Medium | 2/5 | None |
-| Low | 1/5 | None |
+| Operation | Vault | Frequency | Risk | Command |
+|-----------|-------|-----------|------|---------|
+| Pause Vault | All Vaults | Emergency Only | Critical | `cast send $VAULT "pause()" --private-key $PRIVATE_KEY --rpc-url $RPC_URL --legacy` |
+| Unpause Vault | All Vaults | After Fix | Critical | `cast send $VAULT "unpause()" --private-key $PRIVATE_KEY --rpc-url $RPC_URL --legacy` |
 
 ---
 
-## Automation Candidates
+## Upgrade Operations
 
-### Safe to Automate (with monitoring)
-
-```
-1. Daily LP Deposit Approval (if LP whitelisted)
-2. Weekly Dust Recovery
-3. Weekly Value Updates (with oracle price feeds)
-4. Health Checks
-5. Alert on expiring deposits
-```
-
-### Should Not Automate
-
-```
-1. Rebase (requires manual price verification)
-2. Whitelist operations (security risk)
-3. Admin changes (governance decision)
-4. Emergency pause/unpause (manual judgment)
-5. Upgrades (requires thorough testing)
-```
+| Operation | Vault | Frequency | Risk | Command |
+|-----------|-------|-----------|------|---------|
+| Upgrade Vault Implementation | All Proxies | When Needed | Critical | `cast send $PROXY "upgradeToAndCall(address,bytes)" $NEW_IMPL "0x" --private-key $PRIVATE_KEY --rpc-url $RPC_URL --legacy` |
 
 ---
 
-## Quick Reference: Function Signatures
+## Hook Configuration Operations
 
-### Vault Functions
-```solidity
-// Core
-rebase(uint256 lpPrice)
-mintManagementFee()
-updateValue(uint256 newValue)
-
-// Liquidity
-deployToKodiak(uint256 amount, uint256 minLP, address agg0, bytes data0, address agg1, bytes data1)
-investInKodiak(address island, address token, uint256 amount, uint256 minLP, address agg0, bytes data0, address agg1, bytes data1)
-
-// Seeding
-seedVault(address lpToken, uint256 amount, address provider, uint256 lpPrice)
-seedReserveWithToken(address token, uint256 amount, address provider, uint256 tokenPrice)
-
-// Access Control
-addSeeder(address seeder)
-addWhitelistedLPToken(address lpToken)
-addWhitelistedLP(address recipient)
-changeAdmin(address newAdmin)
-setTreasury(address treasury)
-
-// Configuration
-setMgmtFeeSchedule(uint256 interval)
-setKodiakRouter(address router)
-
-// User Deposits
-approveLPDeposit(uint256 depositId, uint256 lpPrice)
-rejectLPDeposit(uint256 depositId, string reason)
-
-// Emergency
-pause()
-unpause()
-```
-
-### Hook Functions
-```solidity
-setRouter(address router)
-setIsland(address island)
-setWBERA(address wbera)
-setAggregatorWhitelisted(address target, bool isWhitelisted)
-setSlippage(uint256 minSharesPerAssetBps, uint256 minAssetOutBps)
-setSafetyMultiplier(uint256 multiplier)
-rescueHoneyToVault()
-swapAndRescue(uint256 amount, address aggregator, bytes data)
-```
+| Operation | Vault | Frequency | Risk | Command |
+|-----------|-------|-----------|------|---------|
+| Set Router | All Hooks | Once/Rare | High | `cast send $HOOK "setRouter(address)" $ROUTER --private-key $PRIVATE_KEY --rpc-url $RPC_URL --legacy` |
+| Set Island | All Hooks | Once/Rare | High | `cast send $HOOK "setIsland(address)" $ISLAND --private-key $PRIVATE_KEY --rpc-url $RPC_URL --legacy` |
+| Set WBERA | All Hooks | Once/Rare | Medium | `cast send $HOOK "setWBERA(address)" $WBERA --private-key $PRIVATE_KEY --rpc-url $RPC_URL --legacy` |
+| Set Slippage | All Hooks | Rare | Medium | `cast send $HOOK "setSlippage(uint256,uint256)" $MIN_SHARES_BPS $MIN_ASSET_BPS --private-key $PRIVATE_KEY --rpc-url $RPC_URL --legacy` |
+| Set Safety Multiplier | All Hooks | Rare | Medium | `cast send $HOOK "setSafetyMultiplier(uint256)" $MULTIPLIER --private-key $PRIVATE_KEY --rpc-url $RPC_URL --legacy` |
 
 ---
 
-**Use this categorization to:**
-- Plan your admin workflows
-- Set up proper access controls
-- Identify automation opportunities
-- Assess operational risks
-- Train new operators
+## Operation Risk Summary
 
+| Risk Level | Count | Operations |
+|------------|-------|------------|
+| **Critical** | 7 | Rebase, Pause, Unpause, Upgrade, Seed Vault, Seed Reserve, Set Treasury, Change Admin |
+| **High** | 4 | Whitelist Aggregator, Whitelist LP Token, Set Kodiak Router, Set Router/Island |
+| **Medium** | 10 | Mint Fee, Update Value, Deploy to Kodiak, Invest in Kodiak, Add LP Recipient, Add Seeder, Approve Deposit, Reject Deposit, Set Fee Schedule, Set Slippage, Set Safety Multiplier, Set WBERA |
+| **Low** | 2 | Rescue Dust, Swap Dust |
+
+---
+
+## Operation Frequency Summary
+
+| Frequency | Count | Operations |
+|-----------|-------|------------|
+| **Monthly** | 1 | Rebase Senior Vault |
+| **Weekly** | 3 | Update Values (Jr/Res), Rescue Dust, Swap Dust |
+| **Daily** | 1 | Approve/Reject LP Deposits |
+| **As Needed** | 5 | Deploy to Kodiak, Invest in Kodiak, Add Seeder, Add LP Recipient, Reject Deposit |
+| **Once (Setup)** | 9 | Seed Vault, Seed Reserve, Set Treasury, Set Fee Schedule, Set Router, Whitelist Aggregator, Whitelist LP Token, Set Island, Set WBERA, Set Kodiak Router |
+| **Rare** | 4 | Change Admin, Set Slippage, Set Safety Multiplier, Upgrade |
+| **Emergency** | 2 | Pause, Unpause |
+
+---
+
+## Quick Reference: Addresses
+
+```bash
+# Vault Proxies
+SENIOR_VAULT=0x49298F4314eb127041b814A2616c25687Db6b650
+JUNIOR_VAULT=0x3a0A97dCa5E6CaCC258490d5ece453412f8E1883
+RESERVE_VAULT=0x7754272C866892CAd4a414C76f060645BDc27203
+
+# Hooks
+SENIOR_HOOK=0x1108E5FF12Cf7904bFe46BFaa70d41E321c54dfa
+JUNIOR_HOOK=0xC6A224385e14dED076D86c69a91E42142698D1f1
+RESERVE_HOOK=0xBe01A06f99f8366f8803A61332e110d1235E5f3C
+
+# Infrastructure
+ENSO_AGGREGATOR=0x38147794FF247e5Fc179eDbAE6C37fff88f68C52
+KODIAK_ISLAND=0xB350944Be03cf5f795f48b63eAA542df6A3c8505
+KODIAK_ROUTER=0x4E8d96EEDE486eDFc47e78e4E75B84e4f5D8a1F1
+```
