@@ -1,69 +1,389 @@
-# Senior Tranche Protocol - Mathematical Specification
+# Senior Tranche Protocol: A Risk-Tranched Liquidity Provision System
 
-## ⚡ Quick Reference: Three-Zone System
+**Version 1.0**  
+**Mathematical Specification & Economic Model**
 
-**Senior operates in three distinct zones with different actions:**
+---
 
-| Backing Range | Action | Why |
-|---------------|--------|-----|
-| **> 110%** | 🎉 **Profit Spillover** → Junior (80%) & Reserve (20%) | Senior has excess, share the wealth |
-| **100% to 110%** | ✅ **No Action** (Healthy Buffer Zone) | Senior maintains peg + pays APY from buffer |
-| **< 100%** | 🚨 **Backstop to 100.9%** ← Reserve first (no cap!), then Junior (no cap!) | Below peg, restore to 100.9% to afford next month's min APY |
+## Abstract
 
-**Dynamic APY Selection (11-13%):**
-- 📈 System tries 13% APY first (maximize returns)
-- 📊 If 13% would depeg, try 12%
-- 📉 If 12% would depeg, try 11%
-- 🛡️ If even 11% would depeg, use 11% + backstop
-- **Result:** Users always get highest APY possible while maintaining peg!
+The Senior Tranche Protocol is a novel DeFi system that creates risk-tranched exposure to automated market maker (AMM) liquidity provision. The protocol splits LP position risk into three tranches: **Senior** (stable, 11-13% APY), **Junior** (leveraged upside/downside), and **Reserve** (backstop layer). 
 
-**The Critical 100% Threshold:**
-- 100% = **The Peg** (1 snrUSD = $1 in backing)
-- If backing drops below 100%, we're **depegged** → Backstop triggers
-- **Backstop restores to 100.9%** (not just 100%)
-- **Why 100.9%?** Ensures we can afford minimum 11% APY next month (0.9167% minting) and stay at peg!
+Users deposit stablecoins which are automatically deployed into DEX liquidity pools containing a stablecoin-volatile token pair. The protocol uses a dynamic three-zone system to manage profit distribution and loss allocation based on the Senior vault's backing ratio. This specification provides a complete mathematical model of the rebase mechanism, spillover dynamics, and fee structures.
 
-**Initial Setup:**
-- ✅ **Launch:** Senior starts at 100% backing (1:1 deposit conversion)
-- ✅ **Growth:** Strategy yield naturally pushes backing above 100%
-- ✅ **Target:** System aims for 100-110% range through operations
+**Key Innovation:** Automated risk-tranching of LP positions where external market volatility in the DEX pool directly determines vault performance, creating distinct risk/reward profiles for different investor preferences.
 
-**Operating Rules:** 
-- ✅ **Above 110%:** Share profits with Junior/Reserve (incentive to participate)
-- ✅ **100-110%:** Healthy operation zone (10% buffer, no action needed)
-- ✅ **Below 100%:** Emergency backstop triggered to restore peg
-- ✅ This creates a **wide buffer zone** where no spillover occurs!
+**Unique Reserve Design:** The Reserve vault acts as a "Reserve for Reserves" by holding the volatile Token X directly (not LP tokens initially), providing both capital efficiency and flexibility. During spillover, it receives LP tokens which accumulate. During backstop, it can use LP tokens or convert Token X → LP tokens as needed.
 
 ---
 
 ## Table of Contents
-0. [Quick Reference: Three-Zone System](#-quick-reference-three-zone-system)
-1. [Notation & Definitions](#notation--definitions)
-2. [Core Formulas](#core-formulas)
-3. [Rebase Algorithm](#rebase-algorithm)
-4. [Three-Zone Spillover System](#three-zone-spillover-system)
-5. [Fee Calculations](#fee-calculations)
-6. [User Balance & Shares](#user-balance--shares)
-7. [Withdrawal Mechanics](#withdrawal-mechanics)
-8. [Constraints & Invariants](#constraints--invariants)
+
+1. [Introduction](#1-introduction)
+2. [System Architecture](#2-system-architecture)
+3. [Economic Mechanism](#3-economic-mechanism)
+4. [Mathematical Model](#4-mathematical-model)
+5. [Protocol Operations](#5-protocol-operations)
+6. [Fee Structure](#6-fee-structure)
+7. [Risk Analysis](#7-risk-analysis)
+8. [Examples & Case Studies](#8-examples--case-studies)
+9. [Appendix](#9-appendix)
 
 ---
 
-## Notation & Definitions
+## 1. Introduction
 
-### **State Variables**
+### 1.1 Motivation
+
+Traditional liquidity provision in AMMs exposes all participants to the same risk profile: impermanent loss and trading fee income. The Senior Tranche Protocol addresses two key problems:
+
+1. **Risk Homogeneity:** All LPs face identical exposure to volatile token price movements
+2. **Capital Inefficiency:** Conservative investors must accept full LP risk for modest yields
+
+### 1.2 Solution Overview
+
+The protocol tranches LP exposure into three risk layers with a unique Reserve design:
+
+```mermaid
+graph TB
+    A[User Deposits] --> B{Risk Preference?}
+    B -->|Stable Yield| C[Senior Vault<br/>11-13% APY<br/>Protected]
+    B -->|Leveraged Returns| D[Junior Vault<br/>Variable APY<br/>Upside+Downside]
+    B -->|Reserve Provider| E[Reserve Vault<br/>Token X + LP tokens<br/>Primary Backstop]
+    
+    C --> F[LP Position in DEX]
+    D --> F
+    
+    F --> G[DEX Pool<br/>USDE ↔ Token X]
+    E --> H[Token X Holdings<br/>Reserve for Reserves]
+    
+    H -.->|Can convert to| G
+    G -.->|Spillover gives| E
+    
+    style C fill:#90EE90
+    style D fill:#FFD700
+    style E fill:#87CEEB
+    style F fill:#4169E1
+    style G fill:#FF6347
+    style H fill:#FFD700
+```
+
+**Key Architecture:**
+- **Senior & Junior:** Deploy stablecoins into DEX LP, hold LP tokens
+- **Reserve:** Holds Token X directly + accumulates LP tokens from spillover
+- **Reserve Flexibility:** Can backstop using LP tokens OR convert Token X → LP
+
+### 1.3 Core Components
+
+- **snrUSD:** Rebasing ERC20 token representing Senior tranche shares
+- **jnrUSD:** ERC4626 token representing Junior tranche shares  
+- **alarUSD:** ERC4626 token representing Reserve tranche shares
+- **Three-Zone System:** Automated profit/loss distribution mechanism
+- **Dynamic APY:** Senior APY varies 11-13% based on backing ratio
+
+---
+
+## 2. System Architecture
+
+### 2.1 Liquidity Deployment Flow
+
+When users deposit stablecoins, the protocol follows this deployment sequence:
+
+```mermaid
+sequenceDiagram
+    participant User
+    participant Vault
+    participant DEX Pool
+    participant LP Token
+    
+    User->>Vault: Deposit $1,000 USDE
+    Note over Vault: Step 1: Receive stablecoins
+    
+    Vault->>DEX Pool: Swap $500 USDE → Token X
+    Note over DEX Pool: Token X = volatile asset<br/>(ETH, BTC, etc.)
+    
+    Vault->>DEX Pool: Add Liquidity<br/>$500 USDE + $500 Token X
+    Note over DEX Pool: Create LP position
+    
+    DEX Pool->>LP Token: Mint LP tokens
+    LP Token->>Vault: Transfer LP tokens
+    Note over Vault: LP tokens staked<br/>Value = Vault Value
+```
+
+**Critical Insight:** The vault doesn't hold the original stablecoins. It holds **LP tokens** whose value fluctuates with:
+1. Token X price movements
+2. Impermanent loss/gain
+3. Trading fees accrued
+
+### 2.2 Vault Value Determination
+
+```mermaid
+graph LR
+    A[External Traders] -->|Buy/Sell Token X| B[DEX Pool]
+    B -->|Token X Price Changes| C[LP Token Value Changes]
+    C -->|Vault holds LP tokens| D[Vault Value = LP tokens × LP price]
+    D -->|V_s, V_j, V_r| E[Drives All Protocol Logic]
+    
+    style A fill:#FF6347
+    style B fill:#4169E1
+    style C fill:#FFD700
+    style E fill:#90EE90
+```
+
+**Vault Value Formula:**
+$$
+V_{vault} = N_{LP} \times P_{LP}
+$$
+
+Where:
+- $N_{LP}$ = Number of LP tokens held by vault
+- $P_{LP}$ = Current price of LP token in USD (derived from pool reserves and Token X price)
+
+### 2.3 Three-Vault System
+
+```mermaid
+graph TB
+    subgraph "Senior Vault (V_s)"
+        S1[Target: 100-110% backing]
+        S2[Dynamic APY: 11-13%]
+        S3[Rebasing Token: snrUSD]
+        S4[Holds: LP tokens]
+    end
+    
+    subgraph "Junior Vault (V_j)"
+        J1[Variable APY]
+        J2[Receives 80% of spillover]
+        J3[Provides secondary backstop]
+        J4[Holds: LP tokens]
+    end
+    
+    subgraph "Reserve Vault (V_r) - Reserve for Reserves"
+        R1[Deposit Cap Controller]
+        R2[Receives 20% of spillover]
+        R3[Provides primary backstop]
+        R4[Holds: Token X + LP tokens]
+    end
+    
+    S1 -.->|Profit >110%<br/>Send LP tokens| J1
+    S1 -.->|Profit >110%<br/>Send LP tokens| R1
+    J1 -.->|Loss <100%<br/>Send LP tokens| S1
+    R1 -.->|Loss <100%<br/>Send LP tokens or<br/>Convert Token X → LP| S1
+    
+    style S1 fill:#90EE90
+    style J1 fill:#FFD700
+    style R1 fill:#87CEEB
+```
+
+**Key Distinction:**
+- **Senior & Junior:** Hold LP tokens only
+- **Reserve:** Holds **Token X** (the volatile asset) + LP tokens received from spillover
+- **Reserve as "Reserve for Reserves":** Keeps the raw volatile token, can convert to LP when needed for backstop
+
+### 2.4 Reserve Vault: "Reserve for Reserves"
+
+The Reserve vault has a unique design as a **dual-asset reserve system**:
+
+```mermaid
+graph TB
+    A[Reserve Vault Holdings] --> B[Token X<br/>Volatile Asset]
+    A --> C[LP Tokens<br/>From Spillover]
+    
+    D[Spillover Event] -->|Receives LP tokens| C
+    C -->|Accumulates| E[LP Token Pool]
+    
+    F[Backstop Event] --> G{Has LP tokens?}
+    G -->|Yes| H[Use LP tokens<br/>Direct transfer]
+    G -->|No or Insufficient| I[Convert Token X]
+    
+    I --> J[Swap 50% Token X → Stablecoin]
+    J --> K[Add Liquidity<br/>Token X + Stablecoin]
+    K --> L[Receive LP tokens]
+    L --> M[Transfer LP to Senior]
+    
+    style B fill:#FF6347
+    style C fill:#87CEEB
+    style H fill:#90EE90
+    style I fill:#FFD700
+```
+
+**Reserve Vault Value:**
+$$
+V_r = (N_X^r \times P_X) + (N_{LP}^r \times P_{LP})
+$$
+
+**Why This Design?**
+
+1. **Efficiency:** Holds the volatile asset directly, no unnecessary LP conversion
+2. **Flexibility:** Can backstop using either LP tokens or Token X
+3. **Capital Preservation:** Token X appreciates directly with market (no IL initially)
+4. **Spillover Accumulation:** LP tokens from spillover stay as LP tokens
+
+**Backstop Mechanics:**
+
+When Reserve provides backstop to Senior:
+
+```
+IF Reserve has sufficient LP tokens:
+    → Direct transfer LP tokens to Senior
+    
+ELSE IF Reserve has Token X:
+    → Calculate LP needed for deficit
+    → Swap 50% of required Token X → Stablecoin
+    → Add liquidity (Token X + Stablecoin) to DEX pool
+    → Receive LP tokens
+    → Transfer LP tokens to Senior
+```
+
+**Example:**
+
+```
+Reserve Holdings:
+- Token X: 1,000 tokens @ $100 = $100,000
+- LP tokens: 200 LP @ $150 = $30,000
+- Total V_r: $130,000
+
+Backstop needed: $50,000 worth of LP
+
+Step 1: Use available LP tokens
+- Has: $30,000 in LP
+- Needs: $50,000 in LP
+- Remaining needed: $20,000
+
+Step 2: Convert Token X to LP
+- Need $20,000 worth of LP
+- Swap: 100 Token X → $10,000 USDE
+- Add liquidity: $10,000 USDE + 100 Token X = $20,000 LP
+- Receive: ~133 LP tokens
+
+Step 3: Transfer to Senior
+- Transfer: 200 LP (existing) + 133 LP (new) = 333 LP total
+```
+
+---
+
+## 3. Economic Mechanism
+
+### 3.1 How Vault Values Change
+
+The protocol's entire economic model depends on external market activity in the DEX pool:
+
+```mermaid
+graph TB
+    A[Token X Price Movement] --> B{Direction}
+    
+    B -->|🚀 Bull Market<br/>Token X ↑| C[LP Value Increases]
+    B -->|💀 Bear Market<br/>Token X ↓| D[LP Value Decreases]
+    
+    C --> E[V_s, V_j, V_r Increase]
+    E --> F[Senior Backing > 110%]
+    F --> G[ZONE 1: Profit Spillover<br/>Junior gets 80% of excess]
+    
+    D --> H[V_s, V_j, V_r Decrease]
+    H --> I[Senior Backing < 100%]
+    I --> J[ZONE 3: Backstop Triggered<br/>Reserve + Junior cover loss]
+    
+    style C fill:#90EE90
+    style D fill:#FF6347
+    style G fill:#FFD700
+    style J fill:#87CEEB
+```
+
+### 3.2 LP Position Dynamics
+
+**Example: Bull Market Scenario**
+
+```
+Initial State:
+- Deposit: $1,000 USDE
+- Swap: $500 USDE → 5 Token X (@ $100/token)
+- Add Liquidity: $500 USDE + 5 Token X
+- LP tokens received: 10 LP tokens @ $100 each
+- Vault value: $1,000
+
+Token X Pumps 50%:
+- Token X price: $100 → $150
+- Pool rebalances (impermanent loss occurs)
+- New LP token value: ~$120 each (despite IL)
+- Vault value: 10 LP × $120 = $1,200
+
+Result: +20% vault gain despite 50% token pump (due to IL)
+```
+
+**Example: Bear Market Scenario**
+
+```
+Token X Dumps 40%:
+- Token X price: $100 → $60
+- Pool rebalances
+- New LP token value: ~$85 each
+- Vault value: 10 LP × $85 = $850
+
+Result: -15% vault loss from 40% token dump
+```
+
+### 3.3 Risk Distribution Model
+
+```mermaid
+graph LR
+    subgraph "Market Scenarios"
+        A1[Bull Market<br/>Token X ↑↑]
+        A2[Stable Market<br/>Token X ≈]
+        A3[Bear Market<br/>Token X ↓↓]
+    end
+    
+    subgraph "Senior Experience"
+        B1[11-13% APY<br/>Stable Returns]
+        B2[11-13% APY<br/>Stable Returns]
+        B3[11-13% APY<br/>Protected by Backstop]
+    end
+    
+    subgraph "Junior Experience"
+        C1[Base APY + 80% Spillover<br/>🚀 Leveraged Gains]
+        C2[Base APY<br/>Moderate Returns]
+        C3[Absorbs Losses<br/>💀 After Reserve]
+    end
+    
+    A1 --> B1
+    A1 --> C1
+    A2 --> B2
+    A2 --> C2
+    A3 --> B3
+    A3 --> C3
+    
+    style B1 fill:#90EE90
+    style B2 fill:#90EE90
+    style B3 fill:#90EE90
+    style C1 fill:#FFD700
+    style C3 fill:#FF6347
+```
+
+**Key Insight:** Junior vault gets leveraged exposure to Token X price movements without directly holding Token X. The LP mechanism + spillover system creates synthetic leveraged exposure.
+
+---
+
+## 4. Mathematical Model
+
+### 4.1 Notation & Definitions
+
+#### State Variables
 
 | Symbol | Description | Unit |
 |--------|-------------|------|
 | $S$ | Circulating supply of snrUSD | snrUSD |
-| $V_s$ | USD value of Senior vault assets | USD |
-| $V_j$ | USD value of Junior vault assets | USD |
-| $V_r$ | USD value of Reserve vault | USD |
+| $V_s$ | USD value of Senior vault LP tokens | USD |
+| $V_j$ | USD value of Junior vault LP tokens | USD |
+| $V_r$ | USD value of Reserve vault assets | USD |
 | $I$ | Rebase index | dimensionless |
 | $t$ | Current time | seconds |
 | $T_r$ | Last rebase timestamp | seconds |
+| $N_{LP}^s$ | LP tokens held by Senior vault | LP tokens |
+| $N_{LP}^j$ | LP tokens held by Junior vault | LP tokens |
+| $N_{LP}^r$ | LP tokens held by Reserve vault (from spillover) | LP tokens |
+| $N_X^r$ | Token X (volatile) held by Reserve vault | Token X |
+| $P_{LP}$ | Current LP token price in USD | USD/LP |
+| $P_X$ | Current Token X price in USD | USD/Token X |
 
-### **Parameters (Constants)**
+#### Parameters (Constants)
 
 | Symbol | Description | Value |
 |--------|-------------|-------|
@@ -73,18 +393,18 @@
 | $r_{month}^{min}$ | Min monthly rebase rate | $\frac{11\%}{12} = 0.009167$ |
 | $r_{month}^{mid}$ | Mid monthly rebase rate | $\frac{12\%}{12} = 0.010000$ |
 | $r_{month}^{max}$ | Max monthly rebase rate | $\frac{13\%}{12} = 0.010833$ |
-| $f_{mgmt}$ | Annual management fee (value deduction) | 0.01 (1%) |
-| $f_{perf}$ | Performance fee (token dilution - 2% extra minted) | 0.02 (2%) |
+| $f_{mgmt}$ | Annual management fee (token minting) | 0.01 (1%) |
+| $f_{perf}$ | Performance fee (token dilution) | 0.02 (2%) |
 | $f_{penalty}$ | Early withdrawal penalty | 0.05 (5%) |
 | $\alpha_{target}$ | Senior target backing (profit spillover) | 1.10 (110%) |
 | $\alpha_{trigger}$ | Senior backstop trigger threshold | 1.00 (100%) |
 | $\alpha_{restore}$ | Senior backstop restoration target | 1.009 (100.9%) |
-| $\beta_j^{spillover}$ | Junior spillover share (Senior → Junior) | 0.80 (80%) |
-| $\beta_r^{spillover}$ | Reserve spillover share (Senior → Reserve) | 0.20 (20%) |
+| $\beta_j^{spillover}$ | Junior spillover share | 0.80 (80%) |
+| $\beta_r^{spillover}$ | Reserve spillover share | 0.20 (20%) |
 | $\gamma$ | Deposit cap multiplier | 10 |
 | $\tau$ | Cooldown period | 604800 (7 days) |
 
-### **User State**
+#### User State
 
 | Symbol | Description | Unit |
 |--------|-------------|------|
@@ -92,11 +412,9 @@
 | $b_i$ | User $i$'s snrUSD balance | snrUSD |
 | $t_c^{(i)}$ | User $i$'s cooldown initiation time | seconds |
 
----
+### 4.2 Core Formulas
 
-## Core Formulas
-
-### **1. User Balance (via Rebase Index)**
+#### 4.2.1 User Balance (Rebase Index)
 
 The actual snrUSD balance of user $i$:
 
@@ -110,9 +428,7 @@ Where:
 
 **Initial state:** $I = 1.0$, so $b_i = \sigma_i$ (1:1 initially)
 
----
-
-### **2. Total Supply**
+#### 4.2.2 Total Supply
 
 $$
 S = \sum_{i=1}^{n} b_i = \sum_{i=1}^{n} (\sigma_i \cdot I) = I \cdot \sum_{i=1}^{n} \sigma_i = I \cdot \Sigma
@@ -120,19 +436,37 @@ $$
 
 Where $\Sigma = \sum_{i=1}^{n} \sigma_i$ is the total shares (constant).
 
----
+#### 4.2.3 Vault Value (from LP Holdings)
 
-### **3. Backing Ratio (Total Ecosystem)**
-
+**Senior vault (LP tokens only):**
 $$
-R_{backing} = \frac{V_s + V_j + V_r}{S}
+V_s = N_{LP}^s \times P_{LP}
 $$
 
-**Interpretation:** How many USD back each snrUSD across entire system.
+**Junior vault (LP tokens only):**
+$$
+V_j = N_{LP}^j \times P_{LP}
+$$
 
----
+**Reserve vault (Token X + LP tokens - "Reserve for Reserves"):**
+$$
+V_r = (N_X^r \times P_X) + (N_{LP}^r \times P_{LP})
+$$
 
-### **4. Senior Backing Ratio**
+Where:
+- $N_X^r$ = Token X holdings (the volatile token)
+- $N_{LP}^r$ = LP tokens received from spillover
+
+**Critical:** $V_s$, $V_j$, $V_r$ change when:
+1. **$N_{LP}$ or $N_X$ changes** (deposits, withdrawals, spillover, backstop)
+2. **$P_{LP}$ or $P_X$ changes** (Token X price movements in DEX pool)
+
+**Reserve Vault Special Property:**
+- Initially holds **Token X** (the volatile asset itself)
+- Receives **LP tokens** during spillover (can accumulate both)
+- During backstop: Uses LP tokens if available, otherwise converts Token X → LP tokens
+
+#### 4.2.4 Senior Backing Ratio
 
 $$
 R_{senior} = \frac{V_s}{S}
@@ -140,8 +474,24 @@ $$
 
 **Three Operating Zones:**
 
-#### **Zone 1: Excess Backing ($R_{senior} > 1.10$)**
-**Action:** Profit spillover to Junior (80%) & Reserve (20%)
+```mermaid
+graph TB
+    A[Calculate R_senior = V_s / S] --> B{Check Zone}
+    
+    B -->|R > 1.10| C[ZONE 1: Excess Backing<br/>Profit Spillover]
+    B -->|1.00 ≤ R ≤ 1.10| D[ZONE 2: Healthy Buffer<br/>No Action Needed ✅]
+    B -->|R < 1.00| E[ZONE 3: Depegged<br/>Backstop Triggered 🚨]
+    
+    C --> F[Senior → Junior 80%<br/>Senior → Reserve 20%]
+    D --> G[Everyone keeps their money<br/>Most common state]
+    E --> H[Reserve → Senior first<br/>Junior → Senior if needed]
+    
+    style C fill:#FFD700
+    style D fill:#90EE90
+    style E fill:#FF6347
+```
+
+**Zone 1: Excess Backing ($R_{senior} > 1.10$)**
 
 $$
 \text{If } R_{senior} > \alpha_{target} = 1.10
@@ -149,17 +499,14 @@ $$
 
 - **Result:** Senior reduced back to exactly 110%
 - **Example:** 115% backing → Spill 5% excess to Junior/Reserve
-- **Frequency:** Happens when strategy performs very well
-- **How reached:** Strategy yield accumulation over time pushes backing above 110%
+- **Cause:** Strong performance of Token X in DEX pool
 
----
-
-#### **Zone 2: Healthy Buffer ($1.00 \leq R_{senior} \leq 1.10$)**
-**Action:** No spillover in either direction ✅
+**Zone 2: Healthy Buffer ($1.00 \leq R_{senior} \leq 1.10$)**
 
 $$
 \text{If } \alpha_{trigger} \leq R_{senior} \leq \alpha_{target}
 $$
+
 $$
 \text{If } 1.00 \leq R_{senior} \leq 1.10
 $$
@@ -169,77 +516,26 @@ $$
 - **Example:** 105% backing → After rebase → ~104.1% → Still healthy!
 - **Frequency:** **Most common state** in normal operation
 
-**Key Insight:** This 10% buffer zone prevents constant spillover!
-
----
-
-#### **Zone 3: Depeg ($R_{senior} < 1.00$)**
-**Action:** Backstop from Reserve first (no cap!), then Junior (no cap!)
+**Zone 3: Depeg ($R_{senior} < 1.00$)**
 
 $$
 \text{If } R_{senior} < \alpha_{trigger} = 1.00
 $$
 
-- **Result:** Senior restored to 100.9% (enables next month's min APY)
-- **Why critical:** Senior is depegged, need to restore + afford next month's 11% APY
-- **Example:** 98% backing → **Depegged!** → Backstop restores to 100.9% → Next month can mint 0.9167% and stay at 100%
-- **Frequency:** Rare, only when strategy performs badly
+- **Result:** Senior restored to 100.9%
+- **Why critical:** Senior is depegged (< 1:1 backing)
+- **Cause:** Poor performance of Token X in DEX pool
+- **Restoration:** Reserve provides funds first, then Junior if needed
 
----
+#### 4.2.5 Total Ecosystem Backing
 
-**This creates balanced risk/reward for Junior holders:**
-- ✅ **Upside:** Share in Senior's excess profits (>110%)
-- ✅ **Wide safety zone:** 100-110% requires no action (10% buffer!)
-- ✅ **Downside:** Secondary backstop (no cap!) - only called if Reserve depleted first
+$$
+R_{backing} = \frac{V_s + V_j + V_r}{S}
+$$
 
----
+**Interpretation:** Total USD backing per snrUSD across entire system.
 
-### **Initial Deployment (Day 0)**
-
-**How Senior Launches:**
-
-```
-Users deposit: $850,000 USDE
-System mints: 850,000 snrUSD (1:1 conversion)
-Senior vault value: $850,000
-Initial backing: 100% ✅
-
-Formula: Initial_snrUSD = Deposit_USDE / 1.0
-```
-
-**Natural Growth Path:**
-
-```
-Day 0:    100% backing (launch)
-          ↓
-Week 1:   Strategy earns yield
-          101-102% backing
-          (Zone 2: No action)
-          ↓
-Month 1:  First rebase occurs
-          ~100% backing after rebase
-          (Peg maintained)
-          ↓
-Month 3:  Yield accumulates
-          105-108% backing
-          (Zone 2: Healthy operation)
-          ↓
-Month 6:  Strong performance
-          112% backing
-          (Zone 1: Profit spillover!)
-          Excess shared with Junior/Reserve
-          Returns to 110%
-```
-
-**Key Points:**
-- ✅ **No upfront overcollateralization required**
-- ✅ **110% is a target reached through operations, not a launch requirement**
-- ✅ **System naturally gravitates toward 100-110% range**
-- ✅ **Users always get 1:1 deposit conversion**
-
----
-
-### **5. Deposit Cap**
+#### 4.2.6 Deposit Cap
 
 $$
 S_{max} = \gamma \cdot V_r = 10 \cdot V_r
@@ -247,52 +543,87 @@ $$
 
 **Constraint:** $S \leq S_{max}$
 
----
-
-## Rebase Algorithm
-
-### **Input State at time $t$:**
-- Current supply: $S$
-- Senior value (reported): $V_s$
-- Junior value: $V_j$
-- Reserve value: $V_r$
-- Last rebase index: $I_{old}$
-
-### **Step 1: Calculate Gross Profit**
-
-$$
-\Pi_{gross} = V_s - V_s^{prev}
-$$
-
-Where $V_s^{prev}$ is Senior value at last rebase.
+Reserve vault size limits Senior vault growth (ensures adequate backstop capacity).
 
 ---
 
-### **Step 2: Calculate Management Fee**
+## 5. Protocol Operations
 
-**Management Fee (monthly) - Deducted from value:**
+### 5.1 Rebase Algorithm
+
+The monthly rebase is the core operation that:
+1. Mints new snrUSD to users (11-13% APY)
+2. Collects fees (management + performance)
+3. Executes spillover or backstop
+4. Updates the rebase index
+
+```mermaid
+graph TB
+    A[Start Monthly Rebase] --> B[Step 1: Calculate Management Fee Tokens<br/>S_mgmt = V_s × 1%/12]
+    B --> C[Step 2: Dynamic APY Selection<br/>Try 13% → 12% → 11%]
+    C --> D[Step 3: Calculate Performance Fee<br/>S_fee = S_users × 2%]
+    D --> E[Step 4: Determine Zone<br/>R_senior = V_s / S_new]
+    
+    E --> F{Which Zone?}
+    
+    F -->|R > 1.10| G[ZONE 1: Execute Spillover<br/>Transfer LP tokens to Junior/Reserve]
+    F -->|1.00 ≤ R ≤ 1.10| H[ZONE 2: No Action<br/>Maintain current state]
+    F -->|R < 1.00| I[ZONE 3: Execute Backstop<br/>Pull LP tokens from Reserve/Junior]
+    
+    G --> J[Step 5: Update Rebase Index<br/>I_new = I_old × 1 + r_selected × 1.02]
+    H --> J
+    I --> J
+    
+    J --> K[Step 6: Mint Fee Tokens<br/>S_total = S_mgmt + S_fee to Treasury]
+    K --> L[Emit Events<br/>Rebase Complete]
+    
+    style B fill:#87CEEB
+    style C fill:#FFD700
+    style G fill:#90EE90
+    style H fill:#90EE90
+    style I fill:#FF6347
+    style J fill:#4169E1
+```
+
+#### Step 1: Calculate Management Fee Tokens
+
+**Management Fee (monthly) - Minted as snrUSD tokens:**
 $$
-F_{mgmt} = V_s \cdot \frac{f_{mgmt}}{12} = V_s \cdot 0.000833
+S_{mgmt} = V_s \cdot \frac{f_{mgmt}}{12} = V_s \cdot 0.000833
 $$
 
-In simple terms, Monthly Management Fee = Senior Value × (1% ÷ 12)
+In simple terms: Monthly Management Fee Tokens = Senior Value × (1% ÷ 12)
 
-**Net Senior Value (after management fee):**
+**Key Point:** Management fee is NOT deducted from vault value. Instead, it's minted as snrUSD tokens to the treasury.
+
+**Vault value stays the same:**
 $$
-V_s^{net} = V_s - F_{mgmt}
+V_s = V_s \quad \text{(no deduction)}
 $$
 
-**Note:** Performance fee is NO LONGER deducted from value. Instead, it's charged by minting additional tokens (see Step 3).
-
----
-
-### **Step 3: Dynamic APY Selection (11-13%) + Performance Fee**
-
+#### Step 2: Dynamic APY Selection
 
 **The system tries to maximize APY while maintaining the peg!**
 
-
 **Algorithm: Waterfall from 13% → 12% → 11%**
+
+```mermaid
+graph LR
+    A[Try 13% APY] --> B{Backing ≥ 100%?}
+    B -->|Yes| C[✅ Use 13%]
+    B -->|No| D[Try 12% APY]
+    D --> E{Backing ≥ 100%?}
+    E -->|Yes| F[✅ Use 12%]
+    E -->|No| G[Try 11% APY]
+    G --> H{Backing ≥ 100%?}
+    H -->|Yes| I[✅ Use 11%]
+    H -->|No| J[⚠️ Use 11% + Backstop]
+    
+    style C fill:#90EE90
+    style F fill:#FFD700
+    style I fill:#FFD700
+    style J fill:#FF6347
+```
 
 **Try 13% APY first (greedy maximization):**
 
@@ -311,9 +642,9 @@ $$
 S_{new}^{13} = S + S_{users}^{13} + S_{fee}^{13} = S \cdot (1 + 0.010833 \cdot 1.02) = S \cdot 1.011050
 $$
 
-Backing check:
+Backing check (using FULL vault value, not reduced):
 $$
-R_{13} = \frac{V_s^{net}}{S_{new}^{13}}
+R_{13} = \frac{V_s}{S_{new}^{13}}
 $$
 
 **If $R_{13} \geq 1.00$:** ✅ Use 13% APY, set $S_{new} = S_{new}^{13}$, $r_{selected} = 0.010833$
@@ -335,9 +666,9 @@ $$
 S_{new}^{12} = S \cdot (1 + 0.010000 \cdot 1.02) = S \cdot 1.010200
 $$
 
-Backing check:
+Backing check (using FULL vault value):
 $$
-R_{12} = \frac{V_s^{net}}{S_{new}^{12}}
+R_{12} = \frac{V_s}{S_{new}^{12}}
 $$
 
 **If $R_{12} \geq 1.00$:** ✅ Use 12% APY, set $S_{new} = S_{new}^{12}$, $r_{selected} = 0.010000$
@@ -359,43 +690,36 @@ $$
 S_{new}^{11} = S \cdot (1 + 0.009167 \cdot 1.02) = S \cdot 1.009350
 $$
 
-Backing check:
+Backing check (using FULL vault value):
 $$
-R_{11} = \frac{V_s^{net}}{S_{new}^{11}}
+R_{11} = \frac{V_s}{S_{new}^{11}}
 $$
 
 **If $R_{11} \geq 1.00$:** ✅ Use 11% APY, set $S_{new} = S_{new}^{11}$, $r_{selected} = 0.009167$
 
 **Else:** 🚨 Use 11% anyway, backstop will be triggered, set $S_{new} = S_{new}^{11}$, $r_{selected} = 0.009167$
 
-
 **Result:** $S_{new}$ and $r_{selected}$ are now set to the highest APY that maintains (or attempts to maintain) the peg.
 
+**IMPORTANT:** This calculates the *conceptual* new supply. The actual tokens are minted in Step 6!
 
-**IMPORTANT:** This calculates the *conceptual* new supply. We don't actually mint tokens - we update the rebase index in Step 6!
+**Fee Model Summary:**
+- ✅ **Management fee:** Minted as tokens (1% annual / 12 = ~$S_{mgmt}$ tokens/month)
+- ✅ **Performance fee:** 2% extra tokens minted on top of user APY
+- ✅ Both minted to protocol treasury
+- ✅ Both dilute backing ratio (accounted for in backing checks)
+- ✅ Example: 11% APY + fees → Users get 0.009167, Mgmt fee tokens = $V_s \cdot 0.000833$, Perf fee = 0.000183 (2% of user tokens)
 
+#### Step 3: Determine Operating Zone
 
-**Performance Fee Model:**
-- ✅ 2% extra tokens minted on top of user APY
-- ✅ Minted to protocol treasury
-- ✅ Dilutes backing ratio slightly (accounted for in backing checks)
-- ✅ Example: 11% APY → Users get 0.009167, Treasury gets 0.000183 (total: 0.009350)
-
-
----
-
-### **Step 4: Determine Operating Zone & Calculate Spillover**
-
-**Calculate current backing ratio:**
+**Calculate current backing ratio (using full vault value):**
 $$
-R_{senior} = \frac{V_s^{net}}{S_{new}}
+R_{senior} = \frac{V_s}{S_{new}}
 $$
 
 **Determine which of three zones Senior is in:**
 
----
-
-#### **Zone 1: Excess Backing ($R_{senior} > 1.10$)**
+##### Zone 1: Excess Backing ($R_{senior} > 1.10$)
 
 **Calculate profit spillover target:**
 $$
@@ -404,14 +728,12 @@ $$
 
 **Excess to distribute:**
 $$
-E = V_s^{net} - V_{target}
+E = V_s - V_{target}
 $$
 
 **→ PROFIT SPILLOVER (Senior → Junior/Reserve)**
 
----
-
-#### **Zone 2: Healthy Buffer ($1.00 \leq R_{senior} \leq 1.10$)**
+##### Zone 2: Healthy Buffer ($1.00 \leq R_{senior} \leq 1.10$)
 
 **Check if in buffer zone:**
 $$
@@ -425,9 +747,7 @@ $$
 
 **Why:** Senior maintains the 1:1 peg and has buffer to pay APY from yield.
 
----
-
-#### **Zone 3: Depeg ($R_{senior} < 1.00$)**
+##### Zone 3: Depeg ($R_{senior} < 1.00$)
 
 **Backstop trigger (when to activate):**
 $$
@@ -441,7 +761,7 @@ $$
 
 **Deficit to cover:**
 $$
-D = V_{restore} - V_s^{net}
+D = V_{restore} - V_s
 $$
 
 **→ BACKSTOP (Junior/Reserve → Senior)**
@@ -451,13 +771,11 @@ $$
 - After next month's rebase: 100.9% - 0.9167% ≈ 100% (still at peg!)
 - Without this buffer, we'd need backstop every single month
 
----
-
 **In simple terms:**
 
 ```
-Senior after fees: $1,050,000
-New supply: 1,000,000 snrUSD
+Senior vault value: $1,050,000 (full value, no fee deduction!)
+New supply (after rebase calc): 1,000,000 snrUSD
 Backing ratio: $1,050,000 / 1,000,000 = 105%
 
 Target (110%): $1,100,000
@@ -479,18 +797,17 @@ Case 3: Backing 98% (< 100%)
   → Junior/Reserve provide $29k
   → Restore to 100.9% (not 100%)
   → Why? Next month can mint 0.9167% and stay at 100%!
+
+NOTE: Fees are minted as tokens, not deducted from vault value!
 ```
 
-
----
-
-### **Step 5A: Execute Profit Spillover (if $\Delta V > 0$)**
+#### Step 4A: Execute Profit Spillover (if Zone 1)
 
 **When Senior backing > 110%, share excess with Junior & Reserve!**
 
 **Total excess:**
 $$
-E = \Delta V = V_s^{net} - V_{target}
+E = \Delta V = V_s - V_{target}
 $$
 
 **Distribution (80/20 split):**
@@ -501,9 +818,19 @@ $$
 E_r = E \cdot \beta_r^{spillover} = E \cdot 0.20
 $$
 
-**Transfer assets:**
+**Transfer LP tokens:**
+
+Calculate LP tokens to transfer:
 $$
-V_s^{final} = V_s^{net} - E = V_{target}
+N_{LP}^{transfer\_j} = \frac{E_j}{P_{LP}}
+$$
+$$
+N_{LP}^{transfer\_r} = \frac{E_r}{P_{LP}}
+$$
+
+**Update holdings:**
+$$
+V_s^{final} = V_s - E = V_{target}
 $$
 $$
 V_j^{new} = V_j + E_j
@@ -515,13 +842,17 @@ $$
 **In simple terms:**
 
 ```
-Senior has $1,000,000 (excess)
+Senior has $1,000,000 worth of LP tokens (excess)
 Target is $935,000
 Excess: $65,000
 
 Split:
 - Junior gets: $65,000 × 80% = $52,000 🎉
 - Reserve gets: $65,000 × 20% = $13,000 🎉
+
+LP transfers:
+- Transfer LP tokens worth $52k to Junior vault
+- Transfer LP tokens worth $13k to Reserve vault
 
 Final state:
 - Senior: $935,000 (exactly 110%)
@@ -531,9 +862,7 @@ Final state:
 
 **This is how Junior holders get rewarded for supporting the system!**
 
----
-
-### **Step 5B: Execute Backstop (if $\Delta V < 0$)**
+#### Step 4B: Execute Backstop (if Zone 3)
 
 **When Senior backing < 100%, Junior & Reserve provide support to restore to 100.9%.**
 
@@ -544,12 +873,44 @@ $$
 
 **Deficit to cover:**
 $$
-D = V_{restore} - V_s^{net}
+D = V_{restore} - V_s
 $$
 
 **Backstop Waterfall (Reserve → Junior, NO CAPS):**
 
+```mermaid
+graph TB
+    A[Deficit = $29,000] --> B{Reserve has LP tokens?}
+    B -->|Yes| C[Use LP tokens first]
+    B -->|No or Insufficient| D[Convert Token X → LP]
+    
+    C --> E[LP_available = N_LP^r × P_LP]
+    D --> F[Swap 50% Token X → Stablecoin]
+    F --> G[Add Liquidity → Get LP tokens]
+    
+    E --> H{V_r ≥ D?}
+    G --> H
+    
+    H -->|Yes| I[Reserve provides all<br/>X_r = D<br/>X_j = 0]
+    H -->|No V_r < D| J[Reserve provides max<br/>X_r = V_r]
+    J --> K[Remaining = D - X_r]
+    K --> L{Junior Sufficient?}
+    L -->|Yes V_j ≥ Remaining| M[Junior provides remaining<br/>X_j = Remaining]
+    L -->|No V_j < Remaining| N[⚠️ Emergency: Insufficient<br/>Both wiped out!]
+    
+    style I fill:#90EE90
+    style M fill:#FFD700
+    style N fill:#FF6347
+```
+
 **Pull from Reserve first (everything if needed):**
+
+Total Reserve value available:
+$$
+V_r = (N_X^r \times P_X) + (N_{LP}^r \times P_{LP})
+$$
+
+Reserve provides (can use LP tokens or convert Token X):
 $$
 X_r = \min(V_r, D)
 $$
@@ -569,9 +930,37 @@ $$
 X_{total} = X_r + X_j
 $$
 
-**Transfer assets:**
+**Transfer LP tokens (Reserve has unique conversion mechanism):**
+
+**Reserve backstop process:**
+
+1. **Calculate LP needed:**
 $$
-V_s^{final} = V_s^{net} + X_{total}
+N_{LP}^{needed} = \frac{X_r}{P_{LP}}
+$$
+
+2. **Check Reserve LP holdings:**
+
+If $N_{LP}^r \times P_{LP} \geq X_r$:
+- Use existing LP tokens directly
+- $N_{LP}^{transfer\_r} = N_{LP}^{needed}$
+
+Else (insufficient LP, need to convert Token X):
+- LP shortfall: $X_{shortfall} = X_r - (N_{LP}^r \times P_{LP})$
+- Calculate Token X needed: $N_X^{convert} = \frac{X_{shortfall}}{P_X}$
+- Swap 50% Token X to stablecoin: $N_X^{swap} = \frac{N_X^{convert}}{2}$
+- Add liquidity with remaining Token X + swapped stablecoin
+- Receive new LP tokens: $N_{LP}^{new}$
+- Total transfer: $N_{LP}^{transfer\_r} = N_{LP}^r + N_{LP}^{new}$
+
+**Junior backstop (straightforward LP transfer):**
+$$
+N_{LP}^{transfer\_j} = \frac{X_j}{P_{LP}}
+$$
+
+**Update holdings:**
+$$
+V_s^{final} = V_s + X_{total}
 $$
 $$
 V_j^{new} = V_j - X_j
@@ -583,7 +972,7 @@ $$
 **In simple terms:**
 
 ```
-Senior has $980,000 (deficit - depegged!)
+Senior has $980,000 worth of LP tokens (deficit - depegged!)
 Supply: 1,000,000 snrUSD
 Current backing: 98%
 
@@ -594,6 +983,9 @@ Waterfall (Reserve → Junior, NO CAPS):
 1. Reserve has: $625,000
    Reserve gives: min($625,000, $29,000) = $29,000 ✅
    Deficit covered! Junior not needed!
+
+LP transfer:
+- Transfer LP tokens worth $29k from Reserve to Senior
 
 Final state:
 - Senior: $980,000 + $29,000 = $1,009,000 (100.9% backing) ✅
@@ -631,38 +1023,15 @@ Final state:
 - Reserve: $625,000 - $509,000 = $116,000 (18.6% remaining)
 ```
 
-**Example with catastrophic deficit (both depleted):**
-
-```
-Senior has $200,000 (catastrophic depeg!)
-Supply: 1,000,000 snrUSD
-
-Deficit: $1,009,000 - $200,000 = $809,000
-
-Waterfall:
-1. Reserve gives everything: $625,000
-   Remaining: $809,000 - $625,000 = $184,000
-
-2. Junior gives: min($850,000, $184,000) = $184,000
-   Deficit covered! ✅
-
-Final state:
-- Senior: $1,009,000 (100.9%) ✅
-- Junior: $850,000 - $184,000 = $666,000 (21.6% loss)
-- Reserve: $0 (WIPED OUT!)
-```
-
 **This is how Junior holders take on risk in exchange for upside!**
- 
 
+#### Step 5: Update Rebase Index & Mint Fee Tokens
 
----
+**Two actions happen here:**
+1. Update the rebase index (user balances automatically increase)
+2. Mint fee tokens to treasury (management + performance)
 
-### **Step 6: Update Rebase Index**
-
-
-**This is the ONLY thing we actually execute on-chain to complete the rebase!**
-
+**A. Update Rebase Index:**
 
 The rebase index multiplier includes BOTH user APY and performance fee:
 
@@ -671,7 +1040,7 @@ I_{new} = I_{old} \cdot (1 + r_{selected} \cdot (1 + f_{perf}))
 $$
 
 Where:
-- $r_{selected}$ = the dynamically chosen rate from Step 3 (0.010833, 0.010000, or 0.009167)
+- $r_{selected}$ = the dynamically chosen rate from Step 2 (0.010833, 0.010000, or 0.009167)
 - $f_{perf}$ = 0.02 (2% performance fee)
 
 **Expanded formulas:**
@@ -696,305 +1065,107 @@ $$
 b_i^{new} = \sigma_i \cdot I_{new}
 $$
 
-**Treasury balance also increases** (holds protocol fee shares):
-$$
-b_{treasury}^{new} = \sigma_{treasury} \cdot I_{new}
-$$
-
 In simple terms: new_rebase_index = old_rebase_index × (1 + selected_rate × 1.02)
 
-**Key Point:** The 2% performance fee is captured by minting additional shares to the treasury during rebase execution, which then grow with the index like all other shares.
+**B. Mint Fee Tokens to Treasury:**
 
----
-
-## Three-Zone Spillover System
-
-### **Understanding the Three Operating Zones**
-
-**Senior operates in three distinct zones with different spillover behavior:**
-
-#### **Mechanism Overview:**
-
-```
-┌──────────────────────────────────────────┐
-│  ZONE 1: Senior Backing > 110%          │
-│  (Excess Profits)                        │
-│                                          │
-│  Senior → Junior (80%)                   │
-│  Senior → Reserve (20%)                  │
-│                                          │
-│  Senior returns to exactly 110% ✅       │
-└──────────────────────────────────────────┘
-
-┌──────────────────────────────────────────┐
-│  ZONE 2: 100% ≤ Backing ≤ 110%          │
-│  (Healthy Buffer - MOST COMMON)          │
-│                                          │
-│  NO ACTION NEEDED                        │
-│                                          │
-│  Everyone keeps their money ✅           │
-│  Senior maintains 1:1 peg + buffer ✅    │
-└──────────────────────────────────────────┘
-
-┌──────────────────────────────────────────┐
-│  ZONE 3: Senior Backing < 100%          │
-│  (Depegged - Emergency)                  │
-│                                          │
-│  Reserve → Senior (no cap!)              │
-│  Junior → Senior (no cap, if needed!)   │
-│                                          │
-│  Senior restored to 100.9% ✅            │
-│  Next month: can mint 11% & stay at peg!│
-│                                          │
-└──────────────────────────────────────────┘
-```
-
-**The Critical Insight - The 100% Threshold:**
-
-```
-100% = The Peg (1 snrUSD = $1 backing)
-
-Starting at 105%:
-  ✅ Zone 2: Healthy buffer!
-  ✅ No action needed, Senior maintains peg + extra buffer
-
-Starting at 98%:
-  🚨 Zone 3: Depegged!
-  🚨 Below 1:1 backing! MUST trigger backstop!
-  → Junior/Reserve provide support to restore to 100.9%
-  → Why 100.9%? Next month can mint 11% APY and stay at peg!
-
-This creates a 10% "no-action" buffer zone (100-110%)!
-```
-
-#### **Why This Design?**
-
-**Creates Balanced Incentives with Wide Operating Range:**
-
-**For Junior Holders:**
-- ✅ **Upside:** Share in 80% of Senior's excess profits (>110%)
-- ✅ **Wide buffer:** No action needed for 10% range (100-110%)
-- ✅ **Downside:** **Secondary backstop** - Only called if Reserve depleted (no cap!)
-- ✅ **Result:** Protected by Reserve first, rare exposure, well-compensated
-
-**For Reserve:**
-- ✅ **Upside:** Receives 20% of Senior's excess profits (passive income)
-- ✅ **Wide buffer:** Same 10% no-action zone
-- ✅ **Downside:** **PRIMARY backstop** - First line of defense (no cap, can be wiped out!)
-- ✅ **Growth Over Time:** Reserve grows from profit spillover (if not used for backstop)
-
-**For Senior Holders:**
-- ✅ **Stability:** Fluctuates naturally in 100-110% range
-- ✅ **Dynamic APY:** 11-13% annual returns, always maximized by dynamic selection
-- ✅ **Protection:** Wide buffer + Junior/Reserve backstop
-- ✅ **Peg safety:** Always maintains 1:1 redemption (≥100%)
-
----
-
-#### **Dynamic APY Selection Examples:**
-
-**Example 1: High Backing (Can afford 13% APY)**
-```
-After fees: $1,080,000
-Current supply: 1,000,000 snrUSD
-
-Try 13%: S_new = 1,010,833
-Backing: $1,080,000 / 1,010,833 = 106.8% ✅ >= 100%
-→ USE 13% APY! 🎉
-→ Result: Zone 2 (106.8%), no action needed
-```
-
-**Example 2: Medium Backing (Can only afford 12% APY)**
-```
-After fees: $1,020,000
-Current supply: 1,000,000 snrUSD
-
-Try 13%: 1,010,833 → Backing 100.9% ✅ >= 100% (would work!)
-→ USE 13% APY! 🎉
-
-Note: Even at 100.9%, 13% works because we're still >= 100%!
-```
-
-**Example 3: Low Backing (Can only afford 11% APY)**
-```
-After fees: $1,010,000
-Current supply: 1,000,000 snrUSD
-
-Try 13%: 1,010,833 → Backing 99.9% ❌
-Try 12%: 1,010,000 → Backing 100.0% ✅
-→ USE 12% APY! ✅
-→ Result: Exactly at peg (100%)
-```
-
-**Example 4: Critical (Need backstop even with 11%)**
-```
-After fees: $1,005,000
-Current supply: 1,000,000 snrUSD
-
-Try 13%: 1,010,833 → Backing 99.4% ❌
-Try 12%: 1,010,000 → Backing 99.5% ❌
-Try 11%: 1,009,167 → Backing 99.6% ❌
-→ USE 11% + BACKSTOP 🚨
-→ Need to restore to 100.9%: 1,009,167 × 1.009 = $1,018,255
-→ Deficit: $1,018,255 - $1,005,000 = $13,255
-→ Reserve provides: min(Reserve, $13,255) = $13,255 ✅
-→ Junior not needed (Reserve covered it)
-→ Final: $1,018,255 (100.9% backing, can afford next month's APY!)
-```
-
----
-
-#### **Three-Zone System Examples:**
-
-**Scenario A: Bull Market (Senior earns 5%)**
-```
-Senior value: $1,150,000 (after yield)
-New supply: 1,000,000 snrUSD
-Backing: 115% (ZONE 1: > 110%)
-
-Target (110%): $1,100,000
-Excess: $50,000
-
-→ PROFIT SPILLOVER:
-  Junior gets: $50,000 × 80% = $40,000 🎉
-  Reserve gets: $50,000 × 20% = $10,000 🎉
-  Senior: Exactly $1,100,000 (110%)
-
-Result: Everyone wins!
-```
-
-**Scenario B: Normal Operation (Senior earns 1%)**
-```
-Senior value: $1,050,000 (after yield & fees)
-New supply: 1,000,000 snrUSD
-Backing: 105% (ZONE 2: 100-110%)
-
-Trigger (100%): $1,000,000
-Target (110%): $1,100,000
-
-→ NO ACTION NEEDED ✅
-→ Everyone keeps their money
-→ Senior maintains peg + 5% buffer
-
-Result: Stable, healthy operation (most common state)
-```
-
-**Scenario C: Moderate Bear Market (Senior loses 2%)**
-```
-Senior value: $1,020,000 (after loss)
-New supply: 1,000,000 snrUSD  
-Backing: 102% (ZONE 2: 100-110%)
-
-Trigger (100%): $1,000,000
-
-→ NO ACTION NEEDED ✅
-→ Still above 100% trigger
-→ Senior maintains peg + 2% buffer
-→ Junior/Reserve don't need to help!
-
-Result: System resilient, buffer absorbs moderate losses
-```
-
-**Scenario D: Severe Bear Market (Senior loses 12%)**
-```
-Senior value: $980,000 (after severe loss)
-New supply: 1,000,000 snrUSD
-Backing: 98% (ZONE 3: < 100%)
-
-Trigger (100%): $1,000,000
-Restore target (100.9%): $1,009,000
-Deficit: $1,009,000 - $980,000 = $29,000
-
-→ BACKSTOP TRIGGERED (Reserve → Junior, NO CAPS):
-  Reserve provides: min($625k, $29k) = $29,000 ✅
-  Junior provides: $0 (not needed, Reserve covered it)
-  Senior: $1,009,000 (100.9%)
-
-→ Restored to 100.9% (not just 100%)!
-→ Why? Next month can mint 11% APY and stay at peg!
-
-Result: Emergency backstop works, Reserve absorbs loss, Junior untouched, system sustainable
-```
-
-### **Three-Zone Spillover Algorithm**
-
-Given:
-- Current Senior value: $V_s^{net}$ (after fees)
-- New supply: $S_{new}$ (after rebase calculation)
-
-**Calculate backing ratio:**
+Total fee tokens minted:
 $$
-R_{senior} = \frac{V_s^{net}}{S_{new}}
+S_{total\_fees} = S_{mgmt} + S_{fee}
 $$
 
-**Calculate thresholds:**
-$$
-V_{target} = \alpha_{target} \cdot S_{new} = 1.10 \cdot S_{new}
-$$
-$$
-V_{trigger} = \alpha_{trigger} \cdot S_{new} = 1.00 \cdot S_{new}
-$$
-$$
-V_{restore} = \alpha_{restore} \cdot S_{new} = 1.009 \cdot S_{new}
-$$
+Where:
+- $S_{mgmt}$ = management fee tokens (from Step 1)
+- $S_{fee}$ = performance fee tokens (from Step 2)
 
-### **Complete Rebase Algorithm with Dynamic APY**
+The treasury receives these tokens as shares, which then grow with future rebases!
+
+**Key Point:** Both management fee (1% annual) and performance fee (2% of APY) are collected by minting snrUSD tokens to the treasury, NOT by deducting from vault value!
+
+### 5.2 Three-Zone Spillover System
+
+```mermaid
+graph TB
+    A[Calculate R_senior after rebase] --> B{Determine Zone}
+    
+    B -->|R > 1.10| C[ZONE 1: Profit Spillover]
+    B -->|1.00 ≤ R ≤ 1.10| D[ZONE 2: Healthy Buffer]
+    B -->|R < 1.00| E[ZONE 3: Backstop]
+    
+    C --> F[Excess = V_s - 110% × S_new]
+    F --> G[Junior gets 80%<br/>Reserve gets 20%]
+    G --> H[Transfer LP tokens<br/>Senior → Junior/Reserve]
+    
+    D --> I[No Action<br/>Everyone keeps money]
+    I --> J[Most common state<br/>10% buffer zone]
+    
+    E --> K[Deficit = 100.9% × S_new - V_s]
+    K --> L[Reserve provides first<br/>up to 100%]
+    L --> M{Deficit remaining?}
+    M -->|Yes| N[Junior provides<br/>up to 100%]
+    M -->|No| O[Backstop complete]
+    N --> P[Transfer LP tokens<br/>Reserve/Junior → Senior]
+    
+    style C fill:#FFD700
+    style D fill:#90EE90
+    style E fill:#FF6347
+```
+
+#### Three-Zone Decision Algorithm
 
 ```
-// STEP 1: Calculate fees and net value
-V_s_net = V_s - F_mgmt - F_perf
+// STEP 1: Calculate management fee tokens to mint
+S_mgmt = V_s × (1% / 12)
 
 // STEP 2: Dynamic APY Selection (Waterfall: 13% → 12% → 11%)
-S_new_13 = S × 1.010833
-R_13 = V_s_net / S_new_13
+// Use FULL vault value (not reduced by fees!)
+S_new_13 = S × 1.011050  // includes performance fee
+R_13 = V_s / S_new_13
 
 IF R_13 >= 1.00:
     S_new = S_new_13
     r_selected = 0.010833  // 13% APY
+    S_fee = S × 0.010833 × 0.02
     selected_APY = "13%"
 ELSE:
-    S_new_12 = S × 1.010000
-    R_12 = V_s_net / S_new_12
+    S_new_12 = S × 1.010200  // includes performance fee
+    R_12 = V_s / S_new_12
     
     IF R_12 >= 1.00:
         S_new = S_new_12
         r_selected = 0.010000  // 12% APY
+        S_fee = S × 0.010000 × 0.02
         selected_APY = "12%"
     ELSE:
-        S_new_11 = S × 1.009167
-        R_11 = V_s_net / S_new_11
+        S_new_11 = S × 1.009350  // includes performance fee
+        R_11 = V_s / S_new_11
         
         IF R_11 >= 1.00:
             S_new = S_new_11
             r_selected = 0.009167  // 11% APY
+            S_fee = S × 0.009167 × 0.02
             selected_APY = "11%"
         ELSE:
             // Use 11% anyway, backstop will be triggered
             S_new = S_new_11
             r_selected = 0.009167  // 11% APY + backstop
+            S_fee = S × 0.009167 × 0.02
             selected_APY = "11% (backstop needed)"
 
-// STEP 3: Calculate backing ratio with selected APY
-R_senior = V_s_net / S_new
+// STEP 3: Calculate backing ratio with selected APY (using full vault value)
+R_senior = V_s / S_new
 
 // STEP 4: Three-Zone Decision
-```
-
----
-
-### **Three-Zone Decision Algorithm**
-
-```
 // ZONE 1: Excess Backing (> 110%)
 IF R_senior > 1.10:
     // PROFIT SPILLOVER (Senior → Junior/Reserve)
-    Excess = V_s_net - V_target
+    Excess = V_s - V_target
     
     // Split 80/20
     To_Junior = Excess × 0.80
     To_Reserve = Excess × 0.20
     
-    // Transfer
+    // Transfer LP tokens
     Senior_Value -= Excess
     Junior_Value += To_Junior
     Reserve_Value += To_Reserve
@@ -1014,7 +1185,7 @@ ELSE IF R_senior < 1.00:
     // BACKSTOP (Reserve → Junior → Senior, NO CAPS!)
     // Restore to 100.9% (not 100%) to afford next month's min APY
     V_restore = 1.009 × S_new
-    Deficit = V_restore - V_s_net
+    Deficit = V_restore - V_s
     
     // Pull from Reserve FIRST (everything if needed!)
     X_r = min(V_r, Deficit)
@@ -1034,7 +1205,7 @@ ELSE IF R_senior < 1.00:
     ELSE:
         X_j = 0  // Junior not needed
     
-    // Transfer
+    // Transfer LP tokens
     Senior_Value += (X_r + X_j)
     Reserve_Value -= X_r
     Junior_Value -= X_j
@@ -1044,12 +1215,17 @@ ELSE IF R_senior < 1.00:
     // Reserve took the hit first, Junior is backup
 
 // STEP 5: Update Rebase Index
-I_new = I_old × (1 + r_selected)
+I_new = I_old × (1 + r_selected × 1.02)
+
+// STEP 6: Mint fee tokens to treasury
+S_total_fees = S_mgmt + S_fee
+Mint S_total_fees to Treasury
 
 // User balances automatically increase via index
 // b_i = σ_i × I_new
 
 EMIT RebaseExecuted(selected_APY, I_new, S_new, V_s_final, zone)
+EMIT FeesCollected(S_mgmt, S_fee)
 ```
 
 **Key Insight:** This three-zone system ensures:
@@ -1058,120 +1234,95 @@ EMIT RebaseExecuted(selected_APY, I_new, S_new, V_s_final, zone)
 - ✅ Backstop only when depegged (< 100%)
 - ✅ System naturally operates in the healthy buffer zone most of the time
 
-### **Junior APY Impact**
+### 5.3 Initial Deployment (Day 0)
 
-Junior's returns are affected by BOTH spillover directions:
+**How Senior Launches:**
 
-#### **Case A: Junior Receives Spillover ($E_j > 0$)**
-
-**Junior's effective monthly return:**
-$$
-r_j^{eff} = \frac{\Pi_j - F_j + E_j}{V_j}
-$$
-
-Where:
-- $\Pi_j$ = Junior gross profit from own strategy
-- $F_j$ = Junior fees (management + performance)
-- $E_j$ = Spillover received from Senior (80% of excess)
-
-**Junior APY:**
-$$
-APY_j = \left(1 + r_j^{eff}\right)^{12} - 1
-$$
-
-**Example:**
 ```
-Junior earns 2% ($17k profit), pays $4k fees
-Receives $52k spillover from Senior
+Users deposit: $850,000 USDE into Senior
+System mints: 850,000 snrUSD (1:1 conversion)
+Deploy: Swap $425k USDE → Token X, add liquidity
+Receive: LP tokens worth $850,000
+Senior vault value: $850,000
+Initial backing: 100% ✅
 
-Monthly return: ($17k - $4k + $52k) / $850k = 7.65%
-APY: (1.0765)^12 - 1 = 143% 🚀
+Formula: Initial_snrUSD = Deposit_USDE / 1.0
 ```
+
+**How Reserve Launches:**
+
+```
+Initial funding: Deposit Token X (e.g., 3,000 Token X @ $100 = $300k)
+Reserve holds: 3,000 Token X directly (not LP tokens!)
+Reserve vault value: $300,000
+LP tokens: 0 (initially)
+
+As spillover occurs:
+- Reserve receives LP tokens from Senior
+- Accumulates both Token X + LP tokens
+- Can backstop using either asset type
+```
+
+**Key Distinction:**
+- **Senior & Junior:** Start with LP tokens from liquidity deployment
+- **Reserve:** Starts with Token X (the volatile asset itself)
+
+**Natural Growth Path:**
+
+```
+Day 0:    100% backing (launch)
+          ↓
+Week 1:   Token X price stable, trading fees accrue
+          101-102% backing
+          (Zone 2: No action)
+          ↓
+Month 1:  First rebase occurs
+          ~100% backing after rebase
+          (Peg maintained)
+          ↓
+Month 3:  Token X appreciates 10%
+          105-108% backing
+          (Zone 2: Healthy operation)
+          ↓
+Month 6:  Strong bull market, Token X +30%
+          112% backing
+          (Zone 1: Profit spillover!)
+          Excess shared with Junior/Reserve
+          Returns to 110%
+```
+
+**Key Points:**
+- ✅ **No upfront overcollateralization required**
+- ✅ **110% is a target reached through operations, not a launch requirement**
+- ✅ **System naturally gravitates toward 100-110% range**
+- ✅ **Users always get 1:1 deposit conversion**
 
 ---
 
-#### **Case B: Junior Provides Backstop ($X_j > 0$)**
+## 6. Fee Structure
 
-**Junior's effective monthly return:**
+### 6.1 Management Fee (Token Minting)
+
+**Monthly fee tokens minted:**
 $$
-r_j^{eff} = \frac{\Pi_j - F_j - X_j}{V_j}
-$$
-
-Where:
-- $\Pi_j$ = Junior gross profit from own strategy
-- $F_j$ = Junior fees (management + performance)
-- $X_j$ = Backstop given to Senior (NO CAP - can be wiped out if Reserve depleted!)
-
-**Junior APY:**
-$$
-APY_j = \left(1 + r_j^{eff}\right)^{12} - 1
-$$
-
-**Example:**
-```
-Junior earns 0% ($0 profit), pays $4k fees
-Provides $85k backstop to Senior (after Reserve depleted)
-
-Monthly return: ($0 - $4k - $85k) / $850k = -10.47%
-APY: (0.8953)^12 - 1 = -72% 💀
-```
-
----
-
-#### **Case C: No Spillover (Balanced)**
-
-**Junior's effective monthly return:**
-$$
-r_j^{eff} = \frac{\Pi_j - F_j}{V_j}
-$$
-
-**Junior APY:**
-$$
-APY_j = \left(1 + r_j^{eff}\right)^{12} - 1
-$$
-
-**Example:**
-```
-Junior earns 1.5% ($12.75k profit), pays $4.25k fees
-No spillover in either direction
-
-Monthly return: ($12.75k - $4.25k) / $850k = 1.0%
-APY: (1.01)^12 - 1 = 12.7% ✅
-```
-
----
-
-**Key Takeaway:** Junior has:
-- ✅ **High upside** when Senior performs well (receives 80% of excess)
-- ⚠️ **High downside risk** when Senior underperforms (NO CAP - secondary backstop after Reserve)
-- ✅ **Balanced risk/reward** with Reserve as primary protection layer
-- ⚠️ **Can be wiped out** in catastrophic scenarios (if Reserve + Junior both depleted)
-
----
-
-## Fee Calculations
-
-### **Management Fee (Value Deduction)**
-
-**Monthly accrual:**
-$$
-F_{mgmt}(t) = V(t) \cdot \frac{f_{mgmt}}{12}
+S_{mgmt} = V_s \cdot \frac{f_{mgmt}}{12}
 $$
 
 **Collected during rebase:**
-- Transferred to protocol treasury
-- Deducted from $V_s$ before backing check
+- Minted to protocol treasury as snrUSD tokens
+- NOT deducted from $V_s$ (vault value stays the same!)
 
 **Example:**
 ```
 Senior value: $10,500,000
-Management fee: $10,500,000 × (1% / 12) = $8,750
-Net value: $10,500,000 - $8,750 = $10,491,250
+Management fee tokens: $10,500,000 × (1% / 12) = $8,750 snrUSD
+Vault value after: $10,500,000 (unchanged!)
+Treasury receives: 8,750 snrUSD tokens
 ```
 
----
+**Key change:** Management fee is now minted as tokens (like performance fee), not deducted from vault value!
 
-### **Performance Fee (Token Dilution)**
+### 6.2 Performance Fee (Token Dilution)
 
 **Charged by minting additional tokens:**
 $$
@@ -1206,9 +1357,24 @@ Users get: 91,670 snrUSD
 Treasury gets: 1,833 snrUSD
 ```
 
----
+### 6.3 Total Fee Model
 
-### **Early Withdrawal Penalty**
+**Both fees are minted as snrUSD tokens each rebase:**
+$$
+S_{total\_fees} = S_{mgmt} + S_{fee}
+$$
+
+**Example:**
+```
+Management fee tokens: 8,750 snrUSD
+Performance fee tokens: 1,833 snrUSD
+Total fee tokens minted: 10,583 snrUSD
+
+Treasury receives all 10,583 snrUSD tokens
+These tokens grow with future rebases!
+```
+
+### 6.4 Early Withdrawal Penalty
 
 **Applied if cooldown not met:**
 $$
@@ -1235,9 +1401,580 @@ $$
 
 ---
 
-## User Balance & Shares
+## 7. Risk Analysis
 
-### **Deposit**
+### 7.1 Senior Vault Risk Profile
+
+**Market Scenarios:**
+
+```mermaid
+graph TB
+    subgraph "Bull Market +50% Token X"
+        A1[LP Value ↑ 20%]
+        A2[V_s increases to 115%]
+        A3[Spillover: Excess → Junior/Reserve]
+        A4[Senior stays at 110%]
+        A5[✅ Senior gets 11-13% APY]
+    end
+    
+    subgraph "Stable Market ±5% Token X"
+        B1[LP Value ≈ stable]
+        B2[V_s around 100-110%]
+        B3[No spillover/backstop]
+        B4[✅ Senior gets 11-13% APY]
+    end
+    
+    subgraph "Bear Market -40% Token X"
+        C1[LP Value ↓ 15%]
+        C2[V_s drops to 95%]
+        C3[Backstop: Reserve/Junior → Senior]
+        C4[Senior restored to 100.9%]
+        C5[✅ Senior gets 11-13% APY]
+    end
+    
+    A1 --> A2 --> A3 --> A4 --> A5
+    B1 --> B2 --> B3 --> B4
+    C1 --> C2 --> C3 --> C4 --> C5
+    
+    style A5 fill:#90EE90
+    style B4 fill:#90EE90
+    style C5 fill:#90EE90
+```
+
+**Risk Summary:**
+- ✅ **Protected downside** via Reserve + Junior backstop
+- ✅ **Stable returns** 11-13% APY regardless of market
+- ⚠️ **Depeg risk** if Reserve + Junior insufficient (catastrophic scenario)
+
+### 7.2 Junior Vault Risk Profile
+
+**Market Scenarios:**
+
+```mermaid
+graph TB
+    subgraph "Bull Market +50% Token X"
+        A1[Base LP returns +20%]
+        A2[Senior spillover +5%]
+        A3[Junior gets 80% of spillover]
+        A4[🚀 Junior APY: 100%+]
+    end
+    
+    subgraph "Stable Market ±5% Token X"
+        B1[Base LP returns ~0%]
+        B2[No spillover]
+        B3[Junior earns trading fees]
+        B4[📊 Junior APY: 5-15%]
+    end
+    
+    subgraph "Bear Market -40% Token X"
+        C1[Base LP returns -15%]
+        C2[Senior needs backstop]
+        C3[Reserve provides first]
+        C4[Junior provides if needed]
+        C5[💀 Junior APY: -50% to -100%]
+    end
+    
+    A1 --> A2 --> A3 --> A4
+    B1 --> B2 --> B3 --> B4
+    C1 --> C2 --> C3 --> C4 --> C5
+    
+    style A4 fill:#FFD700
+    style B4 fill:#FFD700
+    style C5 fill:#FF6347
+```
+
+**Risk Summary:**
+- 🚀 **High upside** via 80% spillover share
+- ⚠️ **High downside** as secondary backstop (no cap!)
+- ✅ **Protected by Reserve** (backstop priority)
+
+### 7.3 Reserve Vault Risk Profile
+
+**Market Scenarios:**
+
+```mermaid
+graph TB
+    subgraph "Bull Market +50% Token X"
+        A1[Token X value ↑ 50%]
+        A2[Receives LP tokens from spillover]
+        A3[Both Token X and LP grow]
+        A4[📈 Reserve grows significantly]
+    end
+    
+    subgraph "Stable Market ±5% Token X"
+        B1[Token X value stable]
+        B2[No spillover/backstop]
+        B3[Holds Token X + any prior LP]
+        B4[📊 Reserve maintains value]
+    end
+    
+    subgraph "Bear Market -40% Token X"
+        C1[Token X value ↓ 40%]
+        C2[Primary backstop provider]
+        C3[Converts Token X → LP for backstop]
+        C4[⚠️ Reserve depleted or wiped]
+    end
+    
+    A1 --> A2 --> A3 --> A4
+    B1 --> B2 --> B3 --> B4
+    C1 --> C2 --> C3 --> C4
+    
+    style A4 fill:#87CEEB
+    style B4 fill:#87CEEB
+    style C4 fill:#FF6347
+```
+
+**Reserve Holdings:**
+$$
+V_r = (N_X^r \times P_X) + (N_{LP}^r \times P_{LP})
+$$
+
+**Unique Characteristics:**
+- ✅ **Direct Token X exposure:** Benefits from Token X appreciation without IL
+- ✅ **LP accumulation:** Receives LP tokens during spillover
+- ✅ **Dual-asset reserve:** Can backstop using either LP or Token X
+- ⚠️ **Primary backstop:** First line of defense (depletes before Junior)
+- ⚠️ **Conversion risk:** Must convert Token X → LP during backstop (incurs swap fees + IL)
+
+**Risk Summary:**
+- 🚀 **High upside in bull markets** (direct Token X exposure + spillover)
+- ✅ **Passive income** from spillover (receives LP tokens)
+- ⚠️ **Primary backstop** (first line of defense)
+- ⚠️ **Can be wiped out** in severe bear markets
+- ⚠️ **Conversion costs** when converting Token X → LP for backstop
+
+### 7.4 Systemic Risk: LP Exposure
+
+**The Critical Dependency:**
+
+All vault values depend on LP token price, which depends on Token X price:
+
+$$
+V_{all} = f(P_{Token\_X})
+$$
+
+```mermaid
+graph TB
+    A[Token X Price Movement] --> B[Pool Rebalances]
+    B --> C[LP Token Price Changes]
+    C --> D[All Vault Values Change]
+    D --> E[Triggers Spillover/Backstop]
+    
+    F[Impermanent Loss] --> C
+    G[Trading Fees Accrued] --> C
+    
+    style A fill:#FF6347
+    style C fill:#FFD700
+    style E fill:#4169E1
+```
+
+**Key Risks:**
+1. **Impermanent Loss:** If Token X diverges significantly from initial price
+2. **Extreme Volatility:** Rapid Token X movements can deplete Reserve + Junior
+3. **Liquidity Crunch:** DEX pool liquidity affects ability to enter/exit positions
+
+**Mitigation:**
+- ✅ Wide 10% buffer zone (100-110%) absorbs moderate volatility
+- ✅ Two-layer backstop (Reserve + Junior)
+- ✅ 100.9% restoration provides sustainability buffer
+
+---
+
+## 8. Examples & Case Studies
+
+### 8.1 Complete Rebase Example
+
+**Scenario: Senior After Several Months of Operation**
+
+**Context:** Senior launched at 100% backing, has been operating for several months, strategy has been performing well.
+
+#### Given (Current State):
+- $S = 10,000,000$ snrUSD (current supply)
+- $V_s = 11,150,000$ USD (current vault value - full value, not reduced by fees!)
+- $I_{old} = 1.0$ (rebase index)
+- Current backing: $11,150,000 / 10,000,000 = 111.5%$ (Zone 1!)
+- $V_j = 5,000,000$ USD (Junior vault value)
+- $V_r = 2,000,000$ USD (Reserve vault value)
+
+#### Step 1: Calculate Management Fee Tokens
+$$
+S_{mgmt} = 11,150,000 \times 0.000833 = 9,288 \text{ snrUSD tokens}
+$$
+
+**Vault value stays the same (fee NOT deducted!):**
+$$
+V_s = 11,150,000 \text{ USD (unchanged!)}
+$$
+
+**Note:** Management fee is minted as tokens in Step 6, not deducted from vault value!
+
+#### Step 2: Dynamic APY Selection + Performance Fee
+
+**Try 13% APY first (using FULL vault value):**
+
+User tokens to mint:
+$$
+S_{users}^{13} = 10,000,000 \times 0.010833 = 108,330 \text{ snrUSD}
+$$
+
+Performance fee (2% extra):
+$$
+S_{fee}^{13} = 108,330 \times 0.02 = 2,167 \text{ snrUSD}
+$$
+
+Total new supply:
+$$
+S_{new}^{13} = 10,000,000 + 108,330 + 2,167 = 10,110,497 \text{ snrUSD}
+$$
+
+Backing check (using FULL vault value):
+$$
+R_{13} = \frac{11,150,000}{10,110,497} = 1.1029 = 110.29\%
+$$
+
+**Check: $R_{13} = 110.29\% \geq 100\%$** ✅ **USE 13% APY!**
+
+**Selected:**
+- $S_{new} = 10,110,497$ snrUSD
+- $r_{selected} = 0.010833$ (13% APY)
+- User tokens: $108,330$ snrUSD
+- Performance fee tokens: $2,167$ snrUSD
+
+**Why 13% works:** Using full vault value ($11,150,000), even after conceptually minting 108,330 for users + 2,167 for performance fee, backing is still 110.29% > 100%!
+
+#### Step 3: Determine Zone & Check for Spillover
+
+**Calculate backing ratio (with 13% APY + performance fee, using full vault value):**
+$$
+R_{senior} = \frac{11,150,000}{10,110,497} = 1.1029 = 110.29\%
+$$
+
+**Check which zone:**
+$$
+R_{senior} = 110.29\% > 110\%
+$$
+
+**ZONE 1: Profit Spillover! 🎉**
+
+**Calculate 110% target:**
+$$
+V_{target} = 1.10 \times 10,110,497 = 11,121,547 \text{ USD}
+$$
+
+**Calculate excess:**
+$$
+E = 11,150,000 - 11,121,547 = 28,453 \text{ USD}
+$$
+
+**Senior has excess backing! Will share $28,453 with Junior/Reserve.**
+
+#### Step 4: Execute Profit Spillover
+
+**Split 80/20:**
+$$
+E_j = 28,453 \times 0.80 = 22,762 \text{ USD to Junior}
+$$
+$$
+E_r = 28,453 \times 0.20 = 5,691 \text{ USD to Reserve}
+$$
+
+**Final values:**
+$$
+V_s^{final} = 11,150,000 - 28,453 = 11,121,547 \text{ USD (exactly 110%)}
+$$
+$$
+V_j^{new} = 5,000,000 + 22,762 = 5,022,762 \text{ USD}
+$$
+$$
+V_r^{new} = 2,000,000 + 5,691 = 2,005,691 \text{ USD}
+$$
+
+#### Step 5: Update Index (with 13% APY + 2% fee!)
+$$
+I_{new} = 1.0 \times (1 + 0.010833 \times 1.02) = 1.0 \times 1.011050 = 1.011050
+$$
+
+#### Step 6: Mint Fee Tokens to Treasury
+
+**Total fee tokens:**
+$$
+S_{total\_fees} = S_{mgmt} + S_{fee}^{13} = 9,288 + 2,167 = 11,455 \text{ snrUSD}
+$$
+
+**Treasury receives:** 11,455 snrUSD tokens (which grow with future rebases!)
+
+#### Result:
+- ✅ **Senior holders:** Balances increased by 1.0833% (13% APY!) 🎉
+- ✅ **Protocol treasury:** Received 11,455 snrUSD total (9,288 mgmt + 2,167 perf fee)
+- ✅ **Senior vault:** Exactly 110% backing maintained
+- ✅ **Junior holders:** Received $22,762 profit share (0.46% bonus!)
+- ✅ **Reserve:** Received $5,691 (0.28% growth)
+- ✅ **Management fee:** 9,288 snrUSD (MINTED, not deducted!)
+- ✅ **Performance fee:** 2,167 snrUSD (MINTED as extra tokens!)
+
+**🎯 Key Insights:** 
+- Dynamic APY selection means users got 13% APY this month (not just 11%)! 
+- **Both fees are minted as tokens, NOT deducted from vault value!**
+- Management fee: 9,288 snrUSD minted (1% annual / 12)
+- Performance fee: 2,167 snrUSD minted (2% of user APY)
+- Treasury receives 11,455 snrUSD total that will grow with future rebases
+- System automatically maximized returns while maintaining the peg
+- Vault value used is FULL $11,150,000 (not reduced by fees!)
+
+### 8.2 Market Scenario Analysis
+
+#### Scenario A: Bull Market (Token X +50%)
+
+```
+Token X price: $100 → $150
+
+LP Position Impact:
+- Pool rebalances (arbitrage)
+- Impermanent loss: ~2%
+- Trading fees: +3%
+- Net LP value change: +18%
+
+Vault Values:
+- Senior (LP tokens): $850k → $1,003k (118% backing)
+- Junior (LP tokens): $500k → $590k
+- Reserve (Token X): 3,000 Token X @ $100 = $300k → 3,000 @ $150 = $450k (+50% direct!)
+
+Senior Rebase:
+- 118% backing > 110% target
+- ZONE 1: Profit spillover
+- Excess: $1,003k - 110% = $71k
+- Junior gets: $71k × 80% = $56.8k (LP tokens)
+- Reserve gets: $71k × 20% = $14.2k (LP tokens)
+- Senior returns to exactly 110%
+
+Final State:
+- Senior: $935k (110% backing maintained, LP tokens)
+- Junior: $590k + $56.8k = $646.8k (+29.4% return!, LP tokens)
+- Reserve: $450k Token X + $14.2k LP = $464.2k (+54.7% return! 🚀)
+  - Token X: 3,000 @ $150 = $450k
+  - LP tokens: ~95 LP @ $150 = $14.2k (received from spillover)
+
+Junior Effective APY: ~350% annualized (from one-month performance)
+```
+
+#### Scenario B: Bear Market (Token X -40%)
+
+```
+Token X price: $100 → $60
+
+LP Position Impact:
+- Pool rebalances
+- Impermanent loss: ~8%
+- Trading fees: +1%
+- Net LP value change: -27%
+
+Vault Values:
+- Senior (LP tokens): $850k → $620k (73% backing - DEPEGGED!)
+- Junior (LP tokens): $500k → $365k
+- Reserve (Token X): 3,000 Token X @ $100 = $300k → 3,000 @ $60 = $180k (-40% direct)
+
+Senior Rebase:
+- 73% backing < 100% trigger
+- ZONE 3: Backstop needed
+- Target: 100.9% of $850k = $857.7k
+- Deficit: $857.7k - $620k = $237.7k
+
+Backstop Waterfall:
+1. Reserve converts Token X → LP tokens:
+   - Has: 3,000 Token X @ $60 = $180k
+   - Needs: $237.7k (but only has $180k!)
+   - Swap: 1,500 Token X → $90k USDE
+   - Add liquidity: $90k USDE + 1,500 Token X = $180k LP
+   - Receive: ~1,200 LP tokens @ $150 = $180k
+   - Reserve provides ALL: $180k in LP tokens
+   
+2. Remaining deficit: $237.7k - $180k = $57.7k
+
+3. Junior provides: $57.7k in LP tokens
+
+Final State:
+- Senior: $857.7k (100.9% backing restored, LP tokens)
+- Junior: $365k - $57.7k = $307.3k (-38.5% loss! LP tokens)
+- Reserve: $0 (COMPLETELY WIPED OUT! All Token X converted and transferred)
+
+Junior Effective APY: -370% annualized (catastrophic month)
+Reserve fully depleted, Junior took secondary hit
+```
+
+#### Scenario C: Stable Market (Token X ±5%)
+
+```
+Token X price: $100 → $103
+
+LP Position Impact:
+- Minimal impermanent loss: ~0.1%
+- Trading fees: +0.8%
+- Net LP value change: +0.7%
+
+Vault Values:
+- Senior (LP tokens): $850k → $856k (100.7% backing)
+- Junior (LP tokens): $500k → $503.5k
+- Reserve (Token X): 3,000 Token X @ $100 = $300k → 3,000 @ $103 = $309k (+3% direct)
+
+Senior Rebase:
+- 100.7% backing in 100-110% range
+- ZONE 2: Healthy buffer
+- NO ACTION NEEDED ✅
+- Everyone keeps their money
+
+Final State (after 11% APY rebase):
+- Senior: $856k (still ~100% backing after rebase, LP tokens)
+- Junior: $503.5k (+0.7% from LP, LP tokens)
+- Reserve: $309k (+3% from Token X appreciation, Token X holdings)
+
+Most common operational state!
+
+**Key Insight:** Reserve benefits from direct Token X exposure without impermanent loss!
+```
+
+### 8.3 Dynamic APY Selection Examples
+
+#### Example 1: High Backing (Can afford 13% APY)
+```
+After fees: $1,080,000
+Current supply: 1,000,000 snrUSD
+
+Try 13%: S_new = 1,010,833
+Backing: $1,080,000 / 1,010,833 = 106.8% ✅ >= 100%
+→ USE 13% APY! 🎉
+→ Result: Zone 2 (106.8%), no action needed
+```
+
+#### Example 2: Medium Backing (Can only afford 12% APY)
+```
+After fees: $1,020,000
+Current supply: 1,000,000 snrUSD
+
+Try 13%: 1,010,833 → Backing 100.9% ✅ >= 100% (would work!)
+→ USE 13% APY! 🎉
+
+Note: Even at 100.9%, 13% works because we're still >= 100%!
+```
+
+#### Example 3: Low Backing (Can only afford 11% APY)
+```
+After fees: $1,010,000
+Current supply: 1,000,000 snrUSD
+
+Try 13%: 1,010,833 → Backing 99.9% ❌
+Try 12%: 1,010,000 → Backing 100.0% ✅
+→ USE 12% APY! ✅
+→ Result: Exactly at peg (100%)
+```
+
+#### Example 4: Critical (Need backstop even with 11%)
+```
+After fees: $1,005,000
+Current supply: 1,000,000 snrUSD
+
+Try 13%: 1,010,833 → Backing 99.4% ❌
+Try 12%: 1,010,000 → Backing 99.5% ❌
+Try 11%: 1,009,167 → Backing 99.6% ❌
+→ USE 11% + BACKSTOP 🚨
+→ Need to restore to 100.9%: 1,009,167 × 1.009 = $1,018,255
+→ Deficit: $1,018,255 - $1,005,000 = $13,255
+→ Reserve provides: min(Reserve, $13,255) = $13,255 ✅
+→ Junior not needed (Reserve covered it)
+→ Final: $1,018,255 (100.9% backing, can afford next month's APY!)
+```
+
+---
+
+## 9. Appendix
+
+### 9.1 Summary of Key Formulas
+
+| Concept | Formula |
+|---------|---------|
+| User balance | $b_i = \sigma_i \cdot I$ |
+| **Fee Calculations (Both Minted as Tokens!)** | |
+| Management fee tokens | $S_{mgmt} = V_s \cdot \frac{1\%}{12}$ (minted monthly) |
+| Performance fee tokens | $S_{fee} = S_{users} \cdot 0.02$ (minted at rebase) |
+| Total fee tokens | $S_{total\_fees} = S_{mgmt} + S_{fee}$ |
+| **Dynamic APY Selection (Using Full $V_s$!)** | |
+| Try 13% APY | $S_{new}^{13} = S \cdot 1.011050$ (includes 2% fee), use if $\frac{V_s}{S_{new}^{13}} \geq 1.00$ |
+| Try 12% APY | $S_{new}^{12} = S \cdot 1.010200$ (includes 2% fee), use if $\frac{V_s}{S_{new}^{12}} \geq 1.00$ |
+| Try 11% APY | $S_{new}^{11} = S \cdot 1.009350$ (includes 2% fee), use if $\frac{V_s}{S_{new}^{11}} \geq 1.00$ (or use + backstop) |
+| Rebase index update | $I_{new} = I_{old} \cdot (1 + r_{selected} \cdot 1.02)$ |
+| **Three-Zone Spillover (Using Full $V_s$!)** | |
+| Backing ratio | $R_{senior} = \frac{V_s}{S_{new}}$ |
+| Profit spillover trigger | $R_{senior} > 1.10$ (Zone 1) |
+| Healthy buffer zone | $1.00 \leq R_{senior} \leq 1.10$ (Zone 2, no action) |
+| Backstop trigger | $R_{senior} < 1.00$ (Zone 3) |
+| Backstop restoration target | 100.9% (enables next month's min APY) |
+| Profit spillover amount | $E = V_s - (1.10 \cdot S_{new})$ |
+| Profit split | $E_j = E \cdot 0.80$, $E_r = E \cdot 0.20$ |
+| Backstop deficit | $D = (1.009 \cdot S_{new}) - V_s$ |
+| Reserve backstop (first) | $X_r = \min(V_r, D)$ (no cap!) |
+| Junior backstop (second) | $X_j = \min(V_j, D - X_r)$ (no cap!) |
+| Backstop waterfall | Reserve → Junior (no limits) |
+| **LP & Reserve Mechanics** | |
+| Senior/Junior vault value | $V_{vault} = N_{LP} \times P_{LP}$ |
+| Reserve vault value | $V_r = (N_X^r \times P_X) + (N_{LP}^r \times P_{LP})$ |
+| LP price dependency | $P_{LP} = f(P_{Token\_X}, \text{fees}, \text{IL})$ |
+| Reserve Token X conversion | Convert Token X → LP when needed for backstop |
+| **User Operations** | |
+| Deposit shares minted | $\sigma_{new} = \frac{d}{I}$ |
+| Withdrawal shares burned | $\sigma_{burn} = \frac{w}{I}$ |
+| Early withdrawal penalty | $P = w \cdot 0.05$ (if $t - t_c < 7$ days) |
+| Deposit cap | $S_{max} = 10 \cdot V_r$ |
+
+### 9.2 System Constraints & Invariants
+
+**Invariant 1: 1:1 Redemption Peg**
+
+$$
+\text{Redemption Value} = 1 \text{ snrUSD} = 1 \text{ USD}
+$$
+
+**Invariant 2: Three-Zone Operating Range**
+
+$$
+1.00 \leq \frac{V_s}{S_{new}} \leq 1.10 \quad \text{(target range)}
+$$
+
+After spillover/backstop, Senior returns to this range.
+
+**Invariant 3: Conservation of Value**
+
+Before rebase:
+$$
+V_{total}^{before} = V_s + V_j + V_r
+$$
+
+After rebase (with spillover/backstop):
+$$
+V_{total}^{after} = V_s^{net} + V_j + V_r
+$$
+
+(Spillover/backstop transfers value, doesn't create/destroy it)
+
+**Invariant 4: Deposit Cap**
+
+Always enforce:
+$$
+S \leq \gamma \cdot V_r
+$$
+
+Revert deposits if this would be violated.
+
+**Invariant 5: Share Conservation**
+
+Total shares never change except for deposits/withdrawals:
+$$
+\Sigma(t) = \Sigma(t_0) + \sum \text{deposits} - \sum \text{withdrawals}
+$$
+
+Rebases do NOT change $\Sigma$, only $I$.
+
+### 9.3 User Balance & Shares
+
+#### Deposit
 
 User deposits $d$ USDE:
 
@@ -1271,9 +2008,7 @@ Balance: 952.38 × 1.05 = 1,000 snrUSD ✅
 Still 1:1 conversion for new user!
 ```
 
----
-
-### **Withdrawal**
+#### Withdrawal
 
 User wants to withdraw $w$ USDE:
 
@@ -1300,9 +2035,7 @@ $$
 w_{net} = w \cdot (1 - f_{penalty}) = w \cdot 0.95
 $$
 
----
-
-### **Balance After Rebase**
+#### Balance After Rebase
 
 Before rebase:
 $$
@@ -1319,11 +2052,9 @@ $$
 \Delta b_i = b_i^{after} - b_i^{before} = \sigma_i \cdot I_{old} \cdot r_{month}
 $$
 
----
+### 9.4 Withdrawal Mechanics
 
-## Withdrawal Mechanics
-
-### **Liquidity Sources**
+#### Liquidity Sources
 
 **Total assets:**
 $$
@@ -1332,9 +2063,9 @@ $$
 
 Where:
 - $A_{liquid}$ = USDE in vault contract
-- $A_{deployed}$ = USDE in strategy (stablecoins)
+- $A_{deployed}$ = USDE equivalent in LP positions
 
-### **Withdrawal Flow**
+#### Withdrawal Flow
 
 User withdraws $w$ USDE:
 
@@ -1345,302 +2076,25 @@ $$
 
 **Step 2: If insufficient, exit LP**
 $$
-w_{strategy} = w - w_{reserve}
+w_{LP} = w - w_{reserve}
 $$
 
-Must call: `strategy.withdraw(w_strategy)`
+Must call: `exitLP(w_LP)` to withdraw from DEX pool
 
 **Step 3: Transfer to user**
 $$
 \text{Transfer}(w_{net}) \text{ to user}
 $$
 
----
-
-## Constraints & Invariants
-
-### **Invariant 1: 1:1 Redemption Peg**
-
-**The peg and backing are DIFFERENT concepts:**
-
-- **Peg (Exchange Rate):** 1 snrUSD always redeems for $1 USD of value
-  $$
-  \text{Redemption Value} = 1 \text{ snrUSD} = 1 \text{ USD}
-  $$
-
-- **Backing (Collateralization):** System holds $1.10 for every $1.00 of snrUSD (safety buffer)
-  $$
-  \frac{V_s}{S} \geq 1.10
-  $$
-
-**Key Point:** The 1:1 peg is what users experience (1 snrUSD = 1 USD). The 110% backing is internal overcollateralization for safety.
-
----
-
-### **Invariant 2: Three-Zone Operating Range**
-
-Senior operates in three distinct zones:
-
-**Zone 1: Profit Spillover Zone ($R_{senior} > 1.10$)**
-$$
-\frac{V_s^{final}}{S_{new}} = 1.10
-$$
-After spillover, Senior returns to exactly 110% backing.
-
-**Zone 2: Healthy Buffer Zone ($1.00 \leq R_{senior} \leq 1.10$)**
-$$
-1.00 \leq \frac{V_s}{S_{new}} \leq 1.10
-$$
-No action needed. This is the **normal operating state** (10% range).
-
-**Zone 3: Backstop Zone ($R_{senior} < 1.00$)**
-$$
-\frac{V_s^{final}}{S_{new}} \geq 1.009
-$$
-After backstop, Senior restored to at least 100.9% (enables next month's min APY).
-
-**Critical Thresholds:**
-- **110%** = Profit spillover trigger (share excess)
-- **100%** = Backstop trigger (depeg / need help)
-- **100.9%** = Backstop restoration target (sustain next month's 11% APY)
-
-**How It Works:**
-- **If > 110%:** Excess spills to Junior/Reserve → Senior returns to 110%
-- **If 100-110%:** Healthy buffer → No action needed ✅
-- **If < 100%:** Junior/Reserve provide backstop → Senior restored to 100.9%
-
-**Why 100.9% restoration?**
-- Ensures we can afford minimum 11% APY (0.9167% minting) next month
-- Without this buffer, would need backstop every single month
-- Creates sustainable system even with 0% strategy returns
-
-**Important Notes:**
-- **10% buffer zone:** Prevents constant spillover activity
-- **Most common state:** Senior naturally operates in 100-110% range
-- **Backstop is rare:** Only when strategy performs very badly
-- **Peg always maintained:** Senior ≥ 100% after each rebase
-
-**Operating States:**
-```
->110%        : Profit spillover to Junior/Reserve
-100-110%     : Healthy buffer (NO ACTION) ✅✅✅
-<100%        : Backstop from Junior/Reserve (Depeg!)
-```
-
-**In extreme cases:**
-```
-If Junior + Reserve combined value is insufficient:
-→ Senior may remain <100%
-→ Depeg persists!
-→ Emergency: System undercollateralized ⚠️
-→ Both Reserve and Junior can be wiped out!
-```
-
----
-
-### **Invariant 3: Conservation of Value**
-
-Before rebase:
-$$
-V_{total}^{before} = V_s + V_j + V_r
-$$
-
-After rebase (with backstop $X_j, X_r$):
-$$
-V_{total}^{after} = V_s^{net} + X_j + X_r + (V_j - X_j) + (V_r - X_r) = V_s^{net} + V_j + V_r
-$$
-
-(Backstop transfers value, doesn't create/destroy it)
-
----
-
-### **Invariant 4: Deposit Cap**
-
-Always enforce:
-$$
-S \leq \gamma \cdot V_r
-$$
-
-Revert deposits if this would be violated.
-
----
-
-### **Invariant 5: Share Conservation**
-
-Total shares never change except for deposits/withdrawals:
-$$
-\Sigma(t) = \Sigma(t_0) + \sum \text{deposits} - \sum \text{withdrawals}
-$$
-
-Rebases do NOT change $\Sigma$, only $I$.
-
----
-
-## Example Calculation
-
-### **Scenario: Senior After Several Months of Operation**
-
-**Context:** Senior launched at 100% backing, has been operating for several months, strategy has been performing well.
-
-### **Given (Current State):**
-- $S = 10,000,000$ snrUSD (current supply)
-- $V_s = 11,150,000$ USD (current value - grown through strategy yield)
-- $V_s^{prev} = 11,000,000$ USD (value 30 days ago)
-- $I_{old} = 1.0$ (rebase index)
-- Current backing: $11,150,000 / 10,000,000 = 111.5%$ (Zone 1!)
-
-### **Step 1: Management Fee**
-$$
-F_{mgmt} = 11,150,000 \times 0.000833 = 9,288 \text{ USD}
-$$
-$$
-V_s^{net} = 11,150,000 - 9,288 = 11,140,712 \text{ USD}
-$$
-
-**Note:** Performance fee is NO LONGER deducted here. It's handled by minting extra tokens in Step 2.
-
-### **Step 2: Dynamic APY Selection + Performance Fee**
-
-**Try 13% APY first:**
-
-User tokens to mint:
-$$
-S_{users}^{13} = 10,000,000 \times 0.010833 = 108,330 \text{ snrUSD}
-$$
-
-Performance fee (2% extra):
-$$
-S_{fee}^{13} = 108,330 \times 0.02 = 2,167 \text{ snrUSD}
-$$
-
-Total new supply:
-$$
-S_{new}^{13} = 10,000,000 + 108,330 + 2,167 = 10,110,497 \text{ snrUSD}
-$$
-
-Backing check:
-$$
-R_{13} = \frac{11,140,712}{10,110,497} = 1.1019 = 110.19\%
-$$
-
-**Check: $R_{13} = 110.19\% \geq 100\%$** ✅ **USE 13% APY!**
-
-**Selected:**
-- $S_{new} = 10,110,497$ snrUSD
-- $r_{selected} = 0.010833$ (13% APY)
-- User tokens: $108,330$ snrUSD
-- Treasury fee tokens: $2,167$ snrUSD
-
-**Why 13% works:** Even after minting 108,330 for users + 2,167 for treasury, backing is still 110.19% > 100%!
-
-### **Step 3: Determine Zone & Check for Spillover**
-
-**Calculate backing ratio (with 13% APY + performance fee):**
-$$
-R_{senior} = \frac{11,140,712}{10,110,497} = 1.1019 = 110.19\%
-$$
-
-**Check which zone:**
-$$
-R_{senior} = 110.19\% > 110\%
-$$
-
-**ZONE 1: Profit Spillover! 🎉**
-
-**Calculate 110% target:**
-$$
-V_{target} = 1.10 \times 10,110,497 = 11,121,547 \text{ USD}
-$$
-
-**Calculate excess:**
-$$
-E = 11,140,712 - 11,121,547 = 19,165 \text{ USD}
-$$
-
-**Senior has excess backing! Will share $19,165 with Junior/Reserve.**
-
-### **Step 4: Execute Profit Spillover**
-
-**Split 80/20:**
-$$
-E_j = 19,165 \times 0.80 = 15,332 \text{ USD to Junior}
-$$
-$$
-E_r = 19,165 \times 0.20 = 3,833 \text{ USD to Reserve}
-$$
-
-**Final values:**
-$$
-V_s^{final} = 11,140,712 - 19,165 = 11,121,547 \text{ USD (exactly 110%)}
-$$
-$$
-V_j^{new} = 5,000,000 + 15,332 = 5,015,332 \text{ USD}
-$$
-$$
-V_r^{new} = 2,000,000 + 3,833 = 2,003,833 \text{ USD}
-$$
-
-### **Step 5: Update Index (with 13% APY + 2% fee!)**
-$$
-I_{new} = 1.0 \times (1 + 0.010833 \times 1.02) = 1.0 \times 1.011050 = 1.011050
-$$
-
-### **Result:**
-- ✅ **Senior holders:** Balances increased by 1.0833% (13% APY!) 🎉
-- ✅ **Protocol treasury:** Received 2,167 snrUSD (2% performance fee via dilution)
-- ✅ **Senior vault:** Exactly 110% backing maintained
-- ✅ **Junior holders:** Received $15,332 profit share (0.31% bonus!)
-- ✅ **Reserve:** Received $3,833 (0.19% growth)
-- ✅ **Management fee:** $9,288 (deducted from value)
-
-**Everyone wins!** This is how the two-way spillover creates balanced incentives.
-
-**🎯 Key Insights:** 
-- Dynamic APY selection means users got 13% APY this month (not just 11%)! 
-- Performance fee charged via token dilution (2% extra minted) instead of value deduction
-- Treasury receives 2,167 snrUSD that will grow with future rebases
-- System automatically maximized returns while maintaining the peg
-
----
-
-## Summary of Key Formulas
-
-| Concept | Formula |
-|---------|---------|
-| User balance | $b_i = \sigma_i \cdot I$ |
-| **Dynamic APY Selection** | |
-| Try 13% APY | $S_{new}^{13} = S \cdot 1.011050$ (includes 2% fee), use if $\frac{V_s^{net}}{S_{new}^{13}} \geq 1.00$ |
-| Try 12% APY | $S_{new}^{12} = S \cdot 1.010200$ (includes 2% fee), use if $\frac{V_s^{net}}{S_{new}^{12}} \geq 1.00$ |
-| Try 11% APY | $S_{new}^{11} = S \cdot 1.009350$ (includes 2% fee), use if $\frac{V_s^{net}}{S_{new}^{11}} \geq 1.00$ (or use + backstop) |
-| Rebase index update | $I_{new} = I_{old} \cdot (1 + r_{selected} \cdot 1.02)$ |
-| Management fee (value) | $F_{mgmt} = V_s \cdot \frac{f_{mgmt}}{12}$ |
-| Performance fee (tokens) | $S_{fee} = S_{users} \cdot 0.02$ (minted to treasury) |
-| **Three-Zone Spillover** | |
-| Backing ratio | $R_{senior} = \frac{V_s^{net}}{S_{new}}$ |
-| Profit spillover trigger | $R_{senior} > 1.10$ (Zone 1) |
-| Healthy buffer zone | $1.00 \leq R_{senior} \leq 1.10$ (Zone 2, no action) |
-| Backstop trigger | $R_{senior} < 1.00$ (Zone 3) |
-| Backstop restoration target | 100.9% (enables next month's min APY) |
-| Profit spillover amount | $E = V_s^{net} - (1.10 \cdot S_{new})$ |
-| Profit split | $E_j = E \cdot 0.80$, $E_r = E \cdot 0.20$ |
-| Backstop deficit | $D = (1.009 \cdot S_{new}) - V_s^{net}$ |
-| Reserve backstop (first) | $X_r = \min(V_r, D)$ (no cap!) |
-| Junior backstop (second) | $X_j = \min(V_j, D - X_r)$ (no cap!) |
-| Backstop waterfall | Reserve → Junior (no limits) |
-| Early withdrawal penalty | $P = w \cdot 0.05$ (if $t - t_c < 7$ days) |
-| Deposit cap | $S_{max} = 10 \cdot V_r$ |
-
----
-
-## Notes on Implementation
+### 9.5 Implementation Notes
 
 1. **All calculations in wei (18 decimals)**
    - Use Solidity fixed-point math
    - Example: 11% = 110000 (basis points × 10)
 
 2. **Order of operations matters**
-   - Fees BEFORE backstop check
-   - Backstop BEFORE rebase execution
+   - Fees calculated BEFORE spillover/backstop
+   - Spillover/backstop BEFORE rebase execution
 
 3. **Rounding considerations**
    - Always round down for user benefits (withdrawals)
@@ -1650,12 +2104,46 @@ $$
    - Use `block.timestamp` for time
    - 1 month ≈ 30 days = 2,592,000 seconds
 
----
+### 9.6 Quick Reference Card
 
-## References
+**🎯 Three-Zone System:**
+
+| Backing Range | Action | Why |
+|---------------|--------|-----|
+| **> 110%** | 🎉 **Profit Spillover** → Junior (80%) & Reserve (20%) | Senior has excess, share the wealth |
+| **100% to 110%** | ✅ **No Action** (Healthy Buffer Zone) | Senior maintains peg + pays APY from buffer |
+| **< 100%** | 🚨 **Backstop to 100.9%** ← Reserve first, then Junior | Below peg, restore to 100.9% to afford next month's min APY |
+
+**🔄 Dynamic APY Selection (11-13%):**
+- 📈 System tries 13% APY first (maximize returns)
+- 📊 If 13% would depeg, try 12%
+- 📉 If 12% would depeg, try 11%
+- 🛡️ If even 11% would depeg, use 11% + backstop
+- **Result:** Users always get highest APY possible while maintaining peg!
+
+**💰 Fee Structure:**
+- Management: 1% annual (minted monthly as tokens)
+- Performance: 2% of APY (minted at rebase as tokens)
+- **Both fees minted as snrUSD, NOT deducted from vault value!**
+
+**🏦 LP Mechanism:**
+- Deposits → 50% kept as stablecoin, 50% swapped to Token X
+- Both added to DEX pool → receive LP tokens
+- LP token value = vault value
+- Token X price movements drive all returns/losses
+
+### 9.7 References
 
 - ERC4626: https://eips.ethereum.org/EIPS/eip-4626
-- Rebase tokens: Ampleforth, Olympus DAO
+- Rebasing tokens: Ampleforth, Olympus DAO
 - Structured tranches: Barnbridge, Saffron Finance
 - LP mechanics: Uniswap v2, Curve Finance
+- Impermanent loss: https://uniswap.org/docs/v2/advanced-topics/understanding-returns/
 
+---
+
+**End of Mathematical Specification**
+
+*For implementation details, see Solidity contracts in `/src` directory.*  
+*For operational procedures, see `admin_operations.md`.*  
+*For deployment addresses, see `prod_addresses.md`.*
