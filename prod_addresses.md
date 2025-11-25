@@ -4,13 +4,14 @@
 
 ---
 
+
 ## Vaults (User-Facing)
 
 | Vault | Name | Symbol | Address |
 |-------|------|--------|---------|
 | **Senior** | Senior Tranche | `snrUSD` | `0x49298F4314eb127041b814A2616c25687Db6b650` |
-| **Junior** | Junior Tranche | `jnr` | `0x3a0A97dCa5E6caCc258490D5eCe453412f8e1883` |
-| **Reserve** | Alar | `alar` | `0x7754272C866892CAd4a414C76f060645BDc27203` |
+| **Junior** | Junior Tranche | `jnr` | `0x3a0A97DcA5e6CaCC258490d5ece453412f8E1883` |
+| **Reserve** | Alar | `alar` | `0x7754272c866892CaD4a414C76f060645bDc27203` |
 
 ---
 
@@ -28,7 +29,7 @@
 
 | Hook | Address |
 |------|---------|
-| **Senior** | `0x1108E5FF12Cf7904bFe46BFaa70d41E321c54dfa` |
+| **Senior** | `0x27b84fcbdb17D108bE6C5f0F12FCAe4F9C78Ed1B` |
 | **Junior** | `0xC6A224385e14dED076D86c69a91E42142698D1f1` |
 | **Reserve** | `0xBe01A06f99f8366f8803A61332e110d1235E5f3C` |
 
@@ -70,8 +71,8 @@
 ```bash
 # Vaults
 export SENIOR_VAULT=0x49298F4314eb127041b814A2616c25687Db6b650
-export JUNIOR_VAULT=0x3a0A97dCa5E6CaCC258490d5ece453412f8E1883
-export RESERVE_VAULT=0x7754272C866892CAd4a414C76f060645BDc27203
+export JUNIOR_VAULT=0x3a0A97DcA5e6CaCC258490d5ece453412f8E1883
+export RESERVE_VAULT=0x7754272c866892CaD4a414C76f060645bDc27203
 
 # Implementations (V2 - upgraded)
 export SENIOR_IMPL=0x3b93f0EF9944B12bC5d9C2cE232AA2ce926C80eb
@@ -84,7 +85,7 @@ export JUNIOR_IMPL_V1=0xdFCdD986F2a5E412671afC81537BA43D1f6A328b
 export RESERVE_IMPL_V1=0x657613E8265e07e542D42802515677A1199989B2
 
 # Hooks
-export SENIOR_HOOK=0x1108E5FF12Cf7904bFe46BFaa70d41E321c54dfa
+export SENIOR_HOOK=0x27b84fcbdb17D108bE6C5f0F12FCAe4F9C78Ed1B
 export JUNIOR_HOOK=0xC6A224385e14dED076D86c69a91E42142698D1f1
 export RESERVE_HOOK=0xBe01A06f99f8366f8803A61332e110d1235E5f3C
 
@@ -109,7 +110,7 @@ export SEEDER4=0x5cc2946b8b73f4b9674bc12cb208c7417c40f774
 ## Block Explorer Links
 
 - [Senior Vault](https://berascan.com/address/0x49298F4314eb127041b814A2616c25687Db6b650)
-- [Junior Vault](https://berascan.com/address/0x3a0A97dCa5E6CaCC258490d5ece453412f8E1883)
+- [Junior Vault](https://berascan.com/address/0x3a0A97DcA5e6CaCC258490d5ece453412f8E1883)
 - [Reserve Vault](https://berascan.com/address/0x7754272c866892CaD4a414C76f060645bDc27203)
 
 ---
