@@ -27,19 +27,6 @@
   },
   {
     "type": "function",
-    "name": "addWhitelistedDepositor",
-    "inputs": [
-      {
-        "name": "depositor",
-        "type": "address",
-        "internalType": "address"
-      }
-    ],
-    "outputs": [],
-    "stateMutability": "nonpayable"
-  },
-  {
-    "type": "function",
     "name": "addWhitelistedLP",
     "inputs": [
       {
@@ -294,6 +281,19 @@
     ],
     "outputs": [],
     "stateMutability": "nonpayable"
+  },
+  {
+    "type": "function",
+    "name": "contractUpdater",
+    "inputs": [],
+    "outputs": [
+      {
+        "name": "",
+        "type": "address",
+        "internalType": "address"
+      }
+    ],
+    "stateMutability": "view"
   },
   {
     "type": "function",
@@ -727,25 +727,6 @@
   },
   {
     "type": "function",
-    "name": "isWhitelistedDepositor",
-    "inputs": [
-      {
-        "name": "depositor",
-        "type": "address",
-        "internalType": "address"
-      }
-    ],
-    "outputs": [
-      {
-        "name": "",
-        "type": "bool",
-        "internalType": "bool"
-      }
-    ],
-    "stateMutability": "view"
-  },
-  {
-    "type": "function",
     "name": "isWhitelistedLP",
     "inputs": [
       {
@@ -804,6 +785,19 @@
         "name": "",
         "type": "uint256",
         "internalType": "uint256"
+      }
+    ],
+    "stateMutability": "view"
+  },
+  {
+    "type": "function",
+    "name": "liquidityManager",
+    "inputs": [],
+    "outputs": [
+      {
+        "name": "",
+        "type": "address",
+        "internalType": "address"
       }
     ],
     "stateMutability": "view"
@@ -1006,6 +1000,19 @@
   },
   {
     "type": "function",
+    "name": "priceFeedManager",
+    "inputs": [],
+    "outputs": [
+      {
+        "name": "",
+        "type": "address",
+        "internalType": "address"
+      }
+    ],
+    "stateMutability": "view"
+  },
+  {
+    "type": "function",
     "name": "provideBackstop",
     "inputs": [
       {
@@ -1096,19 +1103,6 @@
         "name": "reason",
         "type": "string",
         "internalType": "string"
-      }
-    ],
-    "outputs": [],
-    "stateMutability": "nonpayable"
-  },
-  {
-    "type": "function",
-    "name": "removeWhitelistedDepositor",
-    "inputs": [
-      {
-        "name": "depositor",
-        "type": "address",
-        "internalType": "address"
       }
     ],
     "outputs": [],
@@ -1668,6 +1662,19 @@
   },
   {
     "type": "event",
+    "name": "ContractUpdaterSet",
+    "inputs": [
+      {
+        "name": "contractUpdater",
+        "type": "address",
+        "indexed": true,
+        "internalType": "address"
+      }
+    ],
+    "anonymous": false
+  },
+  {
+    "type": "event",
     "name": "Deposit",
     "inputs": [
       {
@@ -1718,32 +1725,6 @@
         "type": "uint256",
         "indexed": false,
         "internalType": "uint256"
-      }
-    ],
-    "anonymous": false
-  },
-  {
-    "type": "event",
-    "name": "DepositorRemoved",
-    "inputs": [
-      {
-        "name": "depositor",
-        "type": "address",
-        "indexed": true,
-        "internalType": "address"
-      }
-    ],
-    "anonymous": false
-  },
-  {
-    "type": "event",
-    "name": "DepositorWhitelisted",
-    "inputs": [
-      {
-        "name": "depositor",
-        "type": "address",
-        "indexed": true,
-        "internalType": "address"
       }
     ],
     "anonymous": false
@@ -1988,6 +1969,19 @@
   },
   {
     "type": "event",
+    "name": "LiquidityManagerSet",
+    "inputs": [
+      {
+        "name": "liquidityManager",
+        "type": "address",
+        "indexed": true,
+        "internalType": "address"
+      }
+    ],
+    "anonymous": false
+  },
+  {
+    "type": "event",
     "name": "ManagementFeeMinted",
     "inputs": [
       {
@@ -2157,6 +2151,19 @@
         "type": "string",
         "indexed": false,
         "internalType": "string"
+      }
+    ],
+    "anonymous": false
+  },
+  {
+    "type": "event",
+    "name": "PriceFeedManagerSet",
+    "inputs": [
+      {
+        "name": "priceFeedManager",
+        "type": "address",
+        "indexed": true,
+        "internalType": "address"
       }
     ],
     "anonymous": false
@@ -2569,18 +2576,17 @@
   },
   {
     "type": "error",
-    "name": "AddressInsufficientBalance",
-    "inputs": [
-      {
-        "name": "account",
-        "type": "address",
-        "internalType": "address"
-      }
-    ]
+    "name": "AdminAlreadySet",
+    "inputs": []
   },
   {
     "type": "error",
-    "name": "AdminAlreadySet",
+    "name": "ContractUpdaterAlreadySet",
+    "inputs": []
+  },
+  {
+    "type": "error",
+    "name": "ContractUpdaterNotSet",
     "inputs": []
   },
   {
@@ -2796,7 +2802,7 @@
   },
   {
     "type": "error",
-    "name": "FailedInnerCall",
+    "name": "FailedCall",
     "inputs": []
   },
   {
@@ -2866,7 +2872,12 @@
   },
   {
     "type": "error",
-    "name": "MathOverflowedMulDiv",
+    "name": "LiquidityManagerAlreadySet",
+    "inputs": []
+  },
+  {
+    "type": "error",
+    "name": "LiquidityManagerNotSet",
     "inputs": []
   },
   {
@@ -2886,7 +2897,22 @@
   },
   {
     "type": "error",
+    "name": "OnlyContractUpdater",
+    "inputs": []
+  },
+  {
+    "type": "error",
     "name": "OnlyDeployer",
+    "inputs": []
+  },
+  {
+    "type": "error",
+    "name": "OnlyLiquidityManager",
+    "inputs": []
+  },
+  {
+    "type": "error",
+    "name": "OnlyPriceFeedManager",
     "inputs": []
   },
   {
@@ -2901,12 +2927,17 @@
   },
   {
     "type": "error",
-    "name": "OnlyWhitelistedDepositor",
+    "name": "Overflow",
     "inputs": []
   },
   {
     "type": "error",
-    "name": "Overflow",
+    "name": "PriceFeedManagerAlreadySet",
+    "inputs": []
+  },
+  {
+    "type": "error",
+    "name": "PriceFeedManagerNotSet",
     "inputs": []
   },
   {
