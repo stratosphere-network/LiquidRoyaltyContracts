@@ -942,6 +942,11 @@ abstract contract BaseVault is ERC4626Upgradeable, IVault, AdminControlled, UUPS
         uint256 assets,
         uint256 shares
     ) internal virtual override {
+        // ⚠️ CRITICAL: Check allowance if caller is not the owner
+        if (caller != owner) {
+            _spendAllowance(owner, caller, shares);
+        }
+        
         // Calculate 1% withdrawal fee
         uint256 withdrawalFee = (assets * MathLib.WITHDRAWAL_FEE) / MathLib.PRECISION;
         uint256 netAssets = assets - withdrawalFee;

@@ -231,6 +231,35 @@
   },
   {
     "type": "function",
+    "name": "calculateWithdrawalPenalty",
+    "inputs": [
+      {
+        "name": "user",
+        "type": "address",
+        "internalType": "address"
+      },
+      {
+        "name": "amount",
+        "type": "uint256",
+        "internalType": "uint256"
+      }
+    ],
+    "outputs": [
+      {
+        "name": "penalty",
+        "type": "uint256",
+        "internalType": "uint256"
+      },
+      {
+        "name": "netAmount",
+        "type": "uint256",
+        "internalType": "uint256"
+      }
+    ],
+    "stateMutability": "view"
+  },
+  {
+    "type": "function",
     "name": "canMintManagementFee",
     "inputs": [],
     "outputs": [
@@ -250,6 +279,25 @@
         "name": "amount",
         "type": "uint256",
         "internalType": "uint256"
+      }
+    ],
+    "outputs": [
+      {
+        "name": "",
+        "type": "bool",
+        "internalType": "bool"
+      }
+    ],
+    "stateMutability": "view"
+  },
+  {
+    "type": "function",
+    "name": "canWithdrawWithoutPenalty",
+    "inputs": [
+      {
+        "name": "user",
+        "type": "address",
+        "internalType": "address"
       }
     ],
     "outputs": [
@@ -327,6 +375,25 @@
         "name": "assets",
         "type": "uint256",
         "internalType": "uint256"
+      }
+    ],
+    "outputs": [
+      {
+        "name": "",
+        "type": "uint256",
+        "internalType": "uint256"
+      }
+    ],
+    "stateMutability": "view"
+  },
+  {
+    "type": "function",
+    "name": "cooldownStart",
+    "inputs": [
+      {
+        "name": "user",
+        "type": "address",
+        "internalType": "address"
       }
     ],
     "outputs": [
@@ -727,6 +794,20 @@
         "internalType": "address"
       }
     ],
+    "outputs": [],
+    "stateMutability": "nonpayable"
+  },
+  {
+    "type": "function",
+    "name": "initializeV3",
+    "inputs": [],
+    "outputs": [],
+    "stateMutability": "nonpayable"
+  },
+  {
+    "type": "function",
+    "name": "initiateCooldown",
+    "inputs": [],
     "outputs": [],
     "stateMutability": "nonpayable"
   },
@@ -1775,6 +1856,25 @@
   },
   {
     "type": "event",
+    "name": "CooldownInitiated",
+    "inputs": [
+      {
+        "name": "user",
+        "type": "address",
+        "indexed": true,
+        "internalType": "address"
+      },
+      {
+        "name": "timestamp",
+        "type": "uint256",
+        "indexed": false,
+        "internalType": "uint256"
+      }
+    ],
+    "anonymous": false
+  },
+  {
+    "type": "event",
     "name": "Deposit",
     "inputs": [
       {
@@ -2664,6 +2764,25 @@
     "anonymous": false
   },
   {
+    "type": "event",
+    "name": "WithdrawalPenaltyCharged",
+    "inputs": [
+      {
+        "name": "user",
+        "type": "address",
+        "indexed": true,
+        "internalType": "address"
+      },
+      {
+        "name": "penalty",
+        "type": "uint256",
+        "indexed": false,
+        "internalType": "uint256"
+      }
+    ],
+    "anonymous": false
+  },
+  {
     "type": "error",
     "name": "AddressEmptyCode",
     "inputs": [
@@ -2953,6 +3072,11 @@
   {
     "type": "error",
     "name": "InvalidTokenPrice",
+    "inputs": []
+  },
+  {
+    "type": "error",
+    "name": "InvalidWithdrawalAmount",
     "inputs": []
   },
   {

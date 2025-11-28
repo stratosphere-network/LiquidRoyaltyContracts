@@ -1024,7 +1024,7 @@ Final state:
 ```
 
 **This is how Junior holders take on risk in exchange for upside!**
-
+ 
 #### Step 5: Update Rebase Index & Mint Fee Tokens
 
 **Two actions happen here:**
