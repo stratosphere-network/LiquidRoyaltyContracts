@@ -19,9 +19,9 @@
 
 | Contract | Address |
 |----------|---------|
-| **Senior** | `0x3b93f0EF9944B12bC5d9C2cE232AA2ce926C80eb` |
-| **Junior** | `0xabA69764135547E42A671E17df41756A7412b88f` |
-| **Reserve** | `0xC1E87f7f4eBe07780D660E3AdFBB6149ccA1c9A6` |
+| **Senior** | `0x70d73f47072BA8Ed0BB2f1d312250176E2F95f5b` |
+| **Junior** | `0xAf10B593EdB7fe2ccB20b685B08A0C1393d4B3B1` |
+| **Reserve** | `0x7c787367d920D00E9ad4a7d287a675cD62dd53B1` |
 
 ---
 
