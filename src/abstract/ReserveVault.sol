@@ -6,6 +6,7 @@ import {IVault} from "../interfaces/IVault.sol";
 import {IReserveVault} from "../interfaces/IReserveVault.sol";
 import {MathLib} from "../libraries/MathLib.sol";
 import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
+import {IERC20Metadata} from "@openzeppelin/contracts/token/ERC20/extensions/IERC20Metadata.sol";
 import {SafeERC20} from "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
 
 /**
@@ -215,32 +216,34 @@ abstract contract ReserveVault is BaseVault, IReserveVault {
     /**
      * @notice Seed Reserve vault with non-stablecoin token (e.g., WBTC)
      * @dev ONLY for Reserve vault - token stays in vault, not transferred to hook
+     * @dev Caller must have seeder role and approve this vault to transfer tokens first
      * @dev Use investInKodiak() after seeding to convert token to LP
      * @param token Non-stablecoin token address (e.g., WBTC)
      * @param amount Amount of tokens to seed
-     * @param seedProvider Address providing the tokens
      * @param tokenPrice Price of token in stablecoin terms (18 decimals)
      */
     function seedReserveWithToken(
         address token,
         uint256 amount,
-        address seedProvider,
         uint256 tokenPrice
     ) external onlySeeder {
         // Validation
-        if (token == address(0) || seedProvider == address(0)) revert ZeroAddress();
+        if (token == address(0)) revert ZeroAddress();
         if (amount == 0) revert InvalidAmount();
         if (tokenPrice == 0) revert InvalidTokenPrice();
         
-        // Step 1: Transfer tokens from seedProvider to vault
+        // Step 1: Transfer tokens from caller (seeder) to vault
         // Token STAYS in vault (not transferred to hook like seedVault)
-        IERC20(token).safeTransferFrom(seedProvider, address(this), amount);
+        IERC20(token).safeTransferFrom(msg.sender, address(this), amount);
         
         // Step 2: Calculate value = amount * tokenPrice / 1e18
+        // Q5 FIX: Account for token decimals (WBTC=8, USDC=6, etc.)
         // tokenPrice is in 18 decimals, representing stablecoin value per token
-        uint256 valueAdded = (amount * tokenPrice) / 1e18;
+        uint8 tokenDecimals = IERC20Metadata(token).decimals();
+        uint256 normalizedAmount = _normalizeToDecimals(amount, tokenDecimals, 18);
+        uint256 valueAdded = (normalizedAmount * tokenPrice) / 1e18;
         
-        // Step 3: Mint shares to seedProvider
+        // Step 3: Mint shares to caller (seeder)
         // Get current share price
         uint256 sharePrice = totalSupply() > 0 ? (totalAssets() * 1e18) / totalSupply() : 1e18;
         
@@ -255,14 +258,14 @@ abstract contract ReserveVault is BaseVault, IReserveVault {
         }
         
         // Mint shares directly (bypass normal deposit flow)
-        _mint(seedProvider, sharesToMint);
+        _mint(msg.sender, sharesToMint);
         
         // Step 4: Update vault value to include new token value
         _vaultValue += valueAdded;
         _lastUpdateTime = block.timestamp;
         
         // Step 5: Emit event
-        emit ReserveSeededWithToken(token, seedProvider, amount, tokenPrice, valueAdded, sharesToMint);
+        emit ReserveSeededWithToken(token, msg.sender, amount, tokenPrice, valueAdded, sharesToMint);
     }
     
     /**
@@ -445,6 +448,7 @@ abstract contract ReserveVault is BaseVault, IReserveVault {
      * @param swapAggregator DEX aggregator address  
      * @param swapData Swap calldata from aggregator
      */
+     
     function exitLPToToken(
         uint256 lpAmount,
         address tokenOut,
@@ -478,23 +482,7 @@ abstract contract ReserveVault is BaseVault, IReserveVault {
         emit LPExitedToToken(lpAmount, tokenOut, tokenReceived, block.timestamp);
     }
     
-    /**
-     * @notice Set Kodiak Router address for Reserve token swaps
-     * @param router Kodiak Router address
-     */
-    function setKodiakRouter(address router) external onlyAdmin {
-        if (router == address(0)) revert ZeroAddress();
-        _kodiakRouter = router;
-        emit KodiakRouterSet(router);
-    }
-    
-    /**
-     * @notice Get Kodiak Router address
-     */
-    function kodiakRouter() external view returns (address) {
-        return _kodiakRouter;
-    }
-    
+ 
     // ============================================
     // Internal Functions
     // ============================================

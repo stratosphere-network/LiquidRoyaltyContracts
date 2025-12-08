@@ -93,6 +93,23 @@ library MathLib {
     }
     
     /**
+     * @notice Calculate internal shares from balance (ROUND UP - for burning)
+     * @dev Used in _burn() to ensure protocol burns enough shares (favors protocol)
+     * @dev Ceiling division: (a + b - 1) / b
+     * @param balance User's visible balance to burn
+     * @param rebaseIndex Current rebase index
+     * @return shares Internal shares to burn (rounded up)
+     */
+    function calculateSharesFromBalanceCeil(
+        uint256 balance,
+        uint256 rebaseIndex
+    ) internal pure returns (uint256 shares) {
+        if (rebaseIndex == 0) revert DivisionByZero();
+        // Ceiling division to round up
+        return (balance * PRECISION + rebaseIndex - 1) / rebaseIndex;
+    }
+    
+    /**
      * @notice Calculate total supply from shares and index
      * @dev Reference: Section 2 - Total Supply
      * Formula: S = I × Σ

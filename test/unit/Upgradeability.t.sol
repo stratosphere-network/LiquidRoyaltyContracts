@@ -405,7 +405,16 @@ contract UpgradeabilityTest is Test {
         console.log("=== Security: Cannot Initialize Twice ===");
         
         vm.expectRevert();  // InvalidInitialization
-        juniorVault.initialize(address(stablecoin), "Junior Tranche", "jnr", address(0x1), 0);
+        juniorVault.initialize(
+            address(stablecoin), 
+            "Junior Tranche", 
+            "jnr", 
+            address(0x1), 
+            0,
+            address(0x2), // liquidityManager (N1: added)
+            address(0x3), // priceFeedManager (N1: added)
+            address(0x4)  // contractUpdater (N1: added)
+        );
         
         console.log("Double initialization blocked");
     }

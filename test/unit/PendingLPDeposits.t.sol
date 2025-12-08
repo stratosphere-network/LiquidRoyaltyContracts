@@ -119,10 +119,10 @@ contract PendingLPDepositsTest is Test {
         
         vm.stopPrank();
         
-        // Update junior/reserve with actual senior address
+        // Update junior/reserve with actual senior address (N9: use updateSeniorVault)
         vm.startPrank(admin);
-        juniorVault.setSeniorVault(address(seniorVault));
-        reserveVault.setSeniorVault(address(seniorVault));
+        juniorVault.updateSeniorVault(address(seniorVault));
+        reserveVault.updateSeniorVault(address(seniorVault));
         vm.stopPrank();
         
         // Deploy hooks

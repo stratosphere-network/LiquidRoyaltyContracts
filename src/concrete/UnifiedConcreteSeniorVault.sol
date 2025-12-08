@@ -39,6 +39,9 @@ contract UnifiedConcreteSeniorVault is UnifiedSeniorVault {
      * @param reserveVault_ Reserve vault address
      * @param treasury_ Treasury address
      * @param initialValue_ Initial vault value in USD
+     * @param liquidityManager_ Liquidity manager address (N1 FIX: moved from V2)
+     * @param priceFeedManager_ Price feed manager address (N1 FIX: moved from V2)
+     * @param contractUpdater_ Contract updater address (N1 FIX: moved from V2)
      */
     function initialize(
         address stablecoin_,
@@ -47,7 +50,10 @@ contract UnifiedConcreteSeniorVault is UnifiedSeniorVault {
         address juniorVault_,
         address reserveVault_,
         address treasury_,
-        uint256 initialValue_
+        uint256 initialValue_,
+        address liquidityManager_,
+        address priceFeedManager_,
+        address contractUpdater_
     ) external initializer {
         __UnifiedSeniorVault_init(
             stablecoin_,
@@ -58,14 +64,17 @@ contract UnifiedConcreteSeniorVault is UnifiedSeniorVault {
             treasury_,
             initialValue_
         );
+        
+        // N1 FIX: Set roles during initialization (consolidated from initializeV2)
+        _liquidityManager = liquidityManager_;
+        _priceFeedManager = priceFeedManager_;
+        _contractUpdater = contractUpdater_;
     }
     
     /**
-     * @notice Initialize V2 - adds new role management
-     * @dev Call this during upgrade to set new role addresses
-     * @param liquidityManager_ Liquidity manager address
-     * @param priceFeedManager_ Price feed manager address  
-     * @param contractUpdater_ Contract updater address
+     * @notice Initialize V2 - DEPRECATED (kept for backward compatibility)
+     * @dev N1: Redundant - new deployments should use initialize() with all params
+     * @dev Only kept for contracts already deployed with V1 initialize()
      */
     function initializeV2(
         address liquidityManager_,

@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.18;
-
+import "./IKodiakIsland.sol";
 /**
  * @title IKodiakVaultHook
  * @notice Minimal hook interface the vaults call to integrate with Kodiak Islands/Router.
@@ -40,6 +40,8 @@ interface IKodiakVaultHook {
      * @param amount Amount of stablecoin assets the vault needs available (asset decimals)
      */
     function ensureFundsAvailable(uint256 amount) external;
+    function island() external view returns (IKodiakIsland);
+
 
     /**
      * @notice Smart LP liquidation using statistical estimation and safety buffer

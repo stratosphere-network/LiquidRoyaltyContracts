@@ -5,6 +5,7 @@ import {ERC4626Upgradeable} from "@openzeppelin/contracts-upgradeable/token/ERC2
 import {ERC20Upgradeable} from "@openzeppelin/contracts-upgradeable/token/ERC20/ERC20Upgradeable.sol";
 import {ERC20BurnableUpgradeable} from "@openzeppelin/contracts-upgradeable/token/ERC20/extensions/ERC20BurnableUpgradeable.sol";
 import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
+import {IERC20Metadata} from "@openzeppelin/contracts/token/ERC20/extensions/IERC20Metadata.sol";
 import {SafeERC20} from "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
 import {UUPSUpgradeable} from "@openzeppelin/contracts-upgradeable/proxy/utils/UUPSUpgradeable.sol";
 import {IVault} from "../interfaces/IVault.sol";
@@ -87,6 +88,8 @@ abstract contract BaseVault is ERC4626Upgradeable, IVault, AdminControlled, UUPS
     event WithdrawalFeeCharged(address indexed user, uint256 fee, uint256 netAmount);
     event ManagementFeeMinted(address indexed treasury, uint256 amount, uint256 timestamp);
     event MgmtFeeScheduleUpdated(uint256 oldSchedule, uint256 newSchedule);
+    event SeniorVaultUpdated(address indexed newSeniorVault);
+    event KodiakHookUpdated(address indexed newHook);
     event ReserveSeededWithToken(
         address indexed token,
         address indexed seedProvider,
@@ -129,7 +132,6 @@ abstract contract BaseVault is ERC4626Upgradeable, IVault, AdminControlled, UUPS
     
     /// @dev Errors (ZeroAddress inherited from AdminControlled, InvalidAmount inherited from IVault)
     error InvalidProfitRange();
-    error SeniorVaultAlreadySet();
     error OnlySeniorVault();
     error WhitelistedLPNotFound();
     error LPAlreadyWhitelisted();
@@ -140,8 +142,10 @@ abstract contract BaseVault is ERC4626Upgradeable, IVault, AdminControlled, UUPS
     error InvalidLPPrice();
     error FeeScheduleNotMet();
     error InvalidSchedule();
+    error ScheduleTooShort();
     error KodiakRouterNotSet();
     error InvalidTokenPrice();
+    error IdleBalanceDeviation();
     
     /// @dev Modifiers
     modifier onlySeniorVault() {
@@ -205,6 +209,16 @@ abstract contract BaseVault is ERC4626Upgradeable, IVault, AdminControlled, UUPS
         if (lp == address(0)) revert AdminControlled.ZeroAddress();
         if (!_isWhitelistedLP[lp]) revert WhitelistedLPNotFound();
         
+        _removeWhitelistedLPInternal(lp);
+        
+        emit WhitelistedLPRemoved(lp);
+    }
+    
+    /**
+     * @dev Internal helper to remove LP from whitelist
+     * @param lp Address to remove
+     */
+    function _removeWhitelistedLPInternal(address lp) internal {
         // Find and remove from array using swap-and-pop
         for (uint256 i = 0; i < _whitelistedLPs.length; i++) {
             if (_whitelistedLPs[i] == lp) {
@@ -216,8 +230,6 @@ abstract contract BaseVault is ERC4626Upgradeable, IVault, AdminControlled, UUPS
         
         // Remove from mapping
         _isWhitelistedLP[lp] = false;
-        
-        emit WhitelistedLPRemoved(lp);
     }
     
     /**
@@ -261,6 +273,16 @@ abstract contract BaseVault is ERC4626Upgradeable, IVault, AdminControlled, UUPS
         if (lpToken == address(0)) revert AdminControlled.ZeroAddress();
         if (!_isWhitelistedLPToken[lpToken]) revert WhitelistedLPNotFound();
         
+        _removeWhitelistedLPTokenInternal(lpToken);
+        
+        emit WhitelistedLPTokenRemoved(lpToken);
+    }
+    
+    /**
+     * @dev Internal helper to remove LP token from whitelist
+     * @param lpToken Address to remove
+     */
+    function _removeWhitelistedLPTokenInternal(address lpToken) internal {
         // Find and remove from array using swap-and-pop
         for (uint256 i = 0; i < _whitelistedLPTokens.length; i++) {
             if (_whitelistedLPTokens[i] == lpToken) {
@@ -272,8 +294,6 @@ abstract contract BaseVault is ERC4626Upgradeable, IVault, AdminControlled, UUPS
         
         // Remove from mapping
         _isWhitelistedLPToken[lpToken] = false;
-        
-        emit WhitelistedLPTokenRemoved(lpToken);
     }
     
     /**
@@ -341,7 +361,7 @@ abstract contract BaseVault is ERC4626Upgradeable, IVault, AdminControlled, UUPS
         if (vaultBalance < amount) revert InsufficientBalance();
         
         // Transfer stablecoins from vault to LP
-        _stablecoin.transfer(lp, amount);
+        _stablecoin.safeTransfer(lp, amount);
         
         emit LPInvestment(lp, amount);
     }
@@ -370,7 +390,7 @@ abstract contract BaseVault is ERC4626Upgradeable, IVault, AdminControlled, UUPS
         if (balance < withdrawAmount) revert InsufficientBalance();
         
         // Transfer LP tokens to whitelisted LP address for liquidation
-        lpTokenContract.transfer(lp, withdrawAmount);
+        lpTokenContract.safeTransfer(lp, withdrawAmount);
         
         emit LPTokensWithdrawn(lpToken, lp, withdrawAmount);
     }
@@ -387,8 +407,6 @@ abstract contract BaseVault is ERC4626Upgradeable, IVault, AdminControlled, UUPS
     function setKodiakHook(address hook) external onlyAdmin {
         // Remove old hook from whitelist if exists
         if (address(kodiakHook) != address(0)) {
-            _stablecoin.forceApprove(address(kodiakHook), 0);
-            
             // Remove from whitelist
             if (_isWhitelistedLP[address(kodiakHook)]) {
                 _removeWhitelistedLPInternal(address(kodiakHook));
@@ -409,6 +427,8 @@ abstract contract BaseVault is ERC4626Upgradeable, IVault, AdminControlled, UUPS
         }
         
         kodiakHook = IKodiakVaultHook(hook);
+        
+        emit KodiakHookUpdated(hook);
     }
     
     /**
@@ -462,6 +482,9 @@ abstract contract BaseVault is ERC4626Upgradeable, IVault, AdminControlled, UUPS
     /**
      * @notice Deploy all idle stablecoins to Kodiak (sweep dust)
      * @dev Convenience function to deploy entire vault balance without specifying amount
+     * @dev N10 FIX: Protects against stale slippage params when deposits happen in same block
+     * @param expectedIdle Expected idle balance when tx was prepared (prevents stale minLPTokens)
+     * @param maxDeviation Maximum allowed deviation from expectedIdle in basis points (e.g., 100 = 1%)
      * @param minLPTokens Minimum LP tokens to receive (slippage protection)
      * @param swapToToken0Aggregator DEX aggregator for token0 swap
      * @param swapToToken0Data Swap calldata for token0
@@ -469,6 +492,8 @@ abstract contract BaseVault is ERC4626Upgradeable, IVault, AdminControlled, UUPS
      * @param swapToToken1Data Swap calldata for token1
      */
     function sweepToKodiak(
+        uint256 expectedIdle,
+        uint256 maxDeviation,
         uint256 minLPTokens,
         address swapToToken0Aggregator,
         bytes calldata swapToToken0Data,
@@ -480,6 +505,16 @@ abstract contract BaseVault is ERC4626Upgradeable, IVault, AdminControlled, UUPS
         // Get all idle stablecoin balance
         uint256 idle = _stablecoin.balanceOf(address(this));
         if (idle == 0) revert InvalidAmount();
+        
+        // N10 FIX: Ensure idle balance hasn't changed significantly since tx preparation
+        // This prevents stale minLPTokens from being used when deposits happen in same block
+        if (idle != expectedIdle) {
+            uint256 deviation = idle > expectedIdle ? idle - expectedIdle : expectedIdle - idle;
+            uint256 maxAllowedDeviation = (expectedIdle * maxDeviation) / 10000;
+            if (deviation > maxAllowedDeviation) {
+                revert IdleBalanceDeviation();
+            }
+        }
         
         // Deploy all idle funds
         uint256 lpBefore = kodiakHook.getIslandLPBalance();
@@ -503,48 +538,18 @@ abstract contract BaseVault is ERC4626Upgradeable, IVault, AdminControlled, UUPS
         
         emit KodiakDeployment(idle, lpReceived, block.timestamp);
     }
-    
-    /**
-     * @notice Internal helper to remove whitelisted LP
-     * @dev Uses swap-and-pop for gas efficiency
-     */
-    function _removeWhitelistedLPInternal(address lp) internal {
-        // Find and remove from array using swap-and-pop
-        for (uint256 i = 0; i < _whitelistedLPs.length; i++) {
-            if (_whitelistedLPs[i] == lp) {
-                _whitelistedLPs[i] = _whitelistedLPs[_whitelistedLPs.length - 1];
-                _whitelistedLPs.pop();
-                break;
-            }
-        }
-        
-        // Remove from mapping
-        _isWhitelistedLP[lp] = false;
-    }
 
     /**
-     * @notice Set Senior vault address (fixes circular dependency)
-     * @dev Can only be called once by admin after deployment
-     * @param seniorVault_ Address of Senior vault
-     */
-    function setSeniorVault(address seniorVault_) external onlyAdmin {
-        if (_seniorVault != address(0) && _seniorVault != address(0x1)) {
-            revert SeniorVaultAlreadySet();
-        }
-        if (seniorVault_ == address(0)) revert AdminControlled.ZeroAddress();
-        
-        _seniorVault = seniorVault_;
-    }
-    
-    /**
      * @notice Update Senior vault address (admin only)
-     * @dev Allows admin to update Senior vault address after initial setup
+     * @dev Allows admin to set or update Senior vault address
      * @param seniorVault_ Address of Senior vault
      */
     function updateSeniorVault(address seniorVault_) external onlyAdmin {
         if (seniorVault_ == address(0)) revert AdminControlled.ZeroAddress();
         
         _seniorVault = seniorVault_;
+        
+        emit SeniorVaultUpdated(seniorVault_);
     }
     
     // ============================================
@@ -651,6 +656,9 @@ abstract contract BaseVault is ERC4626Upgradeable, IVault, AdminControlled, UUPS
      */
     function setMgmtFeeSchedule(uint256 newSchedule) external onlyLiquidityManager {
         if (newSchedule == 0) revert InvalidSchedule();
+        
+        // Prevent too-frequent fee minting (minimum 30 days for monthly fee schedule)
+        if (newSchedule < 30 days) revert ScheduleTooShort();
         
         uint256 oldSchedule = _mgmtFeeSchedule;
         _mgmtFeeSchedule = newSchedule;
@@ -801,44 +809,45 @@ abstract contract BaseVault is ERC4626Upgradeable, IVault, AdminControlled, UUPS
     }
     
     /**
-     * @notice Seed vault with LP tokens from external source
-     * @dev Seeder function to bootstrap vault with LP positions
+     * @notice Seed vault with LP tokens from caller
+     * @dev Seeder function to bootstrap vault with LP positions (caller must have seeder role)
      * @param lpToken Address of the LP token to seed
      * @param amount Amount of LP tokens to seed
-     * @param seedProvider Address providing the LP tokens (must have approved this vault)
      * @param lpPrice Price of LP token in stablecoin terms (18 decimals)
      * 
      * Flow:
-     * 1. Transfer LP tokens from seedProvider to vault (requires approval)
+     * 1. Transfer LP tokens from caller to vault (requires approval)
      * 2. Transfer LP tokens from vault to hook
      * 3. Calculate value = amount * lpPrice
-     * 4. Mint shares to seedProvider (1:1 for senior, share-price-based for junior/reserve)
+     * 4. Mint shares to caller (1:1 for senior, share-price-based for junior/reserve)
      * 5. Update vault value to include new LP value
      * 6. Emit VaultSeeded event
      */
     function seedVault(
         address lpToken,
         uint256 amount,
-        address seedProvider,
         uint256 lpPrice
     ) external onlySeeder {
         // Validation
-        if (lpToken == address(0) || seedProvider == address(0)) revert AdminControlled.ZeroAddress();
+        if (lpToken == address(0)) revert AdminControlled.ZeroAddress();
         if (amount == 0) revert InvalidAmount();
         if (lpPrice == 0) revert InvalidLPPrice();
         if (address(kodiakHook) == address(0)) revert KodiakHookNotSet();
         
-        // Step 1: Transfer LP tokens from seedProvider to vault
-        IERC20(lpToken).safeTransferFrom(seedProvider, address(this), amount);
+        // Step 1: Transfer LP tokens from caller (seeder) to vault
+        IERC20(lpToken).safeTransferFrom(msg.sender, address(this), amount);
         
         // Step 2: Transfer LP tokens from vault to hook
         IERC20(lpToken).safeTransfer(address(kodiakHook), amount);
         
         // Step 3: Calculate value = amount * lpPrice / 1e18
+        // Q5 FIX: Account for LP token decimals
         // lpPrice is in 18 decimals, representing how much stablecoin per LP token
-        uint256 valueAdded = (amount * lpPrice) / 1e18;
+        uint8 lpDecimals = IERC20Metadata(lpToken).decimals();
+        uint256 normalizedAmount = _normalizeToDecimals(amount, lpDecimals, 18);
+        uint256 valueAdded = (normalizedAmount * lpPrice) / 1e18;
         
-        // Step 4: Mint shares to seedProvider
+        // Step 4: Mint shares to caller (seeder)
         // Get current share price (how many assets per share)
         uint256 sharePrice = totalSupply() > 0 ? (totalAssets() * 1e18) / totalSupply() : 1e18;
         
@@ -855,25 +864,17 @@ abstract contract BaseVault is ERC4626Upgradeable, IVault, AdminControlled, UUPS
         }
         
         // Mint shares directly (bypass normal deposit flow)
-        _mint(seedProvider, sharesToMint);
+        _mint(msg.sender, sharesToMint);
         
         // Step 5: Update vault value to include new LP value
         _vaultValue += valueAdded;
         _lastUpdateTime = block.timestamp;
         
         // Step 6: Emit event
-        emit VaultSeeded(lpToken, seedProvider, amount, lpPrice, valueAdded, sharesToMint);
+        emit VaultSeeded(lpToken, msg.sender, amount, lpPrice, valueAdded, sharesToMint);
     }
     
-    /**
-     * @notice Transfer Stablecoins to Senior vault (fixes asset transfer issue)
-     * @dev Called by Senior vault during backstop
-     * @param amount Amount of Stablecoins to transfer
-     */
-    function transferToSenior(uint256 amount) external virtual onlySeniorVault {
-        if (amount == 0) return;
-        _stablecoin.transfer(_seniorVault, amount);
-    }
+ 
 
     // ============================================
     // UUPS Upgrade Authorization
@@ -999,7 +1000,7 @@ abstract contract BaseVault is ERC4626Upgradeable, IVault, AdminControlled, UUPS
         
         // Burn shares from owner
         _burn(owner, shares);
-        
+          _vaultValue -= assets;
         // Transfer net assets to receiver (after 1% fee)
         _stablecoin.safeTransfer(receiver, netAssets);
         
@@ -1010,7 +1011,7 @@ abstract contract BaseVault is ERC4626Upgradeable, IVault, AdminControlled, UUPS
         }
         
         // Track capital outflow: decrease vault value by actual assets withdrawn (full amount including fee)
-        _vaultValue -= assets;
+      
         
         emit Withdraw(caller, receiver, owner, assets, shares);
     }
@@ -1026,5 +1027,29 @@ abstract contract BaseVault is ERC4626Upgradeable, IVault, AdminControlled, UUPS
     function _afterValueUpdate(uint256 oldValue, uint256 newValue) internal virtual {
         // Default: do nothing
         // Override in Senior vault to trigger rebase
+    }
+    
+    /**
+     * @notice Normalize token amount to target decimals (Q5 FIX)
+     * @dev Handles tokens with different decimals (WBTC=8, USDC=6, LP=18, etc.)
+     * @param amount Amount in source decimals
+     * @param fromDecimals Source token decimals
+     * @param toDecimals Target decimals
+     * @return Normalized amount in target decimals
+     */
+    function _normalizeToDecimals(
+        uint256 amount,
+        uint8 fromDecimals,
+        uint8 toDecimals
+    ) internal pure virtual returns (uint256) {
+        if (fromDecimals == toDecimals) {
+            return amount;
+        } else if (fromDecimals < toDecimals) {
+            // Scale up: amount * 10^(toDecimals - fromDecimals)
+            return amount * (10 ** (toDecimals - fromDecimals));
+        } else {
+            // Scale down: amount / 10^(fromDecimals - toDecimals)
+            return amount / (10 ** (fromDecimals - toDecimals));
+        }
     }
 }

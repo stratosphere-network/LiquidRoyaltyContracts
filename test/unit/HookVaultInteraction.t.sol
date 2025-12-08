@@ -6,6 +6,7 @@ import {ERC1967Proxy} from "@openzeppelin/contracts/proxy/ERC1967/ERC1967Proxy.s
 import {ConcreteJuniorVault} from "../../src/concrete/ConcreteJuniorVault.sol";
 import {MockERC20} from "../../src/mocks/MockERC20.sol";
 import {IKodiakVaultHook} from "../../src/integrations/IKodiakVaultHook.sol";
+import {IKodiakIsland} from "../../src/integrations/IKodiakIsland.sol";
 
 /**
  * @title HookVaultInteractionTest
@@ -170,7 +171,7 @@ contract HookVaultInteractionTest is Test {
         console.log("After first deployment - LP:", lp1);
         
         // Sweep remaining 10K dust
-        vault.sweepToKodiak(9900e18, address(0), "", address(0), "");
+        vault.sweepToKodiak(10000e6, 100, 9900e18, address(0), "", address(0), "");
         uint256 lp2 = hook.lpBalance();
         console.log("After sweep - LP:", lp2);
         
@@ -282,7 +283,7 @@ contract HookVaultInteractionTest is Test {
 
 contract MockKodiakHook is IKodiakVaultHook {
     address public vault;
-    address public island;
+    IKodiakIsland public island;
     uint256 public lpBalance;
     uint256 public deploymentCount;
     uint256 public totalDeployed;
@@ -294,7 +295,7 @@ contract MockKodiakHook is IKodiakVaultHook {
     
     constructor(address vault_, address island_) {
         vault = vault_;
-        island = island_;
+        island = IKodiakIsland(island_);
     }
     
     function setLPMintRatio(uint256 ratio) external {

@@ -6,6 +6,7 @@ import {IVault} from "../interfaces/IVault.sol";
 import {IJuniorVault} from "../interfaces/IJuniorVault.sol";
 import {MathLib} from "../libraries/MathLib.sol";
 import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
+import {IERC20Metadata} from "@openzeppelin/contracts/token/ERC20/extensions/IERC20Metadata.sol";
 import {SafeERC20} from "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
 
 /**
@@ -87,6 +88,7 @@ abstract contract JuniorVault is BaseVault, IJuniorVault {
     error DepositExpired();
     error NotDepositor();
     error DepositNotExpired();
+    error InvalidLPToken();
     
     /**
      * @notice Initialize Junior vault (replaces constructor for upgradeable)
@@ -238,11 +240,10 @@ abstract contract JuniorVault is BaseVault, IJuniorVault {
         if (lpToken == address(0)) revert ZeroAddress();
         if (amount == 0) revert InvalidAmount();
         if (address(kodiakHook) == address(0)) revert KodiakHookNotSet();
+      
+        if (lpToken != address(kodiakHook.island())) revert InvalidLPToken();
         
-        // Transfer LP from user to hook
-        IERC20(lpToken).safeTransferFrom(msg.sender, address(kodiakHook), amount);
-        
-        // Create pending deposit
+        // Create pending deposit (Effects - state updates BEFORE external call)
         depositId = _nextDepositId++;
         uint256 expiresAt = block.timestamp + DEPOSIT_EXPIRY_TIME;
         
@@ -258,6 +259,9 @@ abstract contract JuniorVault is BaseVault, IJuniorVault {
         _userDepositIds[msg.sender].push(depositId);
         
         emit PendingLPDepositCreated(depositId, msg.sender, lpToken, amount, expiresAt);
+        
+        // Transfer LP from user to hook (Interaction - external call LAST per CEI pattern)
+        IERC20(lpToken).safeTransferFrom(msg.sender, address(kodiakHook), amount);
     }
     
     /**
@@ -274,23 +278,16 @@ abstract contract JuniorVault is BaseVault, IJuniorVault {
         if (block.timestamp > deposit.expiresAt) revert DepositExpired();
         if (lpPrice == 0) revert InvalidLPPrice();
         
-        // Calculate value and shares
-        uint256 valueAdded = (deposit.amount * lpPrice) / 1e18;
+        // Calculate value and shares (Q5 FIX: account for LP token decimals)
+        uint8 lpDecimals = IERC20Metadata(deposit.lpToken).decimals();
+        uint256 normalizedAmount = _normalizeToDecimals(deposit.amount, lpDecimals, 18);
+        uint256 valueAdded = (normalizedAmount * lpPrice) / 1e18;
         
-        // Calculate shares to mint (same logic as seedVault)
-        uint256 sharePrice = totalSupply() > 0 ? (totalAssets() * 1e18) / totalSupply() : 1e18;
-        uint256 sharesToMint;
+        // Use ERC4626 standard preview (calculates shares based on current state)
+        uint256 sharesToMint = previewDeposit(valueAdded);
+        if (sharesToMint == 0) revert InvalidAmount(); // Safety: prevent 0-share minting
         
-        if (sharePrice == 1e18 || totalSupply() == 0) {
-            sharesToMint = valueAdded;
-        } else {
-            sharesToMint = (valueAdded * 1e18) / sharePrice;
-        }
-        
-        // Mint shares to depositor
-        _mint(deposit.depositor, sharesToMint);
-        
-        // Update vault value
+        // Update vault value (Effects - state updates BEFORE external call)
         _vaultValue += valueAdded;
         _lastUpdateTime = block.timestamp;
         
@@ -298,6 +295,9 @@ abstract contract JuniorVault is BaseVault, IJuniorVault {
         deposit.status = DepositStatus.APPROVED;
         
         emit PendingLPDepositApproved(depositId, deposit.depositor, lpPrice, sharesToMint);
+        
+        // Mint shares to depositor (Interaction - external call LAST, can trigger ERC20 hooks)
+        _mint(deposit.depositor, sharesToMint);
     }
     
     /**
@@ -312,13 +312,13 @@ abstract contract JuniorVault is BaseVault, IJuniorVault {
         if (deposit.depositor == address(0)) revert DepositNotFound();
         if (deposit.status != DepositStatus.PENDING) revert DepositNotPending();
         
-        // Transfer LP back from hook to depositor
-        kodiakHook.transferIslandLP(deposit.depositor, deposit.amount);
-        
-        // Update status
+        // Update status (Effects - state update BEFORE external call)
         deposit.status = DepositStatus.REJECTED;
         
         emit PendingLPDepositRejected(depositId, deposit.depositor, reason);
+        
+        // Transfer LP back from hook to depositor (Interaction - external call LAST per CEI pattern)
+        kodiakHook.transferIslandLP(deposit.depositor, deposit.amount);
     }
     
     /**
@@ -333,13 +333,13 @@ abstract contract JuniorVault is BaseVault, IJuniorVault {
         if (deposit.depositor != msg.sender) revert NotDepositor();
         if (deposit.status != DepositStatus.PENDING) revert DepositNotPending();
         
-        // Transfer LP back from hook to depositor
-        kodiakHook.transferIslandLP(deposit.depositor, deposit.amount);
-        
-        // Update status
+        // Update status (Effects - state update BEFORE external call)
         deposit.status = DepositStatus.CANCELLED;
         
         emit PendingLPDepositCancelled(depositId, deposit.depositor);
+        
+        // Transfer LP back from hook to depositor (Interaction - external call LAST per CEI pattern)
+        kodiakHook.transferIslandLP(deposit.depositor, deposit.amount);
     }
     
     /**
@@ -354,13 +354,13 @@ abstract contract JuniorVault is BaseVault, IJuniorVault {
         if (deposit.status != DepositStatus.PENDING) revert DepositNotPending();
         if (block.timestamp <= deposit.expiresAt) revert DepositNotExpired();
         
-        // Transfer LP back from hook to original depositor
-        kodiakHook.transferIslandLP(deposit.depositor, deposit.amount);
-        
-        // Update status
+        // Update status (Effects - state update BEFORE external call)
         deposit.status = DepositStatus.EXPIRED;
         
         emit PendingLPDepositExpired(depositId, deposit.depositor);
+        
+        // Transfer LP back from hook to original depositor (Interaction - external call LAST per CEI pattern)
+        kodiakHook.transferIslandLP(deposit.depositor, deposit.amount);
     }
     
     /**
