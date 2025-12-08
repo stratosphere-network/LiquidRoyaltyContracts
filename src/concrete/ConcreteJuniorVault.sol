@@ -41,7 +41,10 @@ contract ConcreteJuniorVault is JuniorVault {
         string memory tokenName_,
         string memory tokenSymbol_,
         address seniorVault_,
-        uint256 initialValue_
+        uint256 initialValue_,
+        address liquidityManager_,
+        address priceFeedManager_,
+        address contractUpdater_
     ) external initializer {
         __JuniorVault_init(
             stablecoin_,
@@ -50,14 +53,17 @@ contract ConcreteJuniorVault is JuniorVault {
             seniorVault_,
             initialValue_
         );
+        
+        // N1 FIX: Set roles during initialization (consolidated from initializeV2)
+        _liquidityManager = liquidityManager_;
+        _priceFeedManager = priceFeedManager_;
+        _contractUpdater = contractUpdater_;
     }
     
     /**
-     * @notice Initialize V2 - adds new role management
-     * @dev Call this during upgrade to set new role addresses
-     * @param liquidityManager_ Liquidity manager address
-     * @param priceFeedManager_ Price feed manager address
-     * @param contractUpdater_ Contract updater address
+     * @notice Initialize V2 - DEPRECATED (kept for backward compatibility with existing deployments)
+     * @dev N1: This is now redundant - new deployments should use initialize() with all params
+     * @dev Only kept for contracts already deployed with V1 initialize()
      */
     function initializeV2(
         address liquidityManager_,
@@ -230,6 +236,9 @@ contract ConcreteJuniorVault is JuniorVault {
         // Burn shares from owner
         _burn(owner, shares);
         
+        // Track capital outflow (BEFORE external calls - CEI pattern)
+        _vaultValue -= amountAfterEarlyPenalty;
+        
         // Transfer net assets to receiver (after penalty + fee)
         _stablecoin.safeTransfer(receiver, netAssets);
         
@@ -238,9 +247,6 @@ contract ConcreteJuniorVault is JuniorVault {
             _stablecoin.safeTransfer(_treasury, withdrawalFee);
             emit WithdrawalFeeCharged(owner, withdrawalFee, netAssets);
         }
-        
-        // Track capital outflow
-        _vaultValue -= amountAfterEarlyPenalty;
         
         if (earlyPenalty > 0) {
             emit WithdrawalPenaltyCharged(owner, earlyPenalty);

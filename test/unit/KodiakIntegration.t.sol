@@ -231,7 +231,7 @@ contract KodiakIntegrationTest is Test {
         vm.expectEmit(false, false, false, true);
         emit KodiakDeployment(vaultBalance, vaultBalance, block.timestamp);
         
-        juniorVault.sweepToKodiak(vaultBalance - 100e18, address(0), "", address(0), "");
+        juniorVault.sweepToKodiak(vaultBalance, 100, vaultBalance - 100e18, address(0), "", address(0), "");
         
         // All idle funds should be swept
         assertEq(stablecoin.balanceOf(mockHook), vaultBalance);
@@ -247,12 +247,12 @@ contract KodiakIntegrationTest is Test {
         
         // Try to sweep (nothing left)
         vm.expectRevert(abi.encodeWithSignature("InvalidAmount()"));
-        juniorVault.sweepToKodiak(0, address(0), "", address(0), "");
+        juniorVault.sweepToKodiak(0, 0, 0, address(0), "", address(0), "");
     }
     
     function test_sweepToKodiak_revertsIfNoHook() public {
         vm.expectRevert(abi.encodeWithSignature("KodiakHookNotSet()"));
-        juniorVault.sweepToKodiak(0, address(0), "", address(0), "");
+        juniorVault.sweepToKodiak(0, 0, 0, address(0), "", address(0), "");
     }
     
     function test_sweepToKodiak_onlyAdmin() public {
@@ -260,7 +260,7 @@ contract KodiakIntegrationTest is Test {
         
         vm.prank(user);
         vm.expectRevert();  // Should revert with OnlyAdmin
-        juniorVault.sweepToKodiak(0, address(0), "", address(0), "");
+        juniorVault.sweepToKodiak(0, 0, 0, address(0), "", address(0), "");
     }
     
     // ============================================
@@ -297,12 +297,12 @@ contract KodiakIntegrationTest is Test {
 
 contract MockKodiakHook is IKodiakVaultHook {
     address public immutable vault;
-    address public immutable island;
+    IKodiakIsland public immutable island;
     uint256 public lpBalance;
     
     constructor(address _vault, address _island) {
         vault = _vault;
-        island = _island;
+        island = IKodiakIsland(_island);
     }
     
     function onAfterDeposit(uint256 amount) external override {

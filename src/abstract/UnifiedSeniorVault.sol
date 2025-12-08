@@ -5,6 +5,7 @@ import {ISeniorVault} from "../interfaces/ISeniorVault.sol";
 import {IJuniorVault} from "../interfaces/IJuniorVault.sol";
 import {IReserveVault} from "../interfaces/IReserveVault.sol";
 import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
+import {IERC20Metadata} from "@openzeppelin/contracts/token/ERC20/extensions/IERC20Metadata.sol";
 import {SafeERC20} from "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
 import {PausableUpgradeable} from "@openzeppelin/contracts-upgradeable/utils/PausableUpgradeable.sol";
 import {UUPSUpgradeable} from "@openzeppelin/contracts-upgradeable/proxy/utils/UUPSUpgradeable.sol";
@@ -135,6 +136,8 @@ abstract contract UnifiedSeniorVault is ISeniorVault, IERC20, AdminControlled, P
     event LiquidityFreedForWithdrawal(uint256 requested, uint256 freedFromLP);
     event WithdrawalFeeCharged(address indexed user, uint256 fee, uint256 netAmount);
     event VaultSeeded(address indexed lpToken, address indexed seedProvider, uint256 amount, uint256 lpPrice, uint256 valueAdded, uint256 sharesMinted);
+    event JuniorReserveUpdated(address indexed juniorVault, address indexed reserveVault);
+    event KodiakHookUpdated(address indexed newHook);
     event PendingLPDepositCreated(
         uint256 indexed depositId,
         address indexed depositor,
@@ -167,7 +170,6 @@ abstract contract UnifiedSeniorVault is ISeniorVault, IERC20, AdminControlled, P
     error InvalidLPPrice();
     error InvalidRecipient();
     error InsufficientAllowance();
-    error JuniorReserveAlreadySet();
     error WhitelistedLPNotFound();
     error LPAlreadyWhitelisted();
     error WrongVault();
@@ -179,6 +181,7 @@ abstract contract UnifiedSeniorVault is ISeniorVault, IERC20, AdminControlled, P
     error DepositExpired();
     error NotDepositor();
     error DepositNotExpired();
+    error InvalidLPToken();
     
     /// @dev Modifiers
     modifier whenNotPausedOrAdmin() {
@@ -228,25 +231,8 @@ abstract contract UnifiedSeniorVault is ISeniorVault, IERC20, AdminControlled, P
     }
     
     /**
-     * @notice Set Junior and Reserve vault addresses (fixes circular dependency)
-     * @dev Can only be called once by admin after deployment
-     * @param juniorVault_ Address of Junior vault
-     * @param reserveVault_ Address of Reserve vault
-     */
-    function setJuniorReserve(address juniorVault_, address reserveVault_) external onlyAdmin {
-        if (address(_juniorVault) != address(0) && address(_juniorVault) != address(0x1)) {
-            revert JuniorReserveAlreadySet();
-        }
-        if (juniorVault_ == address(0)) revert AdminControlled.ZeroAddress();
-        if (reserveVault_ == address(0)) revert AdminControlled.ZeroAddress();
-        
-        _juniorVault = IJuniorVault(juniorVault_);
-        _reserveVault = IReserveVault(reserveVault_);
-    }
-    
-    /**
      * @notice Update Junior and Reserve vault addresses (admin only)
-     * @dev Allows admin to update vault addresses after initial setup
+     * @dev Allows admin to set or update vault addresses
      * @param juniorVault_ Address of Junior vault
      * @param reserveVault_ Address of Reserve vault
      */
@@ -256,6 +242,8 @@ abstract contract UnifiedSeniorVault is ISeniorVault, IERC20, AdminControlled, P
         
         _juniorVault = IJuniorVault(juniorVault_);
         _reserveVault = IReserveVault(reserveVault_);
+        
+        emit JuniorReserveUpdated(juniorVault_, reserveVault_);
     }
     
     /**
@@ -281,8 +269,6 @@ abstract contract UnifiedSeniorVault is ISeniorVault, IERC20, AdminControlled, P
     function setKodiakHook(address hook) external onlyAdmin {
         // Remove old hook from whitelist if exists
         if (address(kodiakHook) != address(0)) {
-            _stablecoin.forceApprove(address(kodiakHook), 0);
-            
             // Remove from whitelist
             if (_isWhitelistedLP[address(kodiakHook)]) {
                 _removeWhitelistedLPInternal(address(kodiakHook));
@@ -303,6 +289,8 @@ abstract contract UnifiedSeniorVault is ISeniorVault, IERC20, AdminControlled, P
         }
         
         kodiakHook = IKodiakVaultHook(hook);
+        
+        emit KodiakHookUpdated(hook);
     }
 
     /**
@@ -382,6 +370,16 @@ abstract contract UnifiedSeniorVault is ISeniorVault, IERC20, AdminControlled, P
         if (lpToken == address(0)) revert AdminControlled.ZeroAddress();
         if (!_isWhitelistedLPToken[lpToken]) revert WhitelistedLPNotFound();
         
+        _removeWhitelistedLPTokenInternal(lpToken);
+        
+        emit WhitelistedLPTokenRemoved(lpToken);
+    }
+    
+    /**
+     * @dev Internal helper to remove LP token from whitelist
+     * @param lpToken Address to remove
+     */
+    function _removeWhitelistedLPTokenInternal(address lpToken) internal {
         // Find and remove from array using swap-and-pop
         for (uint256 i = 0; i < _whitelistedLPTokens.length; i++) {
             if (_whitelistedLPTokens[i] == lpToken) {
@@ -393,8 +391,6 @@ abstract contract UnifiedSeniorVault is ISeniorVault, IERC20, AdminControlled, P
         
         // Remove from mapping
         _isWhitelistedLPToken[lpToken] = false;
-        
-        emit WhitelistedLPTokenRemoved(lpToken);
     }
     
     /**
@@ -462,7 +458,7 @@ abstract contract UnifiedSeniorVault is ISeniorVault, IERC20, AdminControlled, P
         if (vaultBalance < amount) revert InsufficientBalance();
         
         // Transfer stablecoins from vault to LP
-        _stablecoin.transfer(lp, amount);
+        _stablecoin.safeTransfer(lp, amount);
         
         emit LPInvestment(lp, amount);
     }
@@ -586,7 +582,7 @@ abstract contract UnifiedSeniorVault is ISeniorVault, IERC20, AdminControlled, P
         if (balance < withdrawAmount) revert InsufficientBalance();
         
         // Transfer LP tokens to whitelisted LP address for liquidation
-        lpTokenContract.transfer(lp, withdrawAmount);
+        lpTokenContract.safeTransfer(lp, withdrawAmount);
         
         emit LPTokensWithdrawn(lpToken, lp, withdrawAmount);
     }
@@ -612,45 +608,46 @@ abstract contract UnifiedSeniorVault is ISeniorVault, IERC20, AdminControlled, P
     }
     
     /**
-     * @notice Seed vault with LP tokens from an external provider
+     * @notice Seed vault with LP tokens from caller
      * @param lpToken Address of the LP token
      * @param amount Amount of LP tokens to seed
-     * @param seedProvider Address providing the LP tokens
      * @param lpPrice Current LP token price (18 decimals)
-     * @dev Provider must approve this vault to transfer LP tokens first
-     * @dev Transfers LP to hook, calculates value, mints shares to provider
+     * @dev Caller must have seeder role and approve this vault to transfer LP tokens first
+     * @dev Transfers LP to hook, calculates value, mints shares to caller
      */
     function seedVault(
         address lpToken,
         uint256 amount,
-        address seedProvider,
         uint256 lpPrice
     ) external onlySeeder {
-        if (lpToken == address(0) || seedProvider == address(0)) revert AdminControlled.ZeroAddress();
+        if (lpToken == address(0)) revert AdminControlled.ZeroAddress();
         if (amount == 0) revert InvalidAmount();
         if (lpPrice == 0) revert InvalidLPPrice();
         if (address(kodiakHook) == address(0)) revert KodiakHookNotSet();
         
-        // Transfer LP tokens from provider to this vault
-        IERC20(lpToken).safeTransferFrom(seedProvider, address(this), amount);
+        // Transfer LP tokens from caller (seeder) to this vault
+        IERC20(lpToken).safeTransferFrom(msg.sender, address(this), amount);
         
         // Transfer LP tokens to hook
         IERC20(lpToken).safeTransfer(address(kodiakHook), amount);
         
         // Calculate value added (LP amount * LP price)
-        uint256 valueAdded = (amount * lpPrice) / 1e18;
+        // Q5 FIX: Account for LP token decimals
+        uint8 lpDecimals = IERC20Metadata(lpToken).decimals();
+        uint256 normalizedAmount = _normalizeToDecimals(amount, lpDecimals, 18);
+        uint256 valueAdded = (normalizedAmount * lpPrice) / 1e18;
         
         // For Senior: mint 1:1 (snrUSD is 1:1 with USD value)
         uint256 sharesToMint = valueAdded;
         
-        // Mint shares to provider
-        _mint(seedProvider, sharesToMint);
+        // Mint shares to caller (seeder)
+        _mint(msg.sender, sharesToMint);
         
         // Update vault value
         _vaultValue += valueAdded;
         _lastUpdateTime = block.timestamp;
         
-        emit VaultSeeded(lpToken, seedProvider, amount, lpPrice, valueAdded, sharesToMint);
+        emit VaultSeeded(lpToken, msg.sender, amount, lpPrice, valueAdded, sharesToMint);
     }
     
     // ============================================
@@ -668,11 +665,9 @@ abstract contract UnifiedSeniorVault is ISeniorVault, IERC20, AdminControlled, P
         if (lpToken == address(0)) revert AdminControlled.ZeroAddress();
         if (amount == 0) revert InvalidAmount();
         if (address(kodiakHook) == address(0)) revert KodiakHookNotSet();
+        if (lpToken != address(kodiakHook.island())) revert InvalidLPToken();
         
-        // Transfer LP from user to hook
-        IERC20(lpToken).safeTransferFrom(msg.sender, address(kodiakHook), amount);
-        
-        // Create pending deposit
+        // Create pending deposit (Effects - state updates BEFORE external call)
         depositId = _nextDepositId++;
         uint256 expiresAt = block.timestamp + DEPOSIT_EXPIRY_TIME;
         
@@ -688,6 +683,9 @@ abstract contract UnifiedSeniorVault is ISeniorVault, IERC20, AdminControlled, P
         _userDepositIds[msg.sender].push(depositId);
         
         emit PendingLPDepositCreated(depositId, msg.sender, lpToken, amount, expiresAt);
+        
+        // Transfer LP from user to hook (Interaction - external call LAST per CEI pattern)
+        IERC20(lpToken).safeTransferFrom(msg.sender, address(kodiakHook), amount);
     }
     
     /**
@@ -705,13 +703,16 @@ abstract contract UnifiedSeniorVault is ISeniorVault, IERC20, AdminControlled, P
         if (lpPrice == 0) revert InvalidLPPrice();
         
         // Calculate value and shares (Senior: 1:1 with USD)
-        uint256 valueAdded = (pendingDeposit.amount * lpPrice) / 1e18;
-        uint256 sharesToMint = valueAdded; // Senior mints 1:1
+        // Q5 FIX: Account for LP token decimals
+        uint8 lpDecimals = IERC20Metadata(pendingDeposit.lpToken).decimals();
+        uint256 normalizedAmount = _normalizeToDecimals(pendingDeposit.amount, lpDecimals, 18);
+        uint256 valueAdded = (normalizedAmount * lpPrice) / 1e18;
         
-        // Mint shares to depositor
-        _mint(pendingDeposit.depositor, sharesToMint);
+        // Use ERC4626 standard preview (calculates shares based on current state)
+        uint256 sharesToMint = previewDeposit(valueAdded);
+        if (sharesToMint == 0) revert InvalidAmount(); // Safety: prevent 0-share minting
         
-        // Update vault value
+        // Update vault value (Effects - state updates BEFORE external call)
         _vaultValue += valueAdded;
         _lastUpdateTime = block.timestamp;
         
@@ -719,6 +720,9 @@ abstract contract UnifiedSeniorVault is ISeniorVault, IERC20, AdminControlled, P
         pendingDeposit.status = DepositStatus.APPROVED;
         
         emit PendingLPDepositApproved(depositId, pendingDeposit.depositor, lpPrice, sharesToMint);
+        
+        // Mint shares to depositor (Interaction - external call LAST, can trigger ERC20 hooks)
+        _mint(pendingDeposit.depositor, sharesToMint);
     }
     
     /**
@@ -733,13 +737,13 @@ abstract contract UnifiedSeniorVault is ISeniorVault, IERC20, AdminControlled, P
         if (pendingDeposit.depositor == address(0)) revert DepositNotFound();
         if (pendingDeposit.status != DepositStatus.PENDING) revert DepositNotPending();
         
-        // Transfer LP back from hook to depositor
-        kodiakHook.transferIslandLP(pendingDeposit.depositor, pendingDeposit.amount);
-        
-        // Update status
+        // Update status (Effects - state update BEFORE external call)
         pendingDeposit.status = DepositStatus.REJECTED;
         
         emit PendingLPDepositRejected(depositId, pendingDeposit.depositor, reason);
+        
+        // Transfer LP back from hook to depositor (Interaction - external call LAST per CEI pattern)
+        kodiakHook.transferIslandLP(pendingDeposit.depositor, pendingDeposit.amount);
     }
     
     /**
@@ -754,13 +758,13 @@ abstract contract UnifiedSeniorVault is ISeniorVault, IERC20, AdminControlled, P
         if (pendingDeposit.depositor != msg.sender) revert NotDepositor();
         if (pendingDeposit.status != DepositStatus.PENDING) revert DepositNotPending();
         
-        // Transfer LP back from hook to depositor
-        kodiakHook.transferIslandLP(pendingDeposit.depositor, pendingDeposit.amount);
-        
-        // Update status
+        // Update status (Effects - state update BEFORE external call)
         pendingDeposit.status = DepositStatus.CANCELLED;
         
         emit PendingLPDepositCancelled(depositId, pendingDeposit.depositor);
+        
+        // Transfer LP back from hook to depositor (Interaction - external call LAST per CEI pattern)
+        kodiakHook.transferIslandLP(pendingDeposit.depositor, pendingDeposit.amount);
     }
     
     /**
@@ -775,13 +779,13 @@ abstract contract UnifiedSeniorVault is ISeniorVault, IERC20, AdminControlled, P
         if (pendingDeposit.status != DepositStatus.PENDING) revert DepositNotPending();
         if (block.timestamp <= pendingDeposit.expiresAt) revert DepositNotExpired();
         
-        // Transfer LP back from hook to original depositor
-        kodiakHook.transferIslandLP(pendingDeposit.depositor, pendingDeposit.amount);
-        
-        // Update status
+        // Update status (Effects - state update BEFORE external call)
         pendingDeposit.status = DepositStatus.EXPIRED;
         
         emit PendingLPDepositExpired(depositId, pendingDeposit.depositor);
+        
+        // Transfer LP back from hook to original depositor (Interaction - external call LAST per CEI pattern)
+        kodiakHook.transferIslandLP(pendingDeposit.depositor, pendingDeposit.amount);
     }
     
     /**
@@ -976,7 +980,8 @@ abstract contract UnifiedSeniorVault is ISeniorVault, IERC20, AdminControlled, P
     function _burn(address from, uint256 amount) internal virtual {
         if (from == address(0)) revert InvalidRecipient();
         
-        uint256 sharesToBurn = MathLib.calculateSharesFromBalance(amount, _rebaseIndex);
+        // Round UP when burning (favors protocol, prevents dust accumulation)
+        uint256 sharesToBurn = MathLib.calculateSharesFromBalanceCeil(amount, _rebaseIndex);
         
         if (_shares[from] < sharesToBurn) revert InvalidAmount(); // Use IVault error
         
@@ -1175,17 +1180,17 @@ abstract contract UnifiedSeniorVault is ISeniorVault, IERC20, AdminControlled, P
         // Burn snrUSD
         _burn(owner, amount);
         
+        // Track capital outflow: decrease vault value by amount after early penalty (BEFORE external calls - CEI pattern)
+        _vaultValue -= amountAfterEarlyPenalty;
+        
         // Transfer net amount to receiver (after both early penalty and withdrawal fee)
-        _stablecoin.transfer(receiver, netAssets);
+        _stablecoin.safeTransfer(receiver, netAssets);
         
         // Transfer withdrawal fee to treasury
         if (_treasury != address(0) && withdrawalFee > 0) {
-            _stablecoin.transfer(_treasury, withdrawalFee);
+            _stablecoin.safeTransfer(_treasury, withdrawalFee);
             emit WithdrawalFeeCharged(owner, withdrawalFee, netAssets);
         }
-        
-        // Track capital outflow: decrease vault value by amount after early penalty
-        _vaultValue -= amountAfterEarlyPenalty;
         
         if (earlyPenalty > 0) {
             emit WithdrawalPenaltyCharged(owner, earlyPenalty);
@@ -1340,8 +1345,9 @@ abstract contract UnifiedSeniorVault is ISeniorVault, IERC20, AdminControlled, P
         uint256 currentSupply = totalSupply();
         if (currentSupply == 0) revert InvalidAmount();
         
-        // Step 1: Calculate management fee tokens to mint (1% annual / 12 months)
-        uint256 mgmtFeeTokens = FeeLib.calculateManagementFeeTokens(_vaultValue);
+        // Step 1: Calculate management fee tokens to mint (Q3 FIX: time-based)
+        uint256 timeElapsed = block.timestamp - _lastRebaseTime;
+        uint256 mgmtFeeTokens = FeeLib.calculateManagementFeeTokens(_vaultValue, timeElapsed);
         
         // Step 2 & 3: Dynamic APY selection (using full vault value, not reduced)
         RebaseLib.APYSelection memory selection = RebaseLib.selectDynamicAPY(
@@ -1350,13 +1356,16 @@ abstract contract UnifiedSeniorVault is ISeniorVault, IERC20, AdminControlled, P
         );
         
         // Step 4: Determine zone and execute spillover/backstop (with LP price)
-        uint256 finalBackingRatio = MathLib.calculateBackingRatio(_vaultValue, selection.newSupply);
+        // VN002 FIX: Include management fee tokens in newSupply for accurate backing ratio
+        // selection.newSupply only includes performance fee, but we also mint mgmtFeeTokens
+        uint256 actualNewSupply = selection.newSupply + mgmtFeeTokens;
+        uint256 finalBackingRatio = MathLib.calculateBackingRatio(_vaultValue, actualNewSupply);
         SpilloverLib.Zone zone = SpilloverLib.determineZone(finalBackingRatio);
         
         if (zone == SpilloverLib.Zone.SPILLOVER) {
-            _executeProfitSpillover(_vaultValue, selection.newSupply, lpPrice);
+            _executeProfitSpillover(_vaultValue, actualNewSupply, lpPrice);
         } else if (zone == SpilloverLib.Zone.BACKSTOP || selection.backstopNeeded) {
-            _executeBackstop(_vaultValue, selection.newSupply, lpPrice);
+            _executeBackstop(_vaultValue, actualNewSupply, lpPrice);
         }
         
         // Step 5: Update rebase index
@@ -1373,7 +1382,7 @@ abstract contract UnifiedSeniorVault is ISeniorVault, IERC20, AdminControlled, P
         _lastRebaseTime = block.timestamp;
         
         emit Rebase(_epoch, oldIndex, _rebaseIndex, totalSupply());
-        emit RebaseExecuted(_epoch, selection.apyTier, oldIndex, _rebaseIndex, selection.newSupply, zone);
+        emit RebaseExecuted(_epoch, selection.apyTier, oldIndex, _rebaseIndex, actualNewSupply, zone);
         emit FeesCollected(mgmtFeeTokens, selection.feeTokens);  // Now shows both fees
     }
     
@@ -1441,7 +1450,7 @@ abstract contract UnifiedSeniorVault is ISeniorVault, IERC20, AdminControlled, P
         if (!paused()) revert("Must be paused");
         if (amount == 0) revert InvalidAmount();
         
-        _stablecoin.transfer(_treasury, amount);
+        _stablecoin.safeTransfer(_treasury, amount);
         emit EmergencyWithdraw(_treasury, amount);
     }
     
@@ -1540,5 +1549,29 @@ abstract contract UnifiedSeniorVault is ISeniorVault, IERC20, AdminControlled, P
      * @param lpPrice Current LP token price in USD (18 decimals)
      */
     function _pullFromJunior(uint256 amountUSD, uint256 lpPrice) internal virtual;
+    
+    /**
+     * @notice Normalize token amount to target decimals (Q5 FIX)
+     * @dev Handles tokens with different decimals (WBTC=8, USDC=6, LP=18, etc.)
+     * @param amount Amount in source decimals
+     * @param fromDecimals Source token decimals
+     * @param toDecimals Target decimals
+     * @return Normalized amount in target decimals
+     */
+    function _normalizeToDecimals(
+        uint256 amount,
+        uint8 fromDecimals,
+        uint8 toDecimals
+    ) internal pure returns (uint256) {
+        if (fromDecimals == toDecimals) {
+            return amount;
+        } else if (fromDecimals < toDecimals) {
+            // Scale up: amount * 10^(toDecimals - fromDecimals)
+            return amount * (10 ** (toDecimals - fromDecimals));
+        } else {
+            // Scale down: amount / 10^(fromDecimals - toDecimals)
+            return amount / (10 ** (fromDecimals - toDecimals));
+        }
+    }
 }
 

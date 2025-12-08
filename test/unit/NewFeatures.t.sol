@@ -15,10 +15,11 @@ import {MathLib} from "../../src/libraries/MathLib.sol";
  * @notice Tests for newly added features:
  *  - seedVault() / seedReserveWithToken()
  *  - investInKodiak()
- *  - setKodiakRouter() / kodiakRouter()
  *  - mintManagementFee()
  *  - setMgmtFeeSchedule() and related getters
  *  - setTreasury() / treasury()
+ * 
+ * Note: setKodiakRouter() tests removed (N10 - dead code cleanup)
  */
 contract NewFeaturesTest is Test {
     UnifiedConcreteSeniorVault public seniorVault;
@@ -125,9 +126,9 @@ contract NewFeaturesTest is Test {
         reserveVault.setKodiakHook(address(reserveHook));
         vm.stopPrank();
         
-        // Mint tokens
-        lpToken.mint(seedProvider, 1000e18);
-        wbtc.mint(seedProvider, 10e8); // 10 WBTC
+        // Mint tokens (N2 FIX: mint to seeder who will provide and receive shares)
+        lpToken.mint(seeder, 1000e18);
+        wbtc.mint(seeder, 10e8); // 10 WBTC
         stablecoin.mint(address(seniorVault), INITIAL_VALUE);
         stablecoin.mint(address(juniorVault), INITIAL_VALUE);
         stablecoin.mint(address(reserveVault), INITIAL_VALUE);
@@ -177,50 +178,53 @@ contract NewFeaturesTest is Test {
     // ============================================
     
     function testSeedVault_Senior() public {
-        // Setup: approve LP tokens
-        vm.prank(seedProvider);
+        // Setup: approve LP tokens (N2 FIX: seeder provides tokens and gets shares)
+        vm.prank(seeder);
         lpToken.approve(address(seniorVault), 100e18);
         
-        uint256 seniorBalanceBefore = seniorVault.balanceOf(seedProvider);
+        uint256 seniorBalanceBefore = seniorVault.balanceOf(seeder);
         uint256 vaultValueBefore = seniorVault.vaultValue();
         
-        // Seed vault
+        // Seed vault (N2 FIX: shares now go to msg.sender/seeder, not seedProvider)
         vm.prank(seeder);
-        seniorVault.seedVault(address(lpToken), 100e18, seedProvider, LP_PRICE);
+        seniorVault.seedVault(address(lpToken), 100e18, LP_PRICE);
         
         // Assertions
         uint256 expectedValue = 100e18; // 100 LP * 1 price = 100 USD
-        assertEq(seniorVault.balanceOf(seedProvider) - seniorBalanceBefore, expectedValue, "Should mint 100 snrUSD");
+        assertEq(seniorVault.balanceOf(seeder) - seniorBalanceBefore, expectedValue, "Should mint 100 snrUSD");
         assertEq(seniorVault.vaultValue() - vaultValueBefore, expectedValue, "Vault value should increase");
         assertEq(lpToken.balanceOf(address(seniorHook)), 100e18, "LP should be in hook");
     }
     
     function testSeedVault_Junior() public {
-        // Setup
-        vm.prank(seedProvider);
+        // Setup (N2 FIX: seeder provides tokens and gets shares)
+        vm.prank(seeder);
         lpToken.approve(address(juniorVault), 50e18);
         
-        uint256 juniorBalanceBefore = juniorVault.balanceOf(seedProvider);
+        uint256 juniorBalanceBefore = juniorVault.balanceOf(seeder);
         uint256 vaultValueBefore = juniorVault.vaultValue();
         
         // Seed vault
         vm.prank(seeder);
-        juniorVault.seedVault(address(lpToken), 50e18, seedProvider, LP_PRICE);
+        juniorVault.seedVault(address(lpToken), 50e18, LP_PRICE);
         
         // Assertions
         uint256 expectedValue = 50e18;
-        assertEq(juniorVault.balanceOf(seedProvider) - juniorBalanceBefore, expectedValue, "Should mint shares");
+        assertEq(juniorVault.balanceOf(seeder) - juniorBalanceBefore, expectedValue, "Should mint shares");
         assertEq(juniorVault.vaultValue() - vaultValueBefore, expectedValue, "Vault value should increase");
         assertEq(lpToken.balanceOf(address(juniorHook)), 50e18, "LP should be in hook");
     }
     
     function testCannotSeedVault_NotAdmin() public {
-        vm.prank(seedProvider);
+        address nonSeeder = makeAddr("nonSeeder");
+        lpToken.mint(nonSeeder, 100e18);
+        
+        vm.prank(nonSeeder);
         lpToken.approve(address(juniorVault), 100e18);
         
-        vm.prank(seedProvider);
+        vm.prank(nonSeeder);
         vm.expectRevert();
-        juniorVault.seedVault(address(lpToken), 100e18, seedProvider, LP_PRICE);
+        juniorVault.seedVault(address(lpToken), 100e18, LP_PRICE);
     }
     
     // ============================================
@@ -228,11 +232,11 @@ contract NewFeaturesTest is Test {
     // ============================================
     
     function testSeedReserveWithToken() public {
-        // Setup: approve WBTC
-        vm.prank(seedProvider);
+        // Setup: approve WBTC (N2 FIX: seeder provides tokens and gets shares)
+        vm.prank(seeder);
         wbtc.approve(address(reserveVault), 1e8); // 1 WBTC
         
-        uint256 reserveBalanceBefore = reserveVault.balanceOf(seedProvider);
+        uint256 reserveBalanceBefore = reserveVault.balanceOf(seeder);
         uint256 vaultValueBefore = reserveVault.vaultValue();
         
         // Seed reserve with WBTC
@@ -240,7 +244,7 @@ contract NewFeaturesTest is Test {
         // Price is in 18 decimals: 50000e18 USD per WBTC
         // Value = (1e8 * 50000e18) / 1e18 = 1e8 * 50000 = 5000000e8 = 50000e18
         vm.prank(seeder);
-        reserveVault.seedReserveWithToken(address(wbtc), 1e8, seedProvider, WBTC_PRICE);
+        reserveVault.seedReserveWithToken(address(wbtc), 1e8, WBTC_PRICE);
         
         // Assertions
         // expectedValue = (amount * tokenPrice) / 1e18
@@ -248,51 +252,41 @@ contract NewFeaturesTest is Test {
         //              = 50000e8 = 5000000000 (in 8 decimal format)
         // But we want it in 18 decimals: 50000e18
         uint256 expectedValue = (uint256(1e8) * WBTC_PRICE) / 1e18;
-        assertEq(reserveVault.balanceOf(seedProvider) - reserveBalanceBefore, expectedValue, "Should mint shares");
+        assertEq(reserveVault.balanceOf(seeder) - reserveBalanceBefore, expectedValue, "Should mint shares");
         assertEq(reserveVault.vaultValue() - vaultValueBefore, expectedValue, "Vault value should increase");
         assertEq(wbtc.balanceOf(address(reserveVault)), 1e8, "WBTC should stay in vault");
         assertEq(wbtc.balanceOf(address(reserveHook)), 0, "WBTC should NOT be in hook yet");
     }
     
     function testCannotSeedReserveWithToken_NotAdmin() public {
-        vm.prank(seedProvider);
+        address nonSeeder = makeAddr("nonSeeder");
+        wbtc.mint(nonSeeder, 1e8);
+        
+        vm.prank(nonSeeder);
         wbtc.approve(address(reserveVault), 1e8);
         
-        vm.prank(seedProvider);
+        vm.prank(nonSeeder);
         vm.expectRevert();
-        reserveVault.seedReserveWithToken(address(wbtc), 1e8, seedProvider, WBTC_PRICE);
+        reserveVault.seedReserveWithToken(address(wbtc), 1e8, WBTC_PRICE);
     }
     
     // ============================================
-    // Kodiak Router Tests
+    // Kodiak Router Tests (N10: REMOVED - Dead Code)
     // ============================================
-    
-    function testSetKodiakRouter() public {
-        vm.prank(admin);
-        reserveVault.setKodiakRouter(kodiakRouter);
-        
-        assertEq(reserveVault.kodiakRouter(), kodiakRouter);
-    }
-    
-    function testCannotSetKodiakRouter_NotAdmin() public {
-        address hacker = makeAddr("hacker");
-        
-        vm.prank(hacker);
-        vm.expectRevert();
-        reserveVault.setKodiakRouter(kodiakRouter);
-    }
+    // setKodiakRouter() was removed from ReserveVault as unused dead code
+    // ReserveVault uses kodiakHook, which has its own router reference
     
     // ============================================
     // Invest in Kodiak Tests
     // ============================================
     
     function testInvestInKodiak() public {
-        // First seed reserve with WBTC
-        vm.prank(seedProvider);
+        // First seed reserve with WBTC (N2 FIX: seeder provides and receives)
+        vm.prank(seeder);
         wbtc.approve(address(reserveVault), 1e8);
         
         vm.prank(seeder);
-        reserveVault.seedReserveWithToken(address(wbtc), 1e8, seedProvider, WBTC_PRICE);
+        reserveVault.seedReserveWithToken(address(wbtc), 1e8, WBTC_PRICE);
         
         // Verify WBTC is in reserve vault
         assertEq(wbtc.balanceOf(address(reserveVault)), 1e8);
@@ -365,13 +359,12 @@ contract NewFeaturesTest is Test {
         vm.prank(admin);
         juniorVault.setTreasury(treasury);
         
-        // Bootstrap vault with seedVault - this mints initial shares
-        lpToken.mint(seedProvider, 100e18);
-        vm.prank(seedProvider);
+        // Bootstrap vault with seedVault - this mints initial shares (N2 FIX)
+        vm.prank(seeder);
         lpToken.approve(address(juniorVault), 100e18);
         
         vm.prank(seeder);
-        juniorVault.seedVault(address(lpToken), 100e18, seedProvider, LP_PRICE);
+        juniorVault.seedVault(address(lpToken), 100e18, LP_PRICE);
         
         uint256 supplyBefore = juniorVault.totalSupply();
         
@@ -400,13 +393,12 @@ contract NewFeaturesTest is Test {
         vm.prank(admin);
         reserveVault.setTreasury(treasury);
         
-        // Bootstrap vault with seedVault
-        lpToken.mint(seedProvider, 100e18);
-        vm.prank(seedProvider);
+        // Bootstrap vault with seedVault (N2 FIX)
+        vm.prank(seeder);
         lpToken.approve(address(reserveVault), 100e18);
         
         vm.prank(seeder);
-        reserveVault.seedVault(address(lpToken), 100e18, seedProvider, LP_PRICE);
+        reserveVault.seedVault(address(lpToken), 100e18, LP_PRICE);
         
         uint256 supplyBefore = reserveVault.totalSupply();
         

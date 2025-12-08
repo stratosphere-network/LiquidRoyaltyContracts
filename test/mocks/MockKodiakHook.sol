@@ -3,6 +3,7 @@ pragma solidity ^0.8.20;
 
 import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import {IKodiakVaultHook} from "../../src/integrations/IKodiakVaultHook.sol";
+import {IKodiakIsland} from "../../src/integrations/IKodiakIsland.sol";
 import {MockERC20} from "../../src/mocks/MockERC20.sol";
 
 /**
@@ -11,12 +12,12 @@ import {MockERC20} from "../../src/mocks/MockERC20.sol";
  */
 contract MockKodiakHook is IKodiakVaultHook {
     address public vault;
-    address public island;
+    IKodiakIsland public island;
     IERC20 public lpToken;
     
     constructor(address vault_, address island_, address lpToken_) {
         vault = vault_;
-        island = island_;
+        island = IKodiakIsland(island_);
         lpToken = IERC20(lpToken_);
     }
     

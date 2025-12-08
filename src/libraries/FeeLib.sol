@@ -80,19 +80,24 @@ library FeeLib {
     }
     
     /**
-     * @notice Calculate management fee tokens to mint
-     * @dev Reference: Section - Rebase Algorithm (Step 2) - UPDATED
-     * Formula: mgmtFeeTokens = vaultValue × (1% / 12)
-     * Management fee is now collected by minting snrUSD, not reducing vault value
+     * @notice Calculate management fee tokens to mint based on time elapsed
+     * @dev Reference: Section - Rebase Algorithm (Step 2) - UPDATED (Q3 FIX)
+     * Formula: mgmtFeeTokens = vaultValue × 1% × (timeElapsed / 365 days)
+     * Q3 FIX: Now calculates based on actual time elapsed, not fixed monthly assumption
+     * This prevents over-charging fees when rebases happen more frequently than monthly
      * @param vaultValue Current vault value (V_s)
+     * @param timeElapsed Time since last rebase in seconds
      * @return managementFeeTokens snrUSD tokens to mint for management fee
      */
     function calculateManagementFeeTokens(
-        uint256 vaultValue
+        uint256 vaultValue,
+        uint256 timeElapsed
     ) internal pure returns (uint256 managementFeeTokens) {
-        // F_mgmt_tokens = vaultValue × (0.01 / 12)
-        // Since snrUSD is 1:1 with vault value, this is the token amount to mint
-        return calculateManagementFee(vaultValue);
+        // Q3 FIX: Calculate based on actual time elapsed
+        // Fee = vaultValue × 1% × (timeElapsed / 365 days)
+        // = (vaultValue × MGMT_FEE_ANNUAL × timeElapsed) / (365 days × PRECISION)
+        uint256 secondsPerYear = 365 days;
+        return (vaultValue * MathLib.MGMT_FEE_ANNUAL * timeElapsed) / (secondsPerYear * MathLib.PRECISION);
     }
     
     /**
@@ -126,9 +131,11 @@ library FeeLib {
     }
     
     /**
-     * @notice Calculate rebase index multiplier including performance fee
+     * @notice Calculate rebase index multiplier (VN001 FIX: exclude performance fee)
      * @dev Reference: Section - Rebase Algorithm (Step 6)
-     * Formula: I_new = I_old × (1 + r_selected × (1 + f_perf))
+     * Formula: I_new = I_old × (1 + r_selected)
+     * VN001 FIX: Performance fee is handled via token minting, not index growth
+     * Including perf fee in index would double-count it (users get extra + treasury gets minted)
      * @param oldIndex Previous rebase index (I_old)
      * @param monthlyRate Selected monthly rate (r_selected)
      * @return newIndex New rebase index (I_new)
@@ -137,10 +144,10 @@ library FeeLib {
         uint256 oldIndex,
         uint256 monthlyRate
     ) internal pure returns (uint256 newIndex) {
-        // I_new = I_old × (1 + r_selected × 1.02)
-        // Multiplier = 1 + (monthlyRate × 1.02)
-        uint256 multiplier = MathLib.PRECISION + 
-            ((monthlyRate * (MathLib.PRECISION + MathLib.PERF_FEE)) / MathLib.PRECISION);
+        // VN001 FIX: I_new = I_old × (1 + r_selected)
+        // NO performance fee adjustment - that's handled by minting tokens to treasury
+        // Multiplier = 1 + monthlyRate (just the rate, not × 1.02)
+        uint256 multiplier = MathLib.PRECISION + monthlyRate;
         
         return (oldIndex * multiplier) / MathLib.PRECISION;
     }
