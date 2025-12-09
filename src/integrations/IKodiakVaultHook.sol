@@ -45,10 +45,12 @@ interface IKodiakVaultHook {
 
     /**
      * @notice Smart LP liquidation using statistical estimation and safety buffer
+     * @dev VN003 FIX: Added slippage protection via minStablecoinOut parameter
      * @dev Called by vault during withdrawal. Uses configurable buffer to handle slippage efficiently.
      * @param unstake_usd USD value user wants to withdraw
+     * @param minStablecoinOut Minimum stablecoin to receive from LP burn (slippage protection)
      */
-    function liquidateLPForAmount(uint256 unstake_usd) external;
+    function liquidateLPForAmount(uint256 unstake_usd, uint256 minStablecoinOut) external;
 
     /**
      * @notice Transfer Island LP tokens from the hook to a recipient vault (for yield transfers).

@@ -340,7 +340,7 @@ contract KodiakVaultHook is AccessControl, IKodiakVaultHook {
      * 4. Apply safety buffer: lpToBurn = lpNeeded * safetyMultiplier (e.g., 2.5x)
      * 5. Burn LP, send ONLY stablecoin to vault, keep WBTC in hook
      */
-    function liquidateLPForAmount(uint256 unstake_usd) public onlyVault {
+    function liquidateLPForAmount(uint256 unstake_usd, uint256 minStablecoinOut) public onlyVault {
         if (unstake_usd == 0) return;
         if (address(island) == address(0)) return;
         
@@ -349,17 +349,17 @@ contract KodiakVaultHook is AccessControl, IKodiakVaultHook {
         if (lpBalance == 0) return; // No LP to liquidate
         
         // Query Island pool directly for actual balances
-        (, uint256 honeyInPool) = island.getUnderlyingBalances();
+        (, uint256 stablecoinInPool) = island.getUnderlyingBalances();
         uint256 totalLPSupply = island.totalSupply();
         
-        if (totalLPSupply == 0 || honeyInPool == 0) return;
+        if (totalLPSupply == 0 || stablecoinInPool == 0) return;
         
-        // Calculate HONEY per LP (this is what we actually get back as stablecoin)
-        // honeyPerLP is in 1e18 precision
-        uint256 honeyPerLP = (honeyInPool * 1e18) / totalLPSupply;
+        // Calculate stablecoin per LP (this is what we actually get back from burn)
+        // stablecoinPerLP is in 1e18 precision
+        uint256 stablecoinPerLP = (stablecoinInPool * 1e18) / totalLPSupply;
         
-        // Calculate LP needed to get unstake_usd worth of HONEY
-        uint256 lpNeeded = (unstake_usd * 1e18) / honeyPerLP;
+        // Calculate LP needed to get unstake_usd worth of stablecoin
+        uint256 lpNeeded = (unstake_usd * 1e18) / stablecoinPerLP;
         
         // Apply safety buffer: safetyMultiplier is in basis points / 100 (e.g., 250 = 2.5x)
         uint256 unstake_send_to_hook = (lpNeeded * safetyMultiplier) / 100;
@@ -373,14 +373,16 @@ contract KodiakVaultHook is AccessControl, IKodiakVaultHook {
         
         // Burn LP tokens
         uint256 wbtcBefore = island.token0().balanceOf(address(this));
-        uint256 honeyBefore = island.token1().balanceOf(address(this));
+        uint256 stablecoinBefore = island.token1().balanceOf(address(this));
         
         try island.burn(unstake_send_to_hook, address(this)) returns (uint256, uint256) {
             // Successfully burned LP
         } catch {
-            // If burn fails, try via router
-            try router.removeLiquidity(island, unstake_send_to_hook, 0, 0, address(this)) returns (uint256, uint256, uint128) {
-                // Successfully removed liquidity
+            // VN003 FIX: If burn fails, try via router WITH slippage protection
+            // minToken0 = 0 (WBTC stays in hook anyway)
+            // minToken1 = minStablecoinOut (critical slippage protection!)
+            try router.removeLiquidity(island, unstake_send_to_hook, 0, minStablecoinOut, address(this)) returns (uint256, uint256, uint128) {
+                // Successfully removed liquidity with slippage protection
             } catch {
                 // If both fail, return without reverting
                 return;
@@ -389,25 +391,32 @@ contract KodiakVaultHook is AccessControl, IKodiakVaultHook {
         
         // Calculate what we received
         uint256 wbtcAfter = island.token0().balanceOf(address(this));
-        uint256 honeyAfter = island.token1().balanceOf(address(this));
+        uint256 stablecoinAfter = island.token1().balanceOf(address(this));
         
         uint256 wbtcReceived = wbtcAfter - wbtcBefore;
-        uint256 honeyReceived = honeyAfter - honeyBefore;
+        uint256 stablecoinReceived = stablecoinAfter - stablecoinBefore;
         
-        // Send ONLY stablecoin (HONEY) to vault
-        if (honeyReceived > 0) {
-            island.token1().safeTransfer(vault, honeyReceived);
+        // VN003 FIX: Validate we received enough stablecoin (protects island.burn() path too)
+        if (stablecoinReceived < minStablecoinOut) {
+            revert("Slippage too high");
+        }
+        
+        // Send ONLY stablecoin to vault
+        if (stablecoinReceived > 0) {
+            island.token1().safeTransfer(vault, stablecoinReceived);
         }
         
         // WBTC stays in hook for admin to batch swap later
         // Emit event for monitoring
-        emit LPLiquidated(unstake_usd, unstake_send_to_hook, honeyReceived, wbtcReceived);
+        emit LPLiquidated(unstake_usd, unstake_send_to_hook, stablecoinReceived, wbtcReceived);
     }
 
     function ensureFundsAvailable(uint256 amount) external override onlyVault {
         // Deprecated: Use liquidateLPForAmount() instead
         // Kept for backward compatibility
-        liquidateLPForAmount(amount);
+        // VN003 FIX: Pass 95% of expected amount as minimum (5% slippage tolerance)
+        uint256 minStablecoinOut = (amount * 95) / 100;
+        liquidateLPForAmount(amount, minStablecoinOut);
     }
 
     /**
