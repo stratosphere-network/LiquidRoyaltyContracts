@@ -283,21 +283,21 @@ abstract contract JuniorVault is BaseVault, IJuniorVault {
         uint256 normalizedAmount = _normalizeToDecimals(deposit.amount, lpDecimals, 18);
         uint256 valueAdded = (normalizedAmount * lpPrice) / 1e18;
         
-        // Use ERC4626 standard preview (calculates shares based on current state)
+        // N1-2 FIX: Use ERC4626 standard preview (calculates shares based on current state)
         uint256 sharesToMint = previewDeposit(valueAdded);
         if (sharesToMint == 0) revert InvalidAmount(); // Safety: prevent 0-share minting
         
-        // Update vault value (Effects - state updates BEFORE external call)
-        _vaultValue += valueAdded;
-        _lastUpdateTime = block.timestamp;
-        
-        // Update status
+        // Update status (Effects - state updates BEFORE external call)
         deposit.status = DepositStatus.APPROVED;
         
         emit PendingLPDepositApproved(depositId, deposit.depositor, lpPrice, sharesToMint);
         
-        // Mint shares to depositor (Interaction - external call LAST, can trigger ERC20 hooks)
+        // N1-2 FIX: Mint shares BEFORE updating vault value (matches standard ERC4626 flow)
         _mint(deposit.depositor, sharesToMint);
+        
+        // Update vault value AFTER minting (consistent with deposit() override pattern)
+        _vaultValue += valueAdded;
+        _lastUpdateTime = block.timestamp;
     }
     
     /**
