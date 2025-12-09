@@ -8,7 +8,9 @@ import {ConcreteReserveVault} from "../src/concrete/ConcreteReserveVault.sol";
 
 /**
  * @title DeployAndUpgradeAll
- * @notice Deploy new implementations and upgrade all three vaults
+ * @notice Deploy new implementations only (does NOT upgrade proxies)
+ * @dev This script deploys new implementation contracts and verifies current proxy state
+ *      Use UpgradeAll.s.sol separately to upgrade proxies to the new implementations
  * 
  * Usage:
  *   forge script script/DeployAndUpgradeAll.s.sol:DeployAndUpgradeAll \
@@ -27,81 +29,65 @@ contract DeployAndUpgradeAll is Script {
         address deployer = vm.addr(deployerPrivateKey);
         
         console2.log("=================================================");
-        console2.log("DEPLOY & UPGRADE ALL VAULTS");
+        console2.log("DEPLOY NEW IMPLEMENTATIONS (NO UPGRADE)");
         console2.log("=================================================");
         console2.log("Deployer:", deployer);
         console2.log("");
         
         vm.startBroadcast(deployerPrivateKey);
         
-        // Step 1: Deploy new implementations
-        console2.log("Step 1: Deploying new implementations...");
+        // Deploy new implementations
+        console2.log("Deploying new implementations...");
         console2.log("");
         
         UnifiedConcreteSeniorVault seniorImpl = new UnifiedConcreteSeniorVault();
-        console2.log("[OK] Senior:  ", address(seniorImpl));
+        console2.log("[OK] Senior Implementation:  ", address(seniorImpl));
         
         ConcreteJuniorVault juniorImpl = new ConcreteJuniorVault();
-        console2.log("[OK] Junior:  ", address(juniorImpl));
+        console2.log("[OK] Junior Implementation:  ", address(juniorImpl));
         
         ConcreteReserveVault reserveImpl = new ConcreteReserveVault();
-        console2.log("[OK] Reserve: ", address(reserveImpl));
-        console2.log("");
-        
-        // Step 2: Upgrade all proxies
-        console2.log("Step 2: Upgrading proxies...");
-        console2.log("");
-        
-        bytes memory emptyData = "";
-        
-        UnifiedConcreteSeniorVault(payable(SENIOR_PROXY)).upgradeToAndCall(address(seniorImpl), emptyData);
-        console2.log("[OK] Senior proxy upgraded");
-        
-        ConcreteJuniorVault(JUNIOR_PROXY).upgradeToAndCall(address(juniorImpl), emptyData);
-        console2.log("[OK] Junior proxy upgraded");
-        
-        ConcreteReserveVault(RESERVE_PROXY).upgradeToAndCall(address(reserveImpl), emptyData);
-        console2.log("[OK] Reserve proxy upgraded");
+        console2.log("[OK] Reserve Implementation: ", address(reserveImpl));
         console2.log("");
         
         vm.stopBroadcast();
         
-        // Verification
+        // Verification - Check current proxy state (NOT upgraded yet)
         console2.log("=================================================");
-        console2.log("VERIFICATION");
+        console2.log("CURRENT PROXY STATE (NOT UPGRADED YET)");
         console2.log("=================================================");
         
         UnifiedConcreteSeniorVault senior = UnifiedConcreteSeniorVault(payable(SENIOR_PROXY));
         ConcreteJuniorVault junior = ConcreteJuniorVault(JUNIOR_PROXY);
         ConcreteReserveVault reserve = ConcreteReserveVault(RESERVE_PROXY);
         
-        console2.log("Senior:");
-        console2.log("  Total Supply:", senior.totalSupply());
-        console2.log("  Vault Value:", senior.vaultValue());
+        console2.log("Senior Vault:");
+        console2.log("  Proxy Address:  ", SENIOR_PROXY);
+        console2.log("  Total Supply:   ", senior.totalSupply());
+        console2.log("  Vault Value:    ", senior.vaultValue());
         console2.log("");
         
-        console2.log("Junior:");
-        console2.log("  Total Supply:", junior.totalSupply());
-        console2.log("  Vault Value:", junior.vaultValue());
+        console2.log("Junior Vault:");
+        console2.log("  Proxy Address:  ", JUNIOR_PROXY);
+        console2.log("  Total Supply:   ", junior.totalSupply());
+        console2.log("  Vault Value:    ", junior.vaultValue());
         console2.log("");
         
-        console2.log("Reserve:");
-        console2.log("  Total Supply:", reserve.totalSupply());
-        console2.log("  Vault Value:", reserve.vaultValue());
+        console2.log("Reserve Vault:");
+        console2.log("  Proxy Address:  ", RESERVE_PROXY);
+        console2.log("  Total Supply:   ", reserve.totalSupply());
+        console2.log("  Vault Value:    ", reserve.vaultValue());
         console2.log("");
         
         console2.log("=================================================");
-        console2.log("SUCCESS");
+        console2.log("DEPLOYMENT SUCCESS - READY FOR UPGRADE");
         console2.log("=================================================");
-        console2.log("New Implementations:");
+        console2.log("New Implementation Addresses:");
         console2.log("  Senior:  ", address(seniorImpl));
         console2.log("  Junior:  ", address(juniorImpl));
         console2.log("  Reserve: ", address(reserveImpl));
         console2.log("");
-        console2.log("Proxies:");
-        console2.log("  Senior:  ", SENIOR_PROXY);
-        console2.log("  Junior:  ", JUNIOR_PROXY);
-        console2.log("  Reserve: ", RESERVE_PROXY);
+        console2.log("To upgrade proxies, use UpgradeAll.s.sol with these addresses");
         console2.log("=================================================");
     }
 }
