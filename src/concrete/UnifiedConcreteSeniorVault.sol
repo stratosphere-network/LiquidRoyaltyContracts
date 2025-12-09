@@ -3,6 +3,7 @@ pragma solidity ^0.8.20;
 
 import {UnifiedSeniorVault} from "../abstract/UnifiedSeniorVault.sol";
 import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
+import {IERC20Metadata} from "@openzeppelin/contracts/token/ERC20/extensions/IERC20Metadata.sol";
 
 
 /**
@@ -127,9 +128,14 @@ contract UnifiedConcreteSeniorVault is UnifiedSeniorVault {
         if (lpPrice == 0) return;
         if (address(kodiakHook) == address(0)) return;
         
-        // Calculate LP amount from USD amount
-        // LP amount = (amountUSD * 1e18) / lpPrice
-        uint256 lpAmount = (amountUSD * 1e18) / lpPrice;
+        // LP DECIMALS FIX: Get LP token and its decimals
+        address lpToken = address(kodiakHook.island());
+        uint8 lpDecimals = IERC20Metadata(lpToken).decimals();
+        
+        // Calculate LP amount from USD amount (accounting for LP decimals)
+        // lpPrice is in 18 decimals (USD per LP token)
+        // We need to convert to LP token's actual decimals
+        uint256 lpAmount = (amountUSD * (10 ** lpDecimals)) / lpPrice;
         
         // Check Senior Hook's LP token balance
         uint256 lpBalance = kodiakHook.getIslandLPBalance();
@@ -144,8 +150,8 @@ contract UnifiedConcreteSeniorVault is UnifiedSeniorVault {
         // Transfer LP tokens from Senior Hook to Junior Hook
         kodiakHook.transferIslandLP(juniorHook, actualLPAmount);
         
-        // Update Junior vault value (they track USD value internally)
-        uint256 actualUSDAmount = (actualLPAmount * lpPrice) / 1e18;
+        // Update Junior vault value (convert LP amount back to USD, accounting for decimals)
+        uint256 actualUSDAmount = (actualLPAmount * lpPrice) / (10 ** lpDecimals);
         _juniorVault.receiveSpillover(actualUSDAmount);
     }
     
@@ -160,9 +166,14 @@ contract UnifiedConcreteSeniorVault is UnifiedSeniorVault {
         if (lpPrice == 0) return;
         if (address(kodiakHook) == address(0)) return;
         
-        // Calculate LP amount from USD amount
-        // LP amount = (amountUSD * 1e18) / lpPrice
-        uint256 lpAmount = (amountUSD * 1e18) / lpPrice;
+        // LP DECIMALS FIX: Get LP token and its decimals
+        address lpToken = address(kodiakHook.island());
+        uint8 lpDecimals = IERC20Metadata(lpToken).decimals();
+        
+        // Calculate LP amount from USD amount (accounting for LP decimals)
+        // lpPrice is in 18 decimals (USD per LP token)
+        // We need to convert to LP token's actual decimals
+        uint256 lpAmount = (amountUSD * (10 ** lpDecimals)) / lpPrice;
         
         // Check Senior Hook's LP token balance
         uint256 lpBalance = kodiakHook.getIslandLPBalance();
@@ -177,8 +188,8 @@ contract UnifiedConcreteSeniorVault is UnifiedSeniorVault {
         // Transfer LP tokens from Senior Hook to Reserve Hook
         kodiakHook.transferIslandLP(reserveHook, actualLPAmount);
         
-        // Update Reserve vault value (they track USD value internally)
-        uint256 actualUSDAmount = (actualLPAmount * lpPrice) / 1e18;
+        // Update Reserve vault value (convert LP amount back to USD, accounting for decimals)
+        uint256 actualUSDAmount = (actualLPAmount * lpPrice) / (10 ** lpDecimals);
         _reserveVault.receiveSpillover(actualUSDAmount);
     }
     

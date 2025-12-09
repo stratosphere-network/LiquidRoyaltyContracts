@@ -197,8 +197,13 @@ abstract contract JuniorVault is BaseVault, IJuniorVault {
         if (lpPrice == 0) return 0;
         if (address(kodiakHook) == address(0)) revert InsufficientBackstopFunds();
         
-        // Calculate LP amount needed
-        uint256 lpAmountNeeded = (amountUSD * 1e18) / lpPrice;
+        // LP DECIMALS FIX: Get LP token and its decimals
+        address lpToken = address(kodiakHook.island());
+        uint8 lpDecimals = IERC20Metadata(lpToken).decimals();
+        
+        // Calculate LP amount needed (accounting for LP decimals)
+        // lpPrice is in 18 decimals (USD per LP token)
+        uint256 lpAmountNeeded = (amountUSD * (10 ** lpDecimals)) / lpPrice;
         
         // Check Junior Hook's actual LP token balance
         uint256 lpBalance = kodiakHook.getIslandLPBalance();
@@ -208,8 +213,8 @@ abstract contract JuniorVault is BaseVault, IJuniorVault {
         
         if (actualLPAmount == 0) revert InsufficientBackstopFunds();
         
-        // Calculate actual USD amount based on LP tokens available
-        actualAmount = (actualLPAmount * lpPrice) / 1e18;
+        // Calculate actual USD amount based on LP tokens available (accounting for decimals)
+        actualAmount = (actualLPAmount * lpPrice) / (10 ** lpDecimals);
         
         // Decrease vault value
         _vaultValue -= actualAmount;
