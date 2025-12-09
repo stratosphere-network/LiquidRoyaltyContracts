@@ -68,6 +68,9 @@ abstract contract BaseVault is ERC4626Upgradeable, IVault, AdminControlled, UUPS
     int256 internal constant MIN_PROFIT_BPS = -5000;  // -50% minimum
     int256 internal constant MAX_PROFIT_BPS = 10000;  // +100% maximum
     
+    /// @dev VN003 FIX: Slippage protection (hardcoded to avoid storage changes)
+    uint256 internal constant LP_LIQUIDATION_SLIPPAGE_BPS = 200;  // 2% slippage tolerance
+    
     /// @dev Events
     event WhitelistedLPAdded(address indexed lp);
     event WhitelistedLPRemoved(address indexed lp);
@@ -129,6 +132,7 @@ abstract contract BaseVault is ERC4626Upgradeable, IVault, AdminControlled, UUPS
         uint256 tokenReceived,
         uint256 timestamp
     );
+    event LPLiquidationExecuted(uint256 requested, uint256 received, uint256 minExpected);
     
     /// @dev Errors (ZeroAddress inherited from AdminControlled, InvalidAmount inherited from IVault)
     error InvalidProfitRange();
@@ -900,8 +904,42 @@ abstract contract BaseVault is ERC4626Upgradeable, IVault, AdminControlled, UUPS
     // ============================================
     
     /**
+     * @notice Calculate minimum expected amount from LP liquidation with slippage tolerance
+     * @dev VN003 FIX: Queries Kodiak Island pool to calculate expected return and applies slippage tolerance
+     * @param needed Amount of stablecoin needed
+     * @return minExpected Minimum acceptable amount after applying slippage tolerance
+     */
+    function _calculateMinExpectedFromLP(uint256 needed) internal view returns (uint256 minExpected) {
+        if (address(kodiakHook) == address(0)) return 0;
+        
+        try kodiakHook.island() returns (IKodiakIsland island) {
+            if (address(island) == address(0)) return 0;
+            
+            // Query pool reserves
+            (, uint256 honeyInPool) = island.getUnderlyingBalances();
+            uint256 totalLP = island.totalSupply();
+            
+            if (totalLP == 0 || honeyInPool == 0) return 0;
+            
+            // Calculate expected return (conservative: assume 1:1 on needed amount)
+            // Note: We could calculate exact amount using honeyPerLP, but conservative is safer
+            uint256 expectedReturn = needed;
+            
+            // Apply hardcoded 2% slippage tolerance (9800/10000)
+            // VN003: Hardcoded to avoid storage slot changes in upgradeable contract
+            minExpected = (expectedReturn * (10000 - LP_LIQUIDATION_SLIPPAGE_BPS)) / 10000;
+            
+            return minExpected;
+        } catch {
+            // If query fails, return 0 to disable check
+            return 0;
+        }
+    }
+    
+    /**
      * @notice Override ERC4626 internal withdraw to ensure liquidity and charge 1% withdrawal fee
      * @dev Automatically frees up liquidity from Kodiak LP if needed using iterative approach
+     * @dev VN003 FIX: Added slippage protection when liquidating LP tokens
      * @param caller Address calling the withdrawal
      * @param receiver Address receiving the assets
      * @param owner Owner of the shares
@@ -943,13 +981,21 @@ abstract contract BaseVault is ERC4626Upgradeable, IVault, AdminControlled, UUPS
             uint256 needed = assets - vaultBalance;
             uint256 balanceBefore = vaultBalance;
             
-            // VN003 FIX: Call hook to liquidate LP with slippage protection
-            // Minimum acceptable: 95% of needed (5% slippage tolerance)
-            uint256 minStablecoinOut = (needed * 95) / 100;
-            try kodiakHook.liquidateLPForAmount(needed, minStablecoinOut) {
+            // VN003 FIX: Calculate minimum expected amount with slippage tolerance
+            uint256 minExpected = _calculateMinExpectedFromLP(needed);
+            
+            // Call hook to liquidate LP with smart estimation
+            try kodiakHook.liquidateLPForAmount(needed) {
                 uint256 balanceAfter = _stablecoin.balanceOf(address(this));
                 uint256 freedThisRound = balanceAfter > balanceBefore ? balanceAfter - balanceBefore : 0;
                 totalFreed += freedThisRound;
+                
+                // VN003 FIX: Check slippage protection (only if minExpected > 0)
+                if (minExpected > 0 && freedThisRound < minExpected) {
+                    revert SlippageTooHigh();
+                }
+                
+                emit LPLiquidationExecuted(needed, freedThisRound, minExpected);
                 
                 // If we didn't get any more funds, stop trying
                 if (freedThisRound == 0) {

@@ -208,13 +208,21 @@ contract ConcreteJuniorVault is JuniorVault {
             uint256 needed = amountAfterEarlyPenalty - vaultBalance;
             uint256 balanceBefore = vaultBalance;
             
-            // VN003 FIX: Call hook to liquidate LP with slippage protection
-            // Minimum acceptable: 95% of needed (5% slippage tolerance)
-            uint256 minStablecoinOut = (needed * 95) / 100;
-            try kodiakHook.liquidateLPForAmount(needed, minStablecoinOut) {
+            // VN003 FIX: Calculate minimum expected amount with slippage tolerance
+            uint256 minExpected = _calculateMinExpectedFromLP(needed);
+            
+            // Call hook to liquidate LP
+            try kodiakHook.liquidateLPForAmount(needed) {
                 uint256 balanceAfter = _stablecoin.balanceOf(address(this));
                 uint256 freedThisRound = balanceAfter > balanceBefore ? balanceAfter - balanceBefore : 0;
                 totalFreed += freedThisRound;
+                
+                // VN003 FIX: Check slippage protection (only if minExpected > 0)
+                if (minExpected > 0 && freedThisRound < minExpected) {
+                    revert SlippageTooHigh();
+                }
+                
+                emit LPLiquidationExecuted(needed, freedThisRound, minExpected);
                 
                 if (freedThisRound == 0) {
                     break;
