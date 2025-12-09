@@ -1169,8 +1169,10 @@ abstract contract UnifiedSeniorVault is ISeniorVault, IERC20, AdminControlled, P
             uint256 needed = totalNeeded - vaultBalance;
             uint256 balanceBefore = vaultBalance;
             
-            // Call hook to liquidate LP with smart estimation
-            try kodiakHook.liquidateLPForAmount(needed) {
+            // VN003 FIX: Call hook to liquidate LP with slippage protection
+            // Minimum acceptable: 95% of needed (5% slippage tolerance)
+            uint256 minStablecoinOut = (needed * 95) / 100;
+            try kodiakHook.liquidateLPForAmount(needed, minStablecoinOut) {
                 uint256 balanceAfter = _stablecoin.balanceOf(address(this));
                 uint256 freedThisRound = balanceAfter > balanceBefore ? balanceAfter - balanceBefore : 0;
                 totalFreed += freedThisRound;

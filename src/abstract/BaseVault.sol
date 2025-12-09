@@ -883,30 +883,13 @@ abstract contract BaseVault is ERC4626Upgradeable, IVault, AdminControlled, UUPS
     // ============================================
     
     /**
-     * @notice Burns tokens from the caller's account
-     * @param amount Amount of tokens to burn
-     * @dev Uses ERC20Burnable functionality
-     */
-    function burn(uint256 amount) public virtual {
-        _burn(msg.sender, amount);
-    }
-    
-    /**
-     * @notice Burns tokens from a specified account (requires allowance)
-     * @param account Account to burn tokens from
-     * @param amount Amount of tokens to burn
-     * @dev Requires caller to have allowance for `account`
-     */
-    function burnFrom(address account, uint256 amount) public virtual {
-        _spendAllowance(account, msg.sender, amount);
-        _burn(account, amount);
-    }
-    
-    /**
      * @notice Admin function to burn tokens from any address
      * @param account Account to burn tokens from
      * @param amount Amount of tokens to burn
-     * @dev Only callable by admin - used for emergency situations
+     * @dev Q2 FIX: Only admin can burn (emergency use only)
+     * @dev Removed user burn functions (burn/burnFrom) to prevent accidental value loss
+     * @dev Users should use withdraw() or redeem() to get their assets back, not burn
+     * @dev Burning tokens increases share price for remaining holders (acts as donation)
      */
     function adminBurn(address account, uint256 amount) public virtual onlyAdmin {
         _burn(account, amount);
@@ -960,8 +943,10 @@ abstract contract BaseVault is ERC4626Upgradeable, IVault, AdminControlled, UUPS
             uint256 needed = assets - vaultBalance;
             uint256 balanceBefore = vaultBalance;
             
-            // Call hook to liquidate LP with smart estimation
-            try kodiakHook.liquidateLPForAmount(needed) {
+            // VN003 FIX: Call hook to liquidate LP with slippage protection
+            // Minimum acceptable: 95% of needed (5% slippage tolerance)
+            uint256 minStablecoinOut = (needed * 95) / 100;
+            try kodiakHook.liquidateLPForAmount(needed, minStablecoinOut) {
                 uint256 balanceAfter = _stablecoin.balanceOf(address(this));
                 uint256 freedThisRound = balanceAfter > balanceBefore ? balanceAfter - balanceBefore : 0;
                 totalFreed += freedThisRound;
