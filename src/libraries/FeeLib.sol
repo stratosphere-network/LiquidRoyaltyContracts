@@ -52,8 +52,9 @@ library FeeLib {
      * @notice Calculate early withdrawal penalty
      * @dev Reference: Section - Fee Calculations (Early Withdrawal Penalty)
      * Formula: P(w, t_c) = w × f_penalty if (t - t_c < τ), else 0
+     * Q1 FIX: If cooldownStartTime is 0 (never initiated), apply penalty
      * @param withdrawalAmount Amount user wants to withdraw (w)
-     * @param cooldownStartTime When cooldown was initiated (t_c)
+     * @param cooldownStartTime When cooldown was initiated (t_c), 0 if never initiated
      * @param currentTime Current block timestamp (t)
      * @return penalty Penalty amount (P)
      * @return netAmount Amount user receives (w_net = w - P)
@@ -64,6 +65,14 @@ library FeeLib {
         uint256 currentTime
     ) internal pure returns (uint256 penalty, uint256 netAmount) {
         if (withdrawalAmount == 0) revert InvalidWithdrawalAmount();
+        
+        // Q1 FIX: If cooldown was never initiated (t_c = 0), apply penalty
+        if (cooldownStartTime == 0) {
+            // Apply penalty: P = w × 0.20
+            penalty = (withdrawalAmount * MathLib.EARLY_WITHDRAWAL_PENALTY) / MathLib.PRECISION;
+            netAmount = withdrawalAmount - penalty;
+            return (penalty, netAmount);
+        }
         
         // Check if cooldown period has passed (τ = 7 days)
         bool cooldownMet = (currentTime - cooldownStartTime) >= MathLib.COOLDOWN_PERIOD;

@@ -139,11 +139,7 @@ abstract contract JuniorVault is BaseVault, IJuniorVault {
         return (strategyReturn * int256(MathLib.PRECISION)) / int256(_lastMonthValue);
     }
     
-    /**
-     * @notice Get current APY (annualized)
-     * @dev Reference: Junior APY Impact - APY_j = (1 + r_j^eff)^12 - 1
-     * Note: Simplified calculation, actual implementation should use proper compounding
-     */
+   
     function currentAPY() public view virtual returns (int256) {
         int256 monthlyReturn = effectiveMonthlyReturn();
         // Simplified: APY ≈ monthly return × 12 (actual should compound)

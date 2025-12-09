@@ -1338,8 +1338,12 @@ abstract contract UnifiedSeniorVault is ISeniorVault, IERC20, AdminControlled, P
         uint256 amount
     ) public view virtual returns (uint256 penalty, uint256 netAmount) {
         uint256 cooldownTime = _cooldownStart[user];
+        // Q1 FIX: If cooldown never initiated, apply full 20% penalty
+        // This enforces cooldown requirement and matches canWithdrawWithoutPenalty() logic
         if (cooldownTime == 0) {
-            return FeeLib.calculateWithdrawalPenalty(amount, 0, block.timestamp);
+            penalty = (amount * MathLib.EARLY_WITHDRAWAL_PENALTY) / MathLib.PRECISION;
+            netAmount = amount - penalty;
+            return (penalty, netAmount);
         }
         return FeeLib.calculateWithdrawalPenalty(amount, cooldownTime, block.timestamp);
     }
