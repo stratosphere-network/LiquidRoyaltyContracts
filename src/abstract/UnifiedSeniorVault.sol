@@ -710,21 +710,21 @@ abstract contract UnifiedSeniorVault is ISeniorVault, IERC20, AdminControlled, P
         uint256 normalizedAmount = _normalizeToDecimals(pendingDeposit.amount, lpDecimals, 18);
         uint256 valueAdded = (normalizedAmount * lpPrice) / 1e18;
         
-        // Use ERC4626 standard preview (calculates shares based on current state)
+        // N1-2 FIX: Use ERC4626 standard preview (calculates shares based on current state)
         uint256 sharesToMint = previewDeposit(valueAdded);
         if (sharesToMint == 0) revert InvalidAmount(); // Safety: prevent 0-share minting
         
-        // Update vault value (Effects - state updates BEFORE external call)
-        _vaultValue += valueAdded;
-        _lastUpdateTime = block.timestamp;
-        
-        // Update status
+        // Update status (Effects - state updates BEFORE external call)
         pendingDeposit.status = DepositStatus.APPROVED;
         
         emit PendingLPDepositApproved(depositId, pendingDeposit.depositor, lpPrice, sharesToMint);
         
-        // Mint shares to depositor (Interaction - external call LAST, can trigger ERC20 hooks)
+        // N1-2 FIX: Mint shares BEFORE updating vault value (matches standard deposit flow)
         _mint(pendingDeposit.depositor, sharesToMint);
+        
+        // Update vault value AFTER minting (consistent with deposit() pattern)
+        _vaultValue += valueAdded;
+        _lastUpdateTime = block.timestamp;
     }
     
     /**
