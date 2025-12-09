@@ -182,6 +182,7 @@ abstract contract UnifiedSeniorVault is ISeniorVault, IERC20, AdminControlled, P
     error NotDepositor();
     error DepositNotExpired();
     error InvalidLPToken();
+    error IdleBalanceDeviation();
     
     /// @dev Modifiers
     modifier whenNotPausedOrAdmin() {
@@ -515,6 +516,9 @@ abstract contract UnifiedSeniorVault is ISeniorVault, IERC20, AdminControlled, P
     /**
      * @notice Deploy all idle stablecoins to Kodiak (sweep dust)
      * @dev Convenience function to deploy entire vault balance without specifying amount
+     * @dev N10 FIX: Protects against stale slippage params when deposits happen in same block
+     * @param expectedIdle Expected idle balance when tx was prepared (prevents stale minLPTokens)
+     * @param maxDeviation Maximum allowed deviation from expectedIdle in basis points (e.g., 100 = 1%)
      * @param minLPTokens Minimum LP tokens to receive (slippage protection)
      * @param swapToToken0Aggregator DEX aggregator for token0 swap
      * @param swapToToken0Data Swap calldata for token0
@@ -522,6 +526,8 @@ abstract contract UnifiedSeniorVault is ISeniorVault, IERC20, AdminControlled, P
      * @param swapToToken1Data Swap calldata for token1
      */
     function sweepToKodiak(
+        uint256 expectedIdle,
+        uint256 maxDeviation,
         uint256 minLPTokens,
         address swapToToken0Aggregator,
         bytes calldata swapToToken0Data,
@@ -534,8 +540,17 @@ abstract contract UnifiedSeniorVault is ISeniorVault, IERC20, AdminControlled, P
         uint256 idle = _stablecoin.balanceOf(address(this));
         if (idle == 0) revert InvalidAmount();
         
+        // N10 FIX: Ensure idle balance hasn't changed significantly since tx preparation
+        // This prevents stale minLPTokens from being used when deposits happen in same block
+        if (idle != expectedIdle) {
+            uint256 deviation = idle > expectedIdle ? idle - expectedIdle : expectedIdle - idle;
+            uint256 maxAllowedDeviation = (expectedIdle * maxDeviation) / 10000;
+            if (deviation > maxAllowedDeviation) {
+                revert IdleBalanceDeviation();
+            }
+        }
+        
         // Deploy all idle funds
-        // Reuse deployToKodiak logic but with dynamic amount
         uint256 lpBefore = kodiakHook.getIslandLPBalance();
         
         // Transfer all idle stablecoins to hook
@@ -710,8 +725,10 @@ abstract contract UnifiedSeniorVault is ISeniorVault, IERC20, AdminControlled, P
         uint256 normalizedAmount = _normalizeToDecimals(pendingDeposit.amount, lpDecimals, 18);
         uint256 valueAdded = (normalizedAmount * lpPrice) / 1e18;
         
-        // N1-2 FIX: Use ERC4626 standard preview (calculates shares based on current state)
-        uint256 sharesToMint = previewDeposit(valueAdded);
+        // For Senior: mint 1:1 (snrUSD is rebasing token, not ERC4626)
+        // NOTE: UnifiedSeniorVault uses rebasing (balance = shares × index)
+        // _mint() will convert the balance amount to internal shares automatically
+        uint256 sharesToMint = valueAdded;  // 1:1 minting for rebasing token
         if (sharesToMint == 0) revert InvalidAmount(); // Safety: prevent 0-share minting
         
         // Update status (Effects - state updates BEFORE external call)
@@ -1089,8 +1106,8 @@ abstract contract UnifiedSeniorVault is ISeniorVault, IERC20, AdminControlled, P
         // Check deposit cap
         if (isDepositCapReached()) revert DepositCapExceeded();
         
-        // Transfer stablecoin from user
-        _stablecoin.transferFrom(msg.sender, address(this), assets);
+        // N5 FIX: Transfer stablecoin from user (use safeTransferFrom for non-standard ERC20)
+        _stablecoin.safeTransferFrom(msg.sender, address(this), assets);
         
         // Track capital inflow: increase vault value by deposited assets
         _vaultValue += assets;
@@ -1204,7 +1221,9 @@ abstract contract UnifiedSeniorVault is ISeniorVault, IERC20, AdminControlled, P
     }
     
     function previewDeposit(uint256 assets) public view virtual returns (uint256) {
-        return assets; // 1:1 at current index
+        // N6 FIX: Return actual shares that would be minted (accounting for rebase index)
+        // Even though snrUSD displays 1:1 balance, internally it's stored as shares
+        return MathLib.calculateSharesFromBalance(assets, _rebaseIndex);
     }
     
     function previewWithdraw(uint256 amount) public view virtual returns (uint256) {
