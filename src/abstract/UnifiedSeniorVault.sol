@@ -83,7 +83,7 @@ abstract contract UnifiedSeniorVault is ISeniorVault, IERC20, AdminControlled, P
     
     /// @dev Reference: State Variables (T_r - last rebase timestamp)
     uint256 internal _lastRebaseTime;
-    uint256 internal _minRebaseInterval; // Settable by admin, default 30 seconds
+    uint256 internal _minRebaseInterval; // Settable by admin, default 30 days
     
     /// @dev Reference: Parameters (τ - cooldown period = 7 days)
     mapping(address => uint256) internal _cooldownStart; // t_c^(i) - user cooldown time
@@ -223,7 +223,7 @@ abstract contract UnifiedSeniorVault is ISeniorVault, IERC20, AdminControlled, P
         _vaultValue = initialValue_;
         _lastUpdateTime = block.timestamp;
         _lastRebaseTime = block.timestamp;
-        _minRebaseInterval = 30; // Default: 30 seconds (settable by admin)
+        _minRebaseInterval = 30 days; // Default: 30 days (monthly rebase cycle, settable by admin)
         
         // Initialize rebase index to 1.0
         _rebaseIndex = MathLib.PRECISION;
@@ -638,6 +638,8 @@ abstract contract UnifiedSeniorVault is ISeniorVault, IERC20, AdminControlled, P
         uint256 valueAdded = (normalizedAmount * lpPrice) / 1e18;
         
         // For Senior: mint 1:1 (snrUSD is 1:1 with USD value)
+        // N1-1 NOTE: Senior vault uses rebasing (not ERC4626 shares), so 1:1 minting is correct
+        // No need for previewDeposit() - rebasing tokens always mint amount == value
         uint256 sharesToMint = valueAdded;
         
         // Mint shares to caller (seeder)
@@ -1345,32 +1347,33 @@ abstract contract UnifiedSeniorVault is ISeniorVault, IERC20, AdminControlled, P
         uint256 currentSupply = totalSupply();
         if (currentSupply == 0) revert InvalidAmount();
         
-        // Step 1: Calculate management fee tokens to mint (Q3 FIX: time-based)
+        // Step 1: Calculate management fee tokens to mint (TIME-BASED)
         uint256 timeElapsed = block.timestamp - _lastRebaseTime;
         uint256 mgmtFeeTokens = FeeLib.calculateManagementFeeTokens(_vaultValue, timeElapsed);
         
-        // Step 2 & 3: Dynamic APY selection (using full vault value, not reduced)
+        // Step 2 & 3: Dynamic APY selection (TIME-BASED FIX + MGMT FEE FIX)
+        // NOW includes timeElapsed and mgmtFeeTokens for accurate backing ratio calculation
         RebaseLib.APYSelection memory selection = RebaseLib.selectDynamicAPY(
             currentSupply,
-            _vaultValue  // Use full vault value now!
+            _vaultValue,
+            timeElapsed,      // TIME-BASED FIX: Pass actual time elapsed
+            mgmtFeeTokens     // MGMT FEE FIX: Include management fee in APY selection
         );
         
         // Step 4: Determine zone and execute spillover/backstop (with LP price)
-        // VN002 FIX: Include management fee tokens in newSupply for accurate backing ratio
-        // selection.newSupply only includes performance fee, but we also mint mgmtFeeTokens
-        uint256 actualNewSupply = selection.newSupply + mgmtFeeTokens;
-        uint256 finalBackingRatio = MathLib.calculateBackingRatio(_vaultValue, actualNewSupply);
+        // selection.newSupply now ALREADY includes mgmtFeeTokens (no need to add again!)
+        uint256 finalBackingRatio = MathLib.calculateBackingRatio(_vaultValue, selection.newSupply);
         SpilloverLib.Zone zone = SpilloverLib.determineZone(finalBackingRatio);
         
         if (zone == SpilloverLib.Zone.SPILLOVER) {
-            _executeProfitSpillover(_vaultValue, actualNewSupply, lpPrice);
+            _executeProfitSpillover(_vaultValue, selection.newSupply, lpPrice);
         } else if (zone == SpilloverLib.Zone.BACKSTOP || selection.backstopNeeded) {
-            _executeBackstop(_vaultValue, actualNewSupply, lpPrice);
+            _executeBackstop(_vaultValue, selection.newSupply, lpPrice);
         }
         
-        // Step 5: Update rebase index
+        // Step 5: Update rebase index (TIME-BASED FIX)
         uint256 oldIndex = _rebaseIndex;
-        _rebaseIndex = FeeLib.calculateNewRebaseIndex(oldIndex, selection.selectedRate);
+        _rebaseIndex = FeeLib.calculateNewRebaseIndex(oldIndex, selection.selectedRate, timeElapsed);
         _epoch++;
         
         // Step 6: Mint ALL fee tokens to treasury (management + performance)
@@ -1382,13 +1385,14 @@ abstract contract UnifiedSeniorVault is ISeniorVault, IERC20, AdminControlled, P
         _lastRebaseTime = block.timestamp;
         
         emit Rebase(_epoch, oldIndex, _rebaseIndex, totalSupply());
-        emit RebaseExecuted(_epoch, selection.apyTier, oldIndex, _rebaseIndex, actualNewSupply, zone);
+        emit RebaseExecuted(_epoch, selection.apyTier, oldIndex, _rebaseIndex, selection.newSupply, zone);
         emit FeesCollected(mgmtFeeTokens, selection.feeTokens);  // Now shows both fees
     }
     
     /**
      * @notice Simulate rebase without executing
      * @dev Reference: Rebase Algorithm - for off-chain analysis
+     * TIME-BASED FIX: Now simulates with actual time elapsed and management fees
      */
     function simulateRebase() public view virtual returns (
         RebaseLib.APYSelection memory selection,
@@ -1400,8 +1404,12 @@ abstract contract UnifiedSeniorVault is ISeniorVault, IERC20, AdminControlled, P
             return (selection, SpilloverLib.Zone.HEALTHY, MathLib.PRECISION);
         }
         
-        // Use full vault value (management fee now minted, not deducted)
-        selection = RebaseLib.selectDynamicAPY(currentSupply, _vaultValue);
+        // Calculate time elapsed and management fee (same as real rebase)
+        uint256 timeElapsed = block.timestamp - _lastRebaseTime;
+        uint256 mgmtFeeTokens = FeeLib.calculateManagementFeeTokens(_vaultValue, timeElapsed);
+        
+        // TIME-BASED FIX: Pass timeElapsed and mgmtFeeTokens
+        selection = RebaseLib.selectDynamicAPY(currentSupply, _vaultValue, timeElapsed, mgmtFeeTokens);
         newBackingRatio = MathLib.calculateBackingRatio(_vaultValue, selection.newSupply);
         zone = SpilloverLib.determineZone(newBackingRatio);
         

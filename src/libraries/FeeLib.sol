@@ -101,31 +101,40 @@ library FeeLib {
     }
     
     /**
-     * @notice Calculate total supply after rebase (users + performance fee)
+     * @notice Calculate total supply after rebase (users + performance fee + management fee)
      * @dev Reference: Section - Rebase Algorithm (Step 3)
-     * Formula: S_new = S + S_users + S_fee = S × (1 + r_month × 1.02)
+     * Formula: S_new = S + S_users + S_perf + S_mgmt
+     * TIME-BASED FIX: Scales monthly rate by actual time elapsed
      * @param currentSupply Current snrUSD supply (S)
      * @param monthlyRate Selected monthly rate (r_month)
+     * @param timeElapsed Time since last rebase in seconds
+     * @param mgmtFeeTokens Management fee tokens to include
      * @return newSupply Total supply after rebase (S_new)
      * @return userTokens Tokens minted for users (S_users)
-     * @return feeTokens Tokens minted for treasury (S_fee)
+     * @return feeTokens Tokens minted for treasury (S_fee - performance only)
      */
     function calculateRebaseSupply(
         uint256 currentSupply,
-        uint256 monthlyRate
+        uint256 monthlyRate,
+        uint256 timeElapsed,
+        uint256 mgmtFeeTokens
     ) internal pure returns (
         uint256 newSupply,
         uint256 userTokens,
         uint256 feeTokens
     ) {
-        // S_users = S × r_month
-        userTokens = (currentSupply * monthlyRate) / MathLib.PRECISION;
+        // TIME-BASED FIX: Scale monthly rate by actual time elapsed
+        // Effective rate = monthlyRate × (timeElapsed / 30 days)
+        uint256 scaledRate = (monthlyRate * timeElapsed) / 30 days;
         
-        // S_fee = S_users × 0.02
+        // S_users = S × scaledRate
+        userTokens = (currentSupply * scaledRate) / MathLib.PRECISION;
+        
+        // S_fee = S_users × 0.02 (performance fee)
         feeTokens = calculatePerformanceFee(userTokens);
         
-        // S_new = S + S_users + S_fee
-        newSupply = currentSupply + userTokens + feeTokens;
+        // S_new = S + S_users + S_fee + S_mgmt (INCLUDE management fee!)
+        newSupply = currentSupply + userTokens + feeTokens + mgmtFeeTokens;
         
         return (newSupply, userTokens, feeTokens);
     }
@@ -133,21 +142,26 @@ library FeeLib {
     /**
      * @notice Calculate rebase index multiplier (VN001 FIX: exclude performance fee)
      * @dev Reference: Section - Rebase Algorithm (Step 6)
-     * Formula: I_new = I_old × (1 + r_selected)
+     * Formula: I_new = I_old × (1 + r_selected × timeScaling)
      * VN001 FIX: Performance fee is handled via token minting, not index growth
-     * Including perf fee in index would double-count it (users get extra + treasury gets minted)
+     * TIME-BASED FIX: Scales monthly rate by actual time elapsed
      * @param oldIndex Previous rebase index (I_old)
      * @param monthlyRate Selected monthly rate (r_selected)
+     * @param timeElapsed Time since last rebase in seconds
      * @return newIndex New rebase index (I_new)
      */
     function calculateNewRebaseIndex(
         uint256 oldIndex,
-        uint256 monthlyRate
+        uint256 monthlyRate,
+        uint256 timeElapsed
     ) internal pure returns (uint256 newIndex) {
-        // VN001 FIX: I_new = I_old × (1 + r_selected)
+        // TIME-BASED FIX: Scale monthly rate by actual time elapsed
+        // Effective rate = monthlyRate × (timeElapsed / 30 days)
+        uint256 scaledRate = (monthlyRate * timeElapsed) / 30 days;
+        
+        // I_new = I_old × (1 + scaledRate)
         // NO performance fee adjustment - that's handled by minting tokens to treasury
-        // Multiplier = 1 + monthlyRate (just the rate, not × 1.02)
-        uint256 multiplier = MathLib.PRECISION + monthlyRate;
+        uint256 multiplier = MathLib.PRECISION + scaledRate;
         
         return (oldIndex * multiplier) / MathLib.PRECISION;
     }

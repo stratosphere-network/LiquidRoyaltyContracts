@@ -34,21 +34,26 @@ library RebaseLib {
      * @notice Dynamically select highest APY that maintains peg
      * @dev Reference: Section - Dynamic APY Selection (Waterfall Algorithm)
      * Tries 13% → 12% → 11% and selects highest that keeps R ≥ 100%
+     * TIME-BASED FIX: Accepts time elapsed and management fee tokens
      * 
      * @param currentSupply Current snrUSD supply (S)
      * @param netVaultValue Vault value after management fee (V_s^net)
+     * @param timeElapsed Time since last rebase in seconds
+     * @param mgmtFeeTokens Management fee tokens to include in calculations
      * @return selection APY selection result with chosen rate and new supply
      */
     function selectDynamicAPY(
         uint256 currentSupply,
-        uint256 netVaultValue
+        uint256 netVaultValue,
+        uint256 timeElapsed,
+        uint256 mgmtFeeTokens
     ) internal pure returns (APYSelection memory selection) {
         if (currentSupply == 0) revert InvalidSupply();
         if (netVaultValue == 0) revert InvalidVaultValue();
         
         // Try 13% APY first (greedy maximization)
         (uint256 newSupply13, uint256 userTokens13, uint256 feeTokens13) = 
-            FeeLib.calculateRebaseSupply(currentSupply, MathLib.MAX_MONTHLY_RATE);
+            FeeLib.calculateRebaseSupply(currentSupply, MathLib.MAX_MONTHLY_RATE, timeElapsed, mgmtFeeTokens);
         
         uint256 backing13 = MathLib.calculateBackingRatio(netVaultValue, newSupply13);
         
@@ -67,7 +72,7 @@ library RebaseLib {
         
         // Try 12% APY
         (uint256 newSupply12, uint256 userTokens12, uint256 feeTokens12) = 
-            FeeLib.calculateRebaseSupply(currentSupply, MathLib.MID_MONTHLY_RATE);
+            FeeLib.calculateRebaseSupply(currentSupply, MathLib.MID_MONTHLY_RATE, timeElapsed, mgmtFeeTokens);
         
         uint256 backing12 = MathLib.calculateBackingRatio(netVaultValue, newSupply12);
         
@@ -85,7 +90,7 @@ library RebaseLib {
         
         // Try 11% APY
         (uint256 newSupply11, uint256 userTokens11, uint256 feeTokens11) = 
-            FeeLib.calculateRebaseSupply(currentSupply, MathLib.MIN_MONTHLY_RATE);
+            FeeLib.calculateRebaseSupply(currentSupply, MathLib.MIN_MONTHLY_RATE, timeElapsed, mgmtFeeTokens);
         
         uint256 backing11 = MathLib.calculateBackingRatio(netVaultValue, newSupply11);
         
@@ -115,31 +120,39 @@ library RebaseLib {
     /**
      * @notice Calculate new rebase index
      * @dev Reference: Section - Rebase Algorithm (Step 6)
-     * Formula: I_new = I_old × (1 + r_selected × (1 + f_perf))
+     * Formula: I_new = I_old × (1 + r_selected × timeScaling)
+     * TIME-BASED FIX: Accepts time elapsed parameter
      * 
      * @param oldIndex Previous rebase index (I_old)
      * @param selectedRate Selected monthly rate (r_selected)
+     * @param timeElapsed Time since last rebase in seconds
      * @return newIndex New rebase index (I_new)
      */
     function calculateNewIndex(
         uint256 oldIndex,
-        uint256 selectedRate
+        uint256 selectedRate,
+        uint256 timeElapsed
     ) internal pure returns (uint256 newIndex) {
-        return FeeLib.calculateNewRebaseIndex(oldIndex, selectedRate);
+        return FeeLib.calculateNewRebaseIndex(oldIndex, selectedRate, timeElapsed);
     }
     
     /**
      * @notice Simulate all three APY tiers and their backing ratios
      * @dev Useful for off-chain analysis and testing
+     * TIME-BASED FIX: Accepts time elapsed and management fee tokens
      * @param currentSupply Current snrUSD supply
      * @param netVaultValue Vault value after fees
+     * @param timeElapsed Time since last rebase in seconds
+     * @param mgmtFeeTokens Management fee tokens to include
      * @return backing13 Backing ratio with 13% APY
      * @return backing12 Backing ratio with 12% APY
      * @return backing11 Backing ratio with 11% APY
      */
     function simulateAllAPYs(
         uint256 currentSupply,
-        uint256 netVaultValue
+        uint256 netVaultValue,
+        uint256 timeElapsed,
+        uint256 mgmtFeeTokens
     ) internal pure returns (
         uint256 backing13,
         uint256 backing12,
@@ -148,15 +161,15 @@ library RebaseLib {
         if (currentSupply == 0) revert InvalidSupply();
         
         // 13% APY simulation
-        (uint256 newSupply13,,) = FeeLib.calculateRebaseSupply(currentSupply, MathLib.MAX_MONTHLY_RATE);
+        (uint256 newSupply13,,) = FeeLib.calculateRebaseSupply(currentSupply, MathLib.MAX_MONTHLY_RATE, timeElapsed, mgmtFeeTokens);
         backing13 = MathLib.calculateBackingRatio(netVaultValue, newSupply13);
         
         // 12% APY simulation
-        (uint256 newSupply12,,) = FeeLib.calculateRebaseSupply(currentSupply, MathLib.MID_MONTHLY_RATE);
+        (uint256 newSupply12,,) = FeeLib.calculateRebaseSupply(currentSupply, MathLib.MID_MONTHLY_RATE, timeElapsed, mgmtFeeTokens);
         backing12 = MathLib.calculateBackingRatio(netVaultValue, newSupply12);
         
         // 11% APY simulation
-        (uint256 newSupply11,,) = FeeLib.calculateRebaseSupply(currentSupply, MathLib.MIN_MONTHLY_RATE);
+        (uint256 newSupply11,,) = FeeLib.calculateRebaseSupply(currentSupply, MathLib.MIN_MONTHLY_RATE, timeElapsed, mgmtFeeTokens);
         backing11 = MathLib.calculateBackingRatio(netVaultValue, newSupply11);
         
         return (backing13, backing12, backing11);

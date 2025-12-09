@@ -848,20 +848,9 @@ abstract contract BaseVault is ERC4626Upgradeable, IVault, AdminControlled, UUPS
         uint256 valueAdded = (normalizedAmount * lpPrice) / 1e18;
         
         // Step 4: Mint shares to caller (seeder)
-        // Get current share price (how many assets per share)
-        uint256 sharePrice = totalSupply() > 0 ? (totalAssets() * 1e18) / totalSupply() : 1e18;
-        
-        // Calculate shares to mint based on vault type
-        // For senior: 1:1 ratio (valueAdded == shares)
-        // For junior/reserve: based on share price
-        uint256 sharesToMint;
-        if (sharePrice == 1e18 || totalSupply() == 0) {
-            // First deposit or 1:1 ratio
-            sharesToMint = valueAdded;
-        } else {
-            // Calculate shares based on current share price
-            sharesToMint = (valueAdded * 1e18) / sharePrice;
-        }
+        // N1-1 FIX: Use ERC4626 standard previewDeposit() for share calculation
+        // This ensures consistency with normal deposit flow and reduces code duplication
+        uint256 sharesToMint = previewDeposit(valueAdded);
         
         // Mint shares directly (bypass normal deposit flow)
         _mint(msg.sender, sharesToMint);
@@ -943,7 +932,7 @@ abstract contract BaseVault is ERC4626Upgradeable, IVault, AdminControlled, UUPS
         uint256 assets,
         uint256 shares
     ) internal virtual override {
-        // ⚠️ CRITICAL: Check allowance if caller is not the owner
+       
         if (caller != owner) {
             _spendAllowance(owner, caller, shares);
         }
