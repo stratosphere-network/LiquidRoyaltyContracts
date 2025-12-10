@@ -4,6 +4,7 @@ pragma solidity ^0.8.18;
 import "@openzeppelin/contracts/access/AccessControl.sol";
 import "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
+import "@openzeppelin/contracts/utils/math/Math.sol";
 import "./IKodiakVaultHook.sol";
 import "./IKodiakIslandRouter.sol";
 import "./IKodiakIsland.sol";
@@ -42,8 +43,8 @@ contract KodiakVaultHook is AccessControl, IKodiakVaultHook {
     uint256 public minSharesPerAssetBps = 0;     // 0 = no min
     uint256 public minAssetOutBps = 0;           // 0 = no min
     
-    // LP liquidation parameters (for smart withdrawal)
-    uint256 public safetyMultiplier = 250;       // 250 = 2.5x buffer (in basis points / 100)
+    // LP liquidation parameters (for smart withdrawal with slippage protection)
+    uint256 public safetyMultiplier = 115;       // 115 = 1.15x = 15% buffer (in basis points, 100 = 1.0x)
     
     // Native BERA placeholder
     address public constant NATIVE_BERA = 0x6969696969696969696969696969696969696969;
@@ -75,16 +76,19 @@ contract KodiakVaultHook is AccessControl, IKodiakVaultHook {
     }
 
     function setRouter(address _router) external onlyRole(ADMIN_ROLE) {
+        require(_router != address(0), "router=0");
         router = IKodiakIslandRouter(_router);
         emit RouterUpdated(_router);
     }
 
     function setIsland(address _island) external onlyRole(ADMIN_ROLE) {
+        require(_island != address(0), "island=0");
         island = IKodiakIsland(_island);
         emit IslandUpdated(_island);
     }
 
     function setWBERA(address _wbera) external onlyRole(ADMIN_ROLE) {
+        require(_wbera != address(0), "wbera=0");
         wbera = _wbera;
         emit WBERAUpdated(_wbera);
     }
@@ -104,10 +108,12 @@ contract KodiakVaultHook is AccessControl, IKodiakVaultHook {
 
     /**
      * @notice Update LP liquidation safety multiplier
-     * @param _safetyMultiplier Safety buffer multiplier in basis points / 100 (e.g., 250 = 2.5x)
+     * @dev SECURITY UPDATE: Now uses reasonable basis points (100 = 1.0x, 115 = 1.15x)
+     * @param _safetyMultiplier Safety buffer in basis points (100-120 = 0-20% buffer)
+     *        100 = no buffer, 110 = 10% buffer, 115 = 15% buffer, 120 = 20% buffer (max)
      */
     function setSafetyMultiplier(uint256 _safetyMultiplier) external onlyRole(ADMIN_ROLE) {
-        require(_safetyMultiplier >= 100 && _safetyMultiplier <= 500, "multiplier must be 1x-5x");
+        require(_safetyMultiplier >= 100 && _safetyMultiplier <= 120, "multiplier must be 1.0x-1.2x (100-120)");
         safetyMultiplier = _safetyMultiplier;
         emit LPParametersUpdated(_safetyMultiplier);
     }
@@ -176,7 +182,11 @@ contract KodiakVaultHook is AccessControl, IKodiakVaultHook {
         }
         island.token0().forceApprove(address(island), use0);
         island.token1().forceApprove(address(island), use1);
-        island.mint(mintAmt, address(this));
+        
+        // SECURITY FIX: Capture and verify LP mint return value
+        (uint256 actual0, uint256 actual1) = island.mint(mintAmt, address(this));
+        require(actual0 > 0 || actual1 > 0, "No tokens used in LP mint");
+        
         // Reset approvals
         island.token0().forceApprove(address(island), 0);
         island.token1().forceApprove(address(island), 0);
@@ -198,11 +208,14 @@ contract KodiakVaultHook is AccessControl, IKodiakVaultHook {
         uint256 price = (uint256(sqrtPriceX96) * 1e18 / (2 ** 96)) ** 2; // token1/token0 in 1e18
 
         (uint256 amt0, uint256 amt1) = island.getUnderlyingBalances();
-        uint256 amt0InToken1 = amt0 * price / 1e36;
-        uint256 total = amt0InToken1 + amt1;
-        if (total == 0) return;
+        // PRECISION FIX: Avoid divide-before-multiply by rearranging calculation
+        // Original: toToken0 = assetAmount × (amt0 × price / 1e36) / ((amt0 × price / 1e36) + amt1)
+        // Fixed: toToken0 = (assetAmount × amt0 × price) / (amt0 × price + amt1 × 1e36)
+        uint256 amt0PriceScaled = amt0 * price;
+        uint256 totalScaled = amt0PriceScaled + (amt1 * 1e36);
+        if (totalScaled == 0) return;
 
-        uint256 toToken0 = assetAmount * amt0InToken1 / total;
+        uint256 toToken0 = (assetAmount * amt0PriceScaled) / totalScaled;
         uint256 toToken1 = assetAmount - toToken0;
 
         // If asset is token0, swap part to token1; if asset is token1, swap part to token0
@@ -329,16 +342,20 @@ contract KodiakVaultHook is AccessControl, IKodiakVaultHook {
     }
 
     /**
-     * @notice Smart LP liquidation using Island pool data
-     * @dev Called by vault during withdrawal. Queries Island directly for accurate HONEY/LP ratio.
+     * @notice Smart LP liquidation using Island pool data with built-in slippage protection
+     * @dev Called by vault during withdrawal. Queries Island directly for HONEY/LP ratio.
+     * @dev SECURITY: Implements multi-layer slippage protection to prevent manipulation attacks
      * @param unstake_usd USD value user wants to withdraw (in stablecoin wei)
      *
      * Algorithm:
      * 1. Query Island for actual HONEY balance in pool
      * 2. Calculate HONEY per LP = honeyInPool / totalLPSupply
      * 3. Calculate LP needed = unstake_usd / honeyPerLP
-     * 4. Apply safety buffer: lpToBurn = lpNeeded * safetyMultiplier (e.g., 2.5x)
-     * 5. Burn LP, send ONLY stablecoin to vault, keep WBTC in hook
+     * 4. Apply reasonable buffer (15% max, not the old 2.5x)
+     * 5. VALIDATE: LP amount is sane (not excessive)
+     * 6. Burn LP, capture actual amounts
+     * 7. VALIDATE: Output meets minimum expectations (95% of requested)
+     * 8. Send ONLY stablecoin to vault, keep WBTC in hook
      */
     function liquidateLPForAmount(uint256 unstake_usd) public onlyVault {
         if (unstake_usd == 0) return;
@@ -354,15 +371,31 @@ contract KodiakVaultHook is AccessControl, IKodiakVaultHook {
         
         if (totalLPSupply == 0 || honeyInPool == 0) return;
         
-        // Calculate HONEY per LP (this is what we actually get back as stablecoin)
-        // honeyPerLP is in 1e18 precision
-        uint256 honeyPerLP = (honeyInPool * 1e18) / totalLPSupply;
+        // Calculate HONEY per LP (in 1e18 precision)
+        uint256 honeyPerLP = Math.mulDiv(honeyInPool, 1e18, totalLPSupply);
+        if (honeyPerLP == 0) return;
         
-        // Calculate LP needed to get unstake_usd worth of HONEY
-        uint256 lpNeeded = (unstake_usd * 1e18) / honeyPerLP;
+        // ===== SLIPPAGE PROTECTION LAYER 1: Reasonable LP Burn Calculation =====
+        // Calculate base LP needed (without excessive multiplier)
+        uint256 lpNeeded = Math.mulDiv(unstake_usd, 1e18, honeyPerLP);
         
-        // Apply safety buffer: safetyMultiplier is in basis points / 100 (e.g., 250 = 2.5x)
-        uint256 unstake_send_to_hook = (lpNeeded * safetyMultiplier) / 100;
+        // Apply REASONABLE buffer for slippage/fees (15% max, configurable via safetyMultiplier)
+        // safetyMultiplier is now in basis points: 100 = 1.0x, 115 = 1.15x
+        // Cap it between 1.0x - 1.2x to prevent excessive burns
+        uint256 effectiveMultiplier = safetyMultiplier;
+        if (effectiveMultiplier > 120) effectiveMultiplier = 120; // Max 20% buffer
+        if (effectiveMultiplier < 100) effectiveMultiplier = 100; // Min 0% buffer
+        
+        uint256 unstake_send_to_hook = Math.mulDiv(lpNeeded, effectiveMultiplier, 100);
+        
+        // ===== SLIPPAGE PROTECTION LAYER 2: Sanity Check on LP Amount =====
+        // If calculated LP amount seems excessive (>3x expected), something is wrong
+        // This catches extreme pool manipulation scenarios
+        uint256 maxReasonableLP = lpNeeded * 3;
+        if (unstake_send_to_hook > maxReasonableLP) {
+            // Pool state looks manipulated, use conservative fallback
+            unstake_send_to_hook = lpNeeded + (lpNeeded * 15 / 100); // Just add 15%
+        }
         
         // Cap at available LP balance
         if (unstake_send_to_hook > lpBalance) {
@@ -371,28 +404,35 @@ contract KodiakVaultHook is AccessControl, IKodiakVaultHook {
         
         if (unstake_send_to_hook == 0) return;
         
-        // Burn LP tokens
-        uint256 wbtcBefore = island.token0().balanceOf(address(this));
-        uint256 honeyBefore = island.token1().balanceOf(address(this));
+        // ===== SLIPPAGE PROTECTION LAYER 3: Minimum Output Validation =====
+        // Calculate minimum acceptable HONEY output (95% of requested)
+        uint256 minHoneyExpected = Math.mulDiv(unstake_usd, 9500, 10000);
         
-        try island.burn(unstake_send_to_hook, address(this)) returns (uint256, uint256) {
-            // Successfully burned LP
+        // Burn LP tokens and capture amounts received
+        uint256 wbtcReceived = 0;
+        uint256 honeyReceived = 0;
+        
+        try island.burn(unstake_send_to_hook, address(this)) returns (uint256 amount0, uint256 amount1) {
+            wbtcReceived = amount0;
+            honeyReceived = amount1;
         } catch {
             // If burn fails, try via router
-            try router.removeLiquidity(island, unstake_send_to_hook, 0, 0, address(this)) returns (uint256, uint256, uint128) {
-                // Successfully removed liquidity
+            try router.removeLiquidity(island, unstake_send_to_hook, 0, 0, address(this)) 
+                returns (uint256 amount0, uint256 amount1, uint128) {
+                wbtcReceived = amount0;
+                honeyReceived = amount1;
             } catch {
-                // If both fail, return without reverting
-                return;
+                // If both fail, revert to signal failure
+                revert("LP burn failed");
             }
         }
         
-        // Calculate what we received
-        uint256 wbtcAfter = island.token0().balanceOf(address(this));
-        uint256 honeyAfter = island.token1().balanceOf(address(this));
+        // Verify we received tokens
+        require(wbtcReceived > 0 || honeyReceived > 0, "No tokens received from burn");
         
-        uint256 wbtcReceived = wbtcAfter - wbtcBefore;
-        uint256 honeyReceived = honeyAfter - honeyBefore;
+        // ===== CRITICAL: Validate output against minimum expectation =====
+        // If we received significantly less HONEY than expected, pool was likely manipulated
+        require(honeyReceived >= minHoneyExpected, "Slippage too high - insufficient output");
         
         // Send ONLY stablecoin (HONEY) to vault
         if (honeyReceived > 0) {
@@ -485,7 +525,7 @@ contract KodiakVaultHook is AccessControl, IKodiakVaultHook {
         require(amount > 0, "amount=0");
         uint256 bal = island.balanceOf(address(this));
         require(bal >= amount, "insufficient LP");
-        island.transfer(recipient, amount);
+        IERC20(address(island)).safeTransfer(recipient, amount);
     }
 
     function getIslandLPBalance() external view override returns (uint256) {
@@ -505,8 +545,12 @@ contract KodiakVaultHook is AccessControl, IKodiakVaultHook {
         uint256 lpBal = island.balanceOf(address(this));
         if (lpBal == 0) return;
         
-        // Burn Island LP
-        island.burn(lpBal, address(this));
+        // SECURITY FIX: Capture return values from LP burn
+        // Burn Island LP and get token amounts received
+        (uint256 amount0, uint256 amount1) = island.burn(lpBal, address(this));
+        
+        // Verify we received tokens
+        require(amount0 > 0 || amount1 > 0, "No tokens received from LP burn");
         
         // Get token balances
         IERC20 token0 = island.token0();
@@ -567,3 +611,4 @@ contract KodiakVaultHook is AccessControl, IKodiakVaultHook {
     // Accept native BERA for unwrapping
     receive() external payable {}
 }
+

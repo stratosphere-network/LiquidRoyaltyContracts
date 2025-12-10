@@ -20,6 +20,7 @@ interface IReserveVault is IVault {
     event ReserveRebaseExecuted(uint256 newValue, int256 effectiveReturn);
     event DepositCapUpdated(uint256 oldCap, uint256 newCap);
     event ReserveBelowThreshold();
+    event CooldownInitiated(address indexed user, uint256 timestamp);
     
     /// @dev Errors
     error InsufficientBackstopFunds();
@@ -96,6 +97,38 @@ interface IReserveVault is IVault {
      * @return utilization Percentage in basis points (10000 = 100%)
      */
     function utilizationRate() external view returns (uint256 utilization);
+    
+    /**
+     * @notice Initiate withdrawal cooldown
+     * @dev After 7 days, user can withdraw without 20% penalty
+     */
+    function initiateCooldown() external;
+    
+    /**
+     * @notice Get user's cooldown start timestamp
+     * @param user User address
+     * @return Cooldown start timestamp (0 if not initiated)
+     */
+    function cooldownStart(address user) external view returns (uint256);
+    
+    /**
+     * @notice Check if user can withdraw without penalty
+     * @param user User address
+     * @return True if cooldown period has passed
+     */
+    function canWithdrawWithoutPenalty(address user) external view returns (bool);
+    
+    /**
+     * @notice Calculate withdrawal penalty for user
+     * @param user User address
+     * @param amount Withdrawal amount
+     * @return penalty Penalty amount
+     * @return netAmount Amount after penalty
+     */
+    function calculateWithdrawalPenalty(
+        address user,
+        uint256 amount
+    ) external view returns (uint256 penalty, uint256 netAmount);
 }
 
 

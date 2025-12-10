@@ -55,6 +55,9 @@ contract ConcreteJuniorVault is JuniorVault {
         );
         
         // N1 FIX: Set roles during initialization (consolidated from initializeV2)
+        if (liquidityManager_ == address(0)) revert ZeroAddress();
+        if (priceFeedManager_ == address(0)) revert ZeroAddress();
+        if (contractUpdater_ == address(0)) revert ZeroAddress();
         _liquidityManager = liquidityManager_;
         _priceFeedManager = priceFeedManager_;
         _contractUpdater = contractUpdater_;
@@ -64,12 +67,16 @@ contract ConcreteJuniorVault is JuniorVault {
      * @notice Initialize V2 - DEPRECATED (kept for backward compatibility with existing deployments)
      * @dev N1: This is now redundant - new deployments should use initialize() with all params
      * @dev Only kept for contracts already deployed with V1 initialize()
+     * @dev SECURITY FIX: Added onlyAdmin to prevent front-running attack
      */
     function initializeV2(
         address liquidityManager_,
         address priceFeedManager_,
         address contractUpdater_
-    ) external reinitializer(2) {
+    ) external reinitializer(2) onlyAdmin {
+        if (liquidityManager_ == address(0)) revert ZeroAddress();
+        if (priceFeedManager_ == address(0)) revert ZeroAddress();
+        if (contractUpdater_ == address(0)) revert ZeroAddress();
         _liquidityManager = liquidityManager_;
         _priceFeedManager = priceFeedManager_;
         _contractUpdater = contractUpdater_;
@@ -88,14 +95,17 @@ contract ConcreteJuniorVault is JuniorVault {
     }
     
     function setLiquidityManager(address liquidityManager_) external onlyAdmin {
+        if (liquidityManager_ == address(0)) revert ZeroAddress();
         _liquidityManager = liquidityManager_;
     }
     
     function setPriceFeedManager(address priceFeedManager_) external onlyAdmin {
+        if (priceFeedManager_ == address(0)) revert ZeroAddress();
         _priceFeedManager = priceFeedManager_;
     }
     
     function setContractUpdater(address contractUpdater_) external onlyAdmin {
+        if (contractUpdater_ == address(0)) revert ZeroAddress();
         _contractUpdater = contractUpdater_;
     }
     
@@ -168,7 +178,7 @@ contract ConcreteJuniorVault is JuniorVault {
         address owner,
         uint256 assets,
         uint256 shares
-    ) internal virtual override {
+    ) internal virtual override nonReentrant {
         // ⚠️ CRITICAL: Check allowance if caller is not the owner
         if (caller != owner) {
             _spendAllowance(owner, caller, shares);
@@ -188,6 +198,12 @@ contract ConcreteJuniorVault is JuniorVault {
         // Calculate 1% withdrawal fee (applied to amount after early penalty)
         uint256 withdrawalFee = (amountAfterEarlyPenalty * MathLib.WITHDRAWAL_FEE) / MathLib.PRECISION;
         uint256 netAssets = amountAfterEarlyPenalty - withdrawalFee;
+        
+        // SECURITY FIX (CEI Pattern): Reset cooldown BEFORE external calls
+        // This ensures state changes happen before interactions
+        if (_cooldownStart[owner] != 0) {
+            _cooldownStart[owner] = 0;
+        }
         
         // Free up liquidity if needed (iterative approach)
         uint256 maxAttempts = 3;
@@ -263,6 +279,24 @@ contract ConcreteJuniorVault is JuniorVault {
         }
         
         emit Withdraw(caller, receiver, owner, amountAfterEarlyPenalty, shares);
+    }
+    
+    /**
+     * @notice Override ERC20 _update to reset cooldown on token transfers
+     * @dev SECURITY FIX: Prevents cooldown bypass by transferring tokens between addresses
+     * @dev Called on all transfers, mints, and burns
+     */
+    function _update(address from, address to, uint256 value) internal virtual override {
+        // Call parent implementation first
+        super._update(from, to, value);
+        
+        // SECURITY FIX: Reset cooldown when receiving tokens (transfer or mint)
+        // This prevents users from bypassing cooldown by:
+        // 1. Transferring tokens to an address with satisfied cooldown
+        // 2. Depositing more tokens to an address with satisfied cooldown
+        if (to != address(0) && _cooldownStart[to] != 0) {
+            _cooldownStart[to] = 0;
+        }
     }
     
     /// @dev Events

@@ -134,10 +134,9 @@ library FeeLib {
     ) {
         // TIME-BASED FIX: Scale monthly rate by actual time elapsed
         // Effective rate = monthlyRate × (timeElapsed / 30 days)
-        uint256 scaledRate = (monthlyRate * timeElapsed) / 30 days;
-        
-        // S_users = S × scaledRate
-        userTokens = (currentSupply * scaledRate) / MathLib.PRECISION;
+        // PRECISION FIX: Multiply all terms first, then divide to avoid precision loss
+        // userTokens = currentSupply × monthlyRate × timeElapsed / (30 days × PRECISION)
+        userTokens = (currentSupply * monthlyRate * timeElapsed) / (30 days * MathLib.PRECISION);
         
         // S_fee = S_users × 0.02 (performance fee)
         feeTokens = calculatePerformanceFee(userTokens);

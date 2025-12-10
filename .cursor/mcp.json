@@ -1,0 +1,28 @@
+{
+  "mcpServers": {
+    "slither": {
+      "command": "uv",
+      "args": [
+        "--directory",
+        "/home/amschel/slither-mcp",
+        "run",
+        "slither-mcp"
+      ]
+    },
+   
+    "solodit": {
+      "command": "npx",
+      "args": ["-y", "@lyuboslavlyubenov/solodit-mcp"],
+      "disabled": false
+    },
+    "foundry": {
+      "command": "npx",
+      "args": ["@pranesh.asp/foundry-mcp-server"],
+      "env": {
+        "RPC_URL": "http://localhost:8545",
+        "PRIVATE_KEY": "0x..."
+      }
+    }
+  }
+}
+
