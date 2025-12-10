@@ -29,10 +29,9 @@ abstract contract BaseVault is ERC4626Upgradeable, IVault, AdminControlled, UUPS
     using MathLib for uint256;
     using SafeERC20 for IERC20;
     
-    /// @dev Reentrancy guard
+    /// @dev Reentrancy guard constants
     uint256 private constant _NOT_ENTERED = 1;
     uint256 private constant _ENTERED = 2;
-    uint256 private _status;
     
     modifier nonReentrant() {
         require(_status != _ENTERED, "ReentrancyGuard: reentrant call");
@@ -75,6 +74,9 @@ abstract contract BaseVault is ERC4626Upgradeable, IVault, AdminControlled, UUPS
     /// @dev Management fee minting for Junior/Reserve vaults
     uint256 internal _lastMintTime;        // Last time management fee was minted
     uint256 internal _mgmtFeeSchedule;     // Time interval between mints (e.g., 7 days, 30 days)
+    
+    /// @dev Reentrancy guard state (ADDED AT END FOR UPGRADE SAFETY)
+    uint256 private _status;
     
     /// @dev Constants
     int256 internal constant MIN_PROFIT_BPS = -5000;  // -50% minimum
