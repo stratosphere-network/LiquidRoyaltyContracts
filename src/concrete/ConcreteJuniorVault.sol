@@ -175,6 +175,7 @@ contract ConcreteJuniorVault is JuniorVault {
     /**
      * @notice Override withdraw to add cooldown penalty
      * @dev Applies 20% penalty if cooldown not met, then 1% withdrawal fee
+     * @dev SECURITY: Follows Checks-Effects-Interactions (CEI) pattern strictly
      */
     function _withdraw(
         address caller,
@@ -183,36 +184,44 @@ contract ConcreteJuniorVault is JuniorVault {
         uint256 assets,
         uint256 shares
     ) internal virtual override nonReentrant {
-        // ⚠️ CRITICAL: Check allowance if caller is not the owner
+        // ============================================
+        // 1. CHECKS - All validations first
+        // ============================================
         if (caller != owner) {
             _spendAllowance(owner, caller, shares);
         }
         
-        // Calculate early withdrawal penalty (20% if cooldown not met)
+        // Calculate penalties and fees
         uint256 cooldownTime = _cooldownStart[owner];
         (uint256 earlyPenalty, uint256 amountAfterEarlyPenalty) = 
             FeeLib.calculateWithdrawalPenalty(assets, cooldownTime, block.timestamp);
         
-        // Calculate 1% withdrawal fee (applied to amount after early penalty)
         uint256 withdrawalFee = (amountAfterEarlyPenalty * MathLib.WITHDRAWAL_FEE) / MathLib.PRECISION;
         uint256 netAssets = amountAfterEarlyPenalty - withdrawalFee;
         
-        // SECURITY FIX (CEI Pattern): Reset cooldown BEFORE external calls
-        // This ensures state changes happen before interactions
+        // ============================================
+        // 2. EFFECTS - All state changes BEFORE external calls
+        // ============================================
+        
+        // Burn shares first
+        _burn(owner, shares);
+        
+        // Update vault value
+        _vaultValue -= amountAfterEarlyPenalty;
+        
+        // Reset cooldown
         if (_cooldownStart[owner] != 0) {
             _cooldownStart[owner] = 0;
         }
         
-        // Ensure sufficient liquidity (DRY: using extracted helper from BaseVault)
+        // ============================================
+        // 3. INTERACTIONS - External calls LAST
+        // ============================================
+        
+        // Ensure sufficient liquidity (may call kodiakHook.liquidateLPForAmount)
         _ensureLiquidityAvailable(amountAfterEarlyPenalty);
         
-        // Burn shares from owner
-        _burn(owner, shares);
-        
-        // Track capital outflow (BEFORE external calls - CEI pattern)
-        _vaultValue -= amountAfterEarlyPenalty;
-        
-        // Transfer net assets to receiver (after penalty + fee)
+        // Transfer net assets to receiver
         _stablecoin.safeTransfer(receiver, netAssets);
         
         // Transfer withdrawal fee to treasury
@@ -221,6 +230,7 @@ contract ConcreteJuniorVault is JuniorVault {
             emit WithdrawalFeeCharged(owner, withdrawalFee, netAssets);
         }
         
+        // Emit events
         if (earlyPenalty > 0) {
             emit WithdrawalPenaltyCharged(owner, earlyPenalty);
         }

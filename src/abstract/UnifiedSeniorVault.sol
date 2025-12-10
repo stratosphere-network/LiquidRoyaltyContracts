@@ -1277,20 +1277,27 @@ abstract contract UnifiedSeniorVault is ISeniorVault, IERC20, AdminControlled, P
         // Total needed = netAssets + withdrawalFee (we need enough for both receiver and treasury)
         uint256 totalNeeded = amountAfterEarlyPenalty;
         
-        // Ensure sufficient liquidity (DRY: using extracted helper from BaseVault)
-        _ensureLiquidityAvailable(totalNeeded);
+        // ============================================
+        // EFFECTS - All state changes BEFORE external calls (CEI Pattern)
+        // ============================================
         
-        // Burn snrUSD
+        // Burn snrUSD first
         _burn(owner, amount);
         
-        // SECURITY FIX (CEI Pattern): Reset cooldown BEFORE external calls
-        // User has now withdrawn, must re-initiate cooldown for future withdrawals
+        // Update vault value
+        _vaultValue -= amountAfterEarlyPenalty;
+        
+        // Reset cooldown
         if (_cooldownStart[owner] != 0) {
             _cooldownStart[owner] = 0;
         }
         
-        // Track capital outflow: decrease vault value by amount after early penalty (BEFORE external calls - CEI pattern)
-        _vaultValue -= amountAfterEarlyPenalty;
+        // ============================================
+        // INTERACTIONS - External calls LAST
+        // ============================================
+        
+        // Ensure sufficient liquidity (may call kodiakHook.liquidateLPForAmount)
+        _ensureLiquidityAvailable(totalNeeded);
         
         // Transfer net amount to receiver (after both early penalty and withdrawal fee)
         _stablecoin.safeTransfer(receiver, netAssets);

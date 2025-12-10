@@ -122,7 +122,8 @@ contract KodiakVaultHook is AccessControl, IKodiakVaultHook {
     // DEAD CODE REMOVED: _minAmountsForRemove() - never used (Slither finding)
 
     function onAfterDeposit(uint256 assets) external override onlyVault {
-        if (address(island) == address(0) || assets == 0) return;
+        require(address(island) != address(0), "Island not configured");
+        require(assets > 0, "Zero deposit amount");
 
         // Vault already sent funds via safeTransfer before calling this function
         // No need to pull - funds are already here!
@@ -211,7 +212,8 @@ contract KodiakVaultHook is AccessControl, IKodiakVaultHook {
         address swapToToken1Aggregator,
         bytes calldata swapToToken1Data
     ) external override onlyVault {
-        if (address(island) == address(0) || assets == 0) return;
+        require(address(island) != address(0), "Island not configured");
+        require(assets > 0, "Zero deposit amount");
 
         // Vault already sent funds via safeTransfer before calling this function
         // No need to pull - funds are already here!
@@ -325,22 +327,22 @@ contract KodiakVaultHook is AccessControl, IKodiakVaultHook {
      * 8. Send ONLY stablecoin to vault, keep WBTC in hook
      */
     function liquidateLPForAmount(uint256 unstakeUsd) public onlyVault {
-        if (unstakeUsd == 0) return;
-        if (address(island) == address(0)) return;
+        require(unstakeUsd > 0, "Zero withdrawal amount");
+        require(address(island) != address(0), "Island not configured");
         
         // Get LP balance in hook
         uint256 lpBalance = island.balanceOf(address(this));
-        if (lpBalance == 0) return; // No LP to liquidate
+        require(lpBalance > 0, "No LP tokens available");
         
         // Query Island pool directly for actual balances
         (, uint256 honeyInPool) = island.getUnderlyingBalances();
         uint256 totalLPSupply = island.totalSupply();
         
-        if (totalLPSupply == 0 || honeyInPool == 0) return;
+        require(totalLPSupply > 0 && honeyInPool > 0, "Invalid pool state");
         
         // Calculate HONEY per LP (in 1e18 precision)
         uint256 honeyPerLP = Math.mulDiv(honeyInPool, 1e18, totalLPSupply);
-        if (honeyPerLP == 0) return;
+        require(honeyPerLP > 0, "Invalid LP price");
         
         // ===== SLIPPAGE PROTECTION LAYER 1: Reasonable LP Burn Calculation =====
         // Calculate base LP needed (without excessive multiplier)
@@ -369,7 +371,7 @@ contract KodiakVaultHook is AccessControl, IKodiakVaultHook {
             unstakeSendToHook = lpBalance;
         }
         
-        if (unstakeSendToHook == 0) return;
+        require(unstakeSendToHook > 0, "Insufficient LP for withdrawal");
         
         // ===== SLIPPAGE PROTECTION LAYER 3: Minimum Output Validation =====
         // Calculate minimum acceptable HONEY output (95% of requested)
