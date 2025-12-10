@@ -42,6 +42,18 @@ abstract contract UnifiedSeniorVault is ISeniorVault, IERC20, AdminControlled, P
     using RebaseLib for uint256;
     using SpilloverLib for uint256;
     
+    /// @dev Reentrancy guard
+    uint256 private constant _NOT_ENTERED = 1;
+    uint256 private constant _ENTERED = 2;
+    uint256 private _status;
+    
+    modifier nonReentrant() {
+        require(_status != _ENTERED, "ReentrancyGuard: reentrant call");
+        _status = _ENTERED;
+        _;
+        _status = _NOT_ENTERED;
+    }
+    
     /// @dev Struct for LP holdings data
     struct LPHolding {
         address lpToken;
@@ -185,6 +197,7 @@ abstract contract UnifiedSeniorVault is ISeniorVault, IERC20, AdminControlled, P
     error DepositNotExpired();
     error InvalidLPToken();
     error IdleBalanceDeviation();
+    error InvalidStablecoinDecimals();
     
     /// @dev Modifiers
     modifier whenNotPausedOrAdmin() {
@@ -213,9 +226,13 @@ abstract contract UnifiedSeniorVault is ISeniorVault, IERC20, AdminControlled, P
     ) internal onlyInitializing {
         if (stablecoin_ == address(0)) revert AdminControlled.ZeroAddress();
         if (treasury_ == address(0)) revert AdminControlled.ZeroAddress();
+
+        // Sanity check: Ensure stablecoin is 18 decimals (vault accounting assumes 18 decimals)
+        if (IERC20Metadata(stablecoin_).decimals() != 18) revert InvalidStablecoinDecimals();
         
         __AdminControlled_init();
         __Pausable_init();
+        _status = _NOT_ENTERED;
         
         _name = tokenName_;
         _symbol = tokenSymbol_;
@@ -641,6 +658,7 @@ abstract contract UnifiedSeniorVault is ISeniorVault, IERC20, AdminControlled, P
         if (amount == 0) revert InvalidAmount();
         if (lpPrice == 0) revert InvalidLPPrice();
         if (address(kodiakHook) == address(0)) revert KodiakHookNotSet();
+          if (lpToken != address(kodiakHook.island())) revert InvalidLPToken();
         
         // Transfer LP tokens from caller (seeder) to this vault
         IERC20(lpToken).safeTransferFrom(msg.sender, address(this), amount);
@@ -978,6 +996,12 @@ abstract contract UnifiedSeniorVault is ISeniorVault, IERC20, AdminControlled, P
             _shares[to] += sharesToTransfer;
         }
         
+        // SECURITY FIX: Reset cooldown on token transfer to prevent bypass
+        // Receiving tokens resets your cooldown - must re-initiate to get penalty-free withdrawal
+        if (to != address(0) && _cooldownStart[to] != 0) {
+            _cooldownStart[to] = 0;
+        }
+        
         emit Transfer(from, to, amount);
     }
     
@@ -991,6 +1015,12 @@ abstract contract UnifiedSeniorVault is ISeniorVault, IERC20, AdminControlled, P
         
         _totalShares += sharesToMint;
         _shares[to] += sharesToMint;
+        
+        // SECURITY FIX: Reset cooldown when receiving new tokens via mint
+        // This prevents bypassing cooldown by depositing more tokens
+        if (_cooldownStart[to] != 0) {
+            _cooldownStart[to] = 0;
+        }
         
         emit Transfer(address(0), to, amount);
     }
@@ -1162,7 +1192,7 @@ abstract contract UnifiedSeniorVault is ISeniorVault, IERC20, AdminControlled, P
      * @param owner Owner of snrUSD
      * @return assets Amount of stablecoin tokens withdrawn (after penalty + 1% withdrawal fee)
      */
-    function withdraw(uint256 amount, address receiver, address owner) public virtual whenNotPausedOrAdmin returns (uint256 assets) {
+    function withdraw(uint256 amount, address receiver, address owner) public virtual whenNotPausedOrAdmin nonReentrant returns (uint256 assets) {
         if (amount == 0) revert InvalidAmount();
         if (receiver == address(0)) revert AdminControlled.ZeroAddress();
         
@@ -1377,20 +1407,14 @@ abstract contract UnifiedSeniorVault is ISeniorVault, IERC20, AdminControlled, P
     /**
      * @notice Calculate withdrawal penalty
      * @dev Reference: Fee Calculations - P(w, t_c)
+     * @dev Q1 FIX: Delegates to FeeLib which handles all cases including cooldownTime == 0
      */
     function calculateWithdrawalPenalty(
         address user,
         uint256 amount
     ) public view virtual returns (uint256 penalty, uint256 netAmount) {
-        uint256 cooldownTime = _cooldownStart[user];
-        // Q1 FIX: If cooldown never initiated, apply full 20% penalty
-        // This enforces cooldown requirement and matches canWithdrawWithoutPenalty() logic
-        if (cooldownTime == 0) {
-            penalty = (amount * MathLib.EARLY_WITHDRAWAL_PENALTY) / MathLib.PRECISION;
-            netAmount = amount - penalty;
-            return (penalty, netAmount);
-        }
-        return FeeLib.calculateWithdrawalPenalty(amount, cooldownTime, block.timestamp);
+        // Delegate to FeeLib - it handles all cases including when cooldown not initiated
+        return FeeLib.calculateWithdrawalPenalty(amount, _cooldownStart[user], block.timestamp);
     }
     
     // ============================================
@@ -1558,6 +1582,7 @@ abstract contract UnifiedSeniorVault is ISeniorVault, IERC20, AdminControlled, P
     /**
      * @notice Execute backstop (Zone 3)
      * @dev Reference: Three-Zone System - Backstop
+     * @dev SECURITY FIX: Uses ACTUAL amounts received, not expected amounts
      * @param lpPrice Current LP token price in USD (18 decimals)
      */
     function _executeBackstop(uint256 netValue, uint256 newSupply, uint256 lpPrice) internal virtual {
@@ -1569,24 +1594,34 @@ abstract contract UnifiedSeniorVault is ISeniorVault, IERC20, AdminControlled, P
         
         if (backstop.deficitAmount == 0) return;
         
+        // SECURITY FIX: Track ACTUAL amounts received (can differ from expected!)
+        uint256 actualFromReserve = 0;
+        uint256 actualFromJunior = 0;
+        
         // Pull LP tokens from Reserve first (calculated from USD amount)
         if (backstop.fromReserve > 0) {
-            _pullFromReserve(backstop.fromReserve, lpPrice);
+            actualFromReserve = _pullFromReserve(backstop.fromReserve, lpPrice);
         }
         
         // Then Junior if needed (calculated from USD amount)
         if (backstop.fromJunior > 0) {
-            _pullFromJunior(backstop.fromJunior, lpPrice);
+            actualFromJunior = _pullFromJunior(backstop.fromJunior, lpPrice);
         }
         
-        // Update Senior value
-        _vaultValue = backstop.seniorFinalValue;
+        // SECURITY FIX: Update vault value based on ACTUAL amounts received
+        // This prevents accounting mismatch when Reserve/Junior can't provide full amounts
+        _vaultValue = netValue + actualFromReserve + actualFromJunior;
+        
+        // Determine if fully restored based on ACTUAL amounts
+        uint256 totalActualReceived = actualFromReserve + actualFromJunior;
+        bool actuallyFullyRestored = (netValue + totalActualReceived >= 
+            (newSupply * MathLib.SENIOR_RESTORE_BACKING) / MathLib.PRECISION);
         
         emit BackstopTriggered(
             backstop.deficitAmount,
-            backstop.fromReserve,
-            backstop.fromJunior,
-            backstop.fullyRestored
+            actualFromReserve,  // Emit ACTUAL amounts, not expected
+            actualFromJunior,   // Emit ACTUAL amounts, not expected
+            actuallyFullyRestored
         );
     }
     
@@ -1615,16 +1650,18 @@ abstract contract UnifiedSeniorVault is ISeniorVault, IERC20, AdminControlled, P
      * @dev Must be implemented to handle actual LP token transfers
      * @param amountUSD Amount in USD to receive
      * @param lpPrice Current LP token price in USD (18 decimals)
+     * @return actualReceived Actual USD value received (may be less than requested)
      */
-    function _pullFromReserve(uint256 amountUSD, uint256 lpPrice) internal virtual;
+    function _pullFromReserve(uint256 amountUSD, uint256 lpPrice) internal virtual returns (uint256 actualReceived);
     
     /**
      * @notice Pull LP tokens from Junior vault
      * @dev Must be implemented to handle actual LP token transfers
      * @param amountUSD Amount in USD to receive
      * @param lpPrice Current LP token price in USD (18 decimals)
+     * @return actualReceived Actual USD value received (may be less than requested)
      */
-    function _pullFromJunior(uint256 amountUSD, uint256 lpPrice) internal virtual;
+    function _pullFromJunior(uint256 amountUSD, uint256 lpPrice) internal virtual returns (uint256 actualReceived);
     
     /**
      * @notice Normalize token amount to target decimals (Q5 FIX)

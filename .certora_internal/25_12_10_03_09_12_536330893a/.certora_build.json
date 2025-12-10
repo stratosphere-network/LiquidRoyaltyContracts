@@ -1,0 +1,2402 @@
+{
+    "MathLibHarness_00000000ce4604a0000000000000000000000002": {
+        "contracts": [
+            {
+                "address": "00000000ce4604a0000000000000000000000002",
+                "allMethods": [
+                    {
+                        "contractName": "MathLibHarness",
+                        "fullArgs": [],
+                        "isLibrary": false,
+                        "name": "BPS_DENOMINATOR",
+                        "notpayable": true,
+                        "originalFile": "certora/harness/MathLibHarness.sol",
+                        "paramNames": [],
+                        "returns": [
+                            {
+                                "location": "stack",
+                                "typeDesc": {
+                                    "primitiveName": "uint256",
+                                    "type": "Primitive"
+                                }
+                            }
+                        ],
+                        "sighash": "e1a45218",
+                        "sourceBytes": {
+                            "begin": 519,
+                            "size": 106
+                        },
+                        "stateMutability": "pure",
+                        "visibility": "external",
+                        "vyper_metadata": null
+                    },
+                    {
+                        "contractName": "MathLibHarness",
+                        "fullArgs": [],
+                        "isLibrary": false,
+                        "name": "COOLDOWN_PERIOD",
+                        "notpayable": true,
+                        "originalFile": "certora/harness/MathLibHarness.sol",
+                        "paramNames": [],
+                        "returns": [
+                            {
+                                "location": "stack",
+                                "typeDesc": {
+                                    "primitiveName": "uint256",
+                                    "type": "Primitive"
+                                }
+                            }
+                        ],
+                        "sighash": "6e99d52f",
+                        "sourceBytes": {
+                            "begin": 2421,
+                            "size": 106
+                        },
+                        "stateMutability": "pure",
+                        "visibility": "external",
+                        "vyper_metadata": null
+                    },
+                    {
+                        "contractName": "MathLibHarness",
+                        "fullArgs": [],
+                        "isLibrary": false,
+                        "name": "DEPOSIT_CAP_MULTIPLIER",
+                        "notpayable": true,
+                        "originalFile": "certora/harness/MathLibHarness.sol",
+                        "paramNames": [],
+                        "returns": [
+                            {
+                                "location": "stack",
+                                "typeDesc": {
+                                    "primitiveName": "uint256",
+                                    "type": "Primitive"
+                                }
+                            }
+                        ],
+                        "sighash": "4df35a0e",
+                        "sourceBytes": {
+                            "begin": 2291,
+                            "size": 120
+                        },
+                        "stateMutability": "pure",
+                        "visibility": "external",
+                        "vyper_metadata": null
+                    },
+                    {
+                        "contractName": "MathLibHarness",
+                        "fullArgs": [],
+                        "isLibrary": false,
+                        "name": "EARLY_WITHDRAWAL_PENALTY",
+                        "notpayable": true,
+                        "originalFile": "certora/harness/MathLibHarness.sol",
+                        "paramNames": [],
+                        "returns": [
+                            {
+                                "location": "stack",
+                                "typeDesc": {
+                                    "primitiveName": "uint256",
+                                    "type": "Primitive"
+                                }
+                            }
+                        ],
+                        "sighash": "b918ee25",
+                        "sourceBytes": {
+                            "begin": 1507,
+                            "size": 124
+                        },
+                        "stateMutability": "pure",
+                        "visibility": "external",
+                        "vyper_metadata": null
+                    },
+                    {
+                        "contractName": "MathLibHarness",
+                        "fullArgs": [],
+                        "isLibrary": false,
+                        "name": "JUNIOR_SPILLOVER_SHARE",
+                        "notpayable": true,
+                        "originalFile": "certora/harness/MathLibHarness.sol",
+                        "paramNames": [],
+                        "returns": [
+                            {
+                                "location": "stack",
+                                "typeDesc": {
+                                    "primitiveName": "uint256",
+                                    "type": "Primitive"
+                                }
+                            }
+                        ],
+                        "sighash": "c47736e4",
+                        "sourceBytes": {
+                            "begin": 2029,
+                            "size": 120
+                        },
+                        "stateMutability": "pure",
+                        "visibility": "external",
+                        "vyper_metadata": null
+                    },
+                    {
+                        "contractName": "MathLibHarness",
+                        "fullArgs": [],
+                        "isLibrary": false,
+                        "name": "MAX_APY",
+                        "notpayable": true,
+                        "originalFile": "certora/harness/MathLibHarness.sol",
+                        "paramNames": [],
+                        "returns": [
+                            {
+                                "location": "stack",
+                                "typeDesc": {
+                                    "primitiveName": "uint256",
+                                    "type": "Primitive"
+                                }
+                            }
+                        ],
+                        "sighash": "3d92f4e2",
+                        "sourceBytes": {
+                            "begin": 835,
+                            "size": 90
+                        },
+                        "stateMutability": "pure",
+                        "visibility": "external",
+                        "vyper_metadata": null
+                    },
+                    {
+                        "contractName": "MathLibHarness",
+                        "fullArgs": [],
+                        "isLibrary": false,
+                        "name": "MAX_MONTHLY_RATE",
+                        "notpayable": true,
+                        "originalFile": "certora/harness/MathLibHarness.sol",
+                        "paramNames": [],
+                        "returns": [
+                            {
+                                "location": "stack",
+                                "typeDesc": {
+                                    "primitiveName": "uint256",
+                                    "type": "Primitive"
+                                }
+                            }
+                        ],
+                        "sighash": "cca71e0e",
+                        "sourceBytes": {
+                            "begin": 1171,
+                            "size": 108
+                        },
+                        "stateMutability": "pure",
+                        "visibility": "external",
+                        "vyper_metadata": null
+                    },
+                    {
+                        "contractName": "MathLibHarness",
+                        "fullArgs": [],
+                        "isLibrary": false,
+                        "name": "MGMT_FEE_ANNUAL",
+                        "notpayable": true,
+                        "originalFile": "certora/harness/MathLibHarness.sol",
+                        "paramNames": [],
+                        "returns": [
+                            {
+                                "location": "stack",
+                                "typeDesc": {
+                                    "primitiveName": "uint256",
+                                    "type": "Primitive"
+                                }
+                            }
+                        ],
+                        "sighash": "e4c52f13",
+                        "sourceBytes": {
+                            "begin": 1289,
+                            "size": 106
+                        },
+                        "stateMutability": "pure",
+                        "visibility": "external",
+                        "vyper_metadata": null
+                    },
+                    {
+                        "contractName": "MathLibHarness",
+                        "fullArgs": [],
+                        "isLibrary": false,
+                        "name": "MID_APY",
+                        "notpayable": true,
+                        "originalFile": "certora/harness/MathLibHarness.sol",
+                        "paramNames": [],
+                        "returns": [
+                            {
+                                "location": "stack",
+                                "typeDesc": {
+                                    "primitiveName": "uint256",
+                                    "type": "Primitive"
+                                }
+                            }
+                        ],
+                        "sighash": "609a9959",
+                        "sourceBytes": {
+                            "begin": 735,
+                            "size": 90
+                        },
+                        "stateMutability": "pure",
+                        "visibility": "external",
+                        "vyper_metadata": null
+                    },
+                    {
+                        "contractName": "MathLibHarness",
+                        "fullArgs": [],
+                        "isLibrary": false,
+                        "name": "MID_MONTHLY_RATE",
+                        "notpayable": true,
+                        "originalFile": "certora/harness/MathLibHarness.sol",
+                        "paramNames": [],
+                        "returns": [
+                            {
+                                "location": "stack",
+                                "typeDesc": {
+                                    "primitiveName": "uint256",
+                                    "type": "Primitive"
+                                }
+                            }
+                        ],
+                        "sighash": "0b3ad234",
+                        "sourceBytes": {
+                            "begin": 1053,
+                            "size": 108
+                        },
+                        "stateMutability": "pure",
+                        "visibility": "external",
+                        "vyper_metadata": null
+                    },
+                    {
+                        "contractName": "MathLibHarness",
+                        "fullArgs": [],
+                        "isLibrary": false,
+                        "name": "MIN_APY",
+                        "notpayable": true,
+                        "originalFile": "certora/harness/MathLibHarness.sol",
+                        "paramNames": [],
+                        "returns": [
+                            {
+                                "location": "stack",
+                                "typeDesc": {
+                                    "primitiveName": "uint256",
+                                    "type": "Primitive"
+                                }
+                            }
+                        ],
+                        "sighash": "e51d375a",
+                        "sourceBytes": {
+                            "begin": 635,
+                            "size": 90
+                        },
+                        "stateMutability": "pure",
+                        "visibility": "external",
+                        "vyper_metadata": null
+                    },
+                    {
+                        "contractName": "MathLibHarness",
+                        "fullArgs": [],
+                        "isLibrary": false,
+                        "name": "MIN_MONTHLY_RATE",
+                        "notpayable": true,
+                        "originalFile": "certora/harness/MathLibHarness.sol",
+                        "paramNames": [],
+                        "returns": [
+                            {
+                                "location": "stack",
+                                "typeDesc": {
+                                    "primitiveName": "uint256",
+                                    "type": "Primitive"
+                                }
+                            }
+                        ],
+                        "sighash": "62dd4c64",
+                        "sourceBytes": {
+                            "begin": 935,
+                            "size": 108
+                        },
+                        "stateMutability": "pure",
+                        "visibility": "external",
+                        "vyper_metadata": null
+                    },
+                    {
+                        "contractName": "MathLibHarness",
+                        "fullArgs": [],
+                        "isLibrary": false,
+                        "name": "PERF_FEE",
+                        "notpayable": true,
+                        "originalFile": "certora/harness/MathLibHarness.sol",
+                        "paramNames": [],
+                        "returns": [
+                            {
+                                "location": "stack",
+                                "typeDesc": {
+                                    "primitiveName": "uint256",
+                                    "type": "Primitive"
+                                }
+                            }
+                        ],
+                        "sighash": "44774870",
+                        "sourceBytes": {
+                            "begin": 1405,
+                            "size": 92
+                        },
+                        "stateMutability": "pure",
+                        "visibility": "external",
+                        "vyper_metadata": null
+                    },
+                    {
+                        "contractName": "MathLibHarness",
+                        "fullArgs": [],
+                        "isLibrary": false,
+                        "name": "PRECISION",
+                        "notpayable": true,
+                        "originalFile": "certora/harness/MathLibHarness.sol",
+                        "paramNames": [],
+                        "returns": [
+                            {
+                                "location": "stack",
+                                "typeDesc": {
+                                    "primitiveName": "uint256",
+                                    "type": "Primitive"
+                                }
+                            }
+                        ],
+                        "sighash": "aaf5eb68",
+                        "sourceBytes": {
+                            "begin": 415,
+                            "size": 94
+                        },
+                        "stateMutability": "pure",
+                        "visibility": "external",
+                        "vyper_metadata": null
+                    },
+                    {
+                        "contractName": "MathLibHarness",
+                        "fullArgs": [],
+                        "isLibrary": false,
+                        "name": "RESERVE_SPILLOVER_SHARE",
+                        "notpayable": true,
+                        "originalFile": "certora/harness/MathLibHarness.sol",
+                        "paramNames": [],
+                        "returns": [
+                            {
+                                "location": "stack",
+                                "typeDesc": {
+                                    "primitiveName": "uint256",
+                                    "type": "Primitive"
+                                }
+                            }
+                        ],
+                        "sighash": "f24390fa",
+                        "sourceBytes": {
+                            "begin": 2159,
+                            "size": 122
+                        },
+                        "stateMutability": "pure",
+                        "visibility": "external",
+                        "vyper_metadata": null
+                    },
+                    {
+                        "contractName": "MathLibHarness",
+                        "fullArgs": [],
+                        "isLibrary": false,
+                        "name": "SENIOR_RESTORE_BACKING",
+                        "notpayable": true,
+                        "originalFile": "certora/harness/MathLibHarness.sol",
+                        "paramNames": [],
+                        "returns": [
+                            {
+                                "location": "stack",
+                                "typeDesc": {
+                                    "primitiveName": "uint256",
+                                    "type": "Primitive"
+                                }
+                            }
+                        ],
+                        "sighash": "acb1b231",
+                        "sourceBytes": {
+                            "begin": 1899,
+                            "size": 120
+                        },
+                        "stateMutability": "pure",
+                        "visibility": "external",
+                        "vyper_metadata": null
+                    },
+                    {
+                        "contractName": "MathLibHarness",
+                        "fullArgs": [],
+                        "isLibrary": false,
+                        "name": "SENIOR_TARGET_BACKING",
+                        "notpayable": true,
+                        "originalFile": "certora/harness/MathLibHarness.sol",
+                        "paramNames": [],
+                        "returns": [
+                            {
+                                "location": "stack",
+                                "typeDesc": {
+                                    "primitiveName": "uint256",
+                                    "type": "Primitive"
+                                }
+                            }
+                        ],
+                        "sighash": "374b67c1",
+                        "sourceBytes": {
+                            "begin": 1641,
+                            "size": 118
+                        },
+                        "stateMutability": "pure",
+                        "visibility": "external",
+                        "vyper_metadata": null
+                    },
+                    {
+                        "contractName": "MathLibHarness",
+                        "fullArgs": [],
+                        "isLibrary": false,
+                        "name": "SENIOR_TRIGGER_BACKING",
+                        "notpayable": true,
+                        "originalFile": "certora/harness/MathLibHarness.sol",
+                        "paramNames": [],
+                        "returns": [
+                            {
+                                "location": "stack",
+                                "typeDesc": {
+                                    "primitiveName": "uint256",
+                                    "type": "Primitive"
+                                }
+                            }
+                        ],
+                        "sighash": "432fa086",
+                        "sourceBytes": {
+                            "begin": 1769,
+                            "size": 120
+                        },
+                        "stateMutability": "pure",
+                        "visibility": "external",
+                        "vyper_metadata": null
+                    },
+                    {
+                        "contractName": "MathLibHarness",
+                        "fullArgs": [
+                            {
+                                "location": "stack",
+                                "typeDesc": {
+                                    "primitiveName": "uint256",
+                                    "type": "Primitive"
+                                }
+                            },
+                            {
+                                "location": "stack",
+                                "typeDesc": {
+                                    "primitiveName": "int256",
+                                    "type": "Primitive"
+                                }
+                            }
+                        ],
+                        "isLibrary": false,
+                        "name": "applyPercentage",
+                        "notpayable": true,
+                        "originalFile": "certora/harness/MathLibHarness.sol",
+                        "paramNames": [
+                            "value",
+                            "percentageBps"
+                        ],
+                        "returns": [
+                            {
+                                "location": "stack",
+                                "typeDesc": {
+                                    "primitiveName": "uint256",
+                                    "type": "Primitive"
+                                }
+                            }
+                        ],
+                        "sighash": "2d919b95",
+                        "sourceBytes": {
+                            "begin": 4644,
+                            "size": 185
+                        },
+                        "stateMutability": "pure",
+                        "visibility": "external",
+                        "vyper_metadata": null
+                    },
+                    {
+                        "contractName": "MathLibHarness",
+                        "fullArgs": [
+                            {
+                                "location": "stack",
+                                "typeDesc": {
+                                    "primitiveName": "uint256",
+                                    "type": "Primitive"
+                                }
+                            },
+                            {
+                                "location": "stack",
+                                "typeDesc": {
+                                    "primitiveName": "uint256",
+                                    "type": "Primitive"
+                                }
+                            }
+                        ],
+                        "isLibrary": false,
+                        "name": "calculateBackingRatio",
+                        "notpayable": true,
+                        "originalFile": "certora/harness/MathLibHarness.sol",
+                        "paramNames": [
+                            "vaultValue",
+                            "totalSupply"
+                        ],
+                        "returns": [
+                            {
+                                "location": "stack",
+                                "typeDesc": {
+                                    "primitiveName": "uint256",
+                                    "type": "Primitive"
+                                }
+                            }
+                        ],
+                        "sighash": "5f4866fb",
+                        "sourceBytes": {
+                            "begin": 2693,
+                            "size": 204
+                        },
+                        "stateMutability": "pure",
+                        "visibility": "external",
+                        "vyper_metadata": null
+                    },
+                    {
+                        "contractName": "MathLibHarness",
+                        "fullArgs": [
+                            {
+                                "location": "stack",
+                                "typeDesc": {
+                                    "primitiveName": "uint256",
+                                    "type": "Primitive"
+                                }
+                            },
+                            {
+                                "location": "stack",
+                                "typeDesc": {
+                                    "primitiveName": "uint256",
+                                    "type": "Primitive"
+                                }
+                            }
+                        ],
+                        "isLibrary": false,
+                        "name": "calculateBalanceFromShares",
+                        "notpayable": true,
+                        "originalFile": "certora/harness/MathLibHarness.sol",
+                        "paramNames": [
+                            "shares",
+                            "rebaseIndex"
+                        ],
+                        "returns": [
+                            {
+                                "location": "stack",
+                                "typeDesc": {
+                                    "primitiveName": "uint256",
+                                    "type": "Primitive"
+                                }
+                            }
+                        ],
+                        "sighash": "48073b63",
+                        "sourceBytes": {
+                            "begin": 3037,
+                            "size": 206
+                        },
+                        "stateMutability": "pure",
+                        "visibility": "external",
+                        "vyper_metadata": null
+                    },
+                    {
+                        "contractName": "MathLibHarness",
+                        "fullArgs": [
+                            {
+                                "location": "stack",
+                                "typeDesc": {
+                                    "primitiveName": "uint256",
+                                    "type": "Primitive"
+                                }
+                            }
+                        ],
+                        "isLibrary": false,
+                        "name": "calculateDepositCap",
+                        "notpayable": true,
+                        "originalFile": "certora/harness/MathLibHarness.sol",
+                        "paramNames": [
+                            "reserveValue"
+                        ],
+                        "returns": [
+                            {
+                                "location": "stack",
+                                "typeDesc": {
+                                    "primitiveName": "uint256",
+                                    "type": "Primitive"
+                                }
+                            }
+                        ],
+                        "sighash": "ee97b689",
+                        "sourceBytes": {
+                            "begin": 4415,
+                            "size": 162
+                        },
+                        "stateMutability": "pure",
+                        "visibility": "external",
+                        "vyper_metadata": null
+                    },
+                    {
+                        "contractName": "MathLibHarness",
+                        "fullArgs": [
+                            {
+                                "location": "stack",
+                                "typeDesc": {
+                                    "primitiveName": "uint256",
+                                    "type": "Primitive"
+                                }
+                            },
+                            {
+                                "location": "stack",
+                                "typeDesc": {
+                                    "primitiveName": "uint256",
+                                    "type": "Primitive"
+                                }
+                            }
+                        ],
+                        "isLibrary": false,
+                        "name": "calculateSharesFromBalance",
+                        "notpayable": true,
+                        "originalFile": "certora/harness/MathLibHarness.sol",
+                        "paramNames": [
+                            "balance",
+                            "rebaseIndex"
+                        ],
+                        "returns": [
+                            {
+                                "location": "stack",
+                                "typeDesc": {
+                                    "primitiveName": "uint256",
+                                    "type": "Primitive"
+                                }
+                            }
+                        ],
+                        "sighash": "1dff29d7",
+                        "sourceBytes": {
+                            "begin": 3385,
+                            "size": 208
+                        },
+                        "stateMutability": "pure",
+                        "visibility": "external",
+                        "vyper_metadata": null
+                    },
+                    {
+                        "contractName": "MathLibHarness",
+                        "fullArgs": [
+                            {
+                                "location": "stack",
+                                "typeDesc": {
+                                    "primitiveName": "uint256",
+                                    "type": "Primitive"
+                                }
+                            },
+                            {
+                                "location": "stack",
+                                "typeDesc": {
+                                    "primitiveName": "uint256",
+                                    "type": "Primitive"
+                                }
+                            }
+                        ],
+                        "isLibrary": false,
+                        "name": "calculateSharesFromBalanceCeil",
+                        "notpayable": true,
+                        "originalFile": "certora/harness/MathLibHarness.sol",
+                        "paramNames": [
+                            "balance",
+                            "rebaseIndex"
+                        ],
+                        "returns": [
+                            {
+                                "location": "stack",
+                                "typeDesc": {
+                                    "primitiveName": "uint256",
+                                    "type": "Primitive"
+                                }
+                            }
+                        ],
+                        "sighash": "fe818b43",
+                        "sourceBytes": {
+                            "begin": 3730,
+                            "size": 216
+                        },
+                        "stateMutability": "pure",
+                        "visibility": "external",
+                        "vyper_metadata": null
+                    },
+                    {
+                        "contractName": "MathLibHarness",
+                        "fullArgs": [
+                            {
+                                "location": "stack",
+                                "typeDesc": {
+                                    "primitiveName": "uint256",
+                                    "type": "Primitive"
+                                }
+                            },
+                            {
+                                "location": "stack",
+                                "typeDesc": {
+                                    "primitiveName": "uint256",
+                                    "type": "Primitive"
+                                }
+                            }
+                        ],
+                        "isLibrary": false,
+                        "name": "calculateTotalSupply",
+                        "notpayable": true,
+                        "originalFile": "certora/harness/MathLibHarness.sol",
+                        "paramNames": [
+                            "totalShares",
+                            "rebaseIndex"
+                        ],
+                        "returns": [
+                            {
+                                "location": "stack",
+                                "typeDesc": {
+                                    "primitiveName": "uint256",
+                                    "type": "Primitive"
+                                }
+                            }
+                        ],
+                        "sighash": "a474adec",
+                        "sourceBytes": {
+                            "begin": 4070,
+                            "size": 204
+                        },
+                        "stateMutability": "pure",
+                        "visibility": "external",
+                        "vyper_metadata": null
+                    },
+                    {
+                        "contractName": "MathLibHarness",
+                        "fullArgs": [
+                            {
+                                "location": "stack",
+                                "typeDesc": {
+                                    "primitiveName": "uint256",
+                                    "type": "Primitive"
+                                }
+                            },
+                            {
+                                "location": "stack",
+                                "typeDesc": {
+                                    "primitiveName": "uint256",
+                                    "type": "Primitive"
+                                }
+                            }
+                        ],
+                        "isLibrary": false,
+                        "name": "max",
+                        "notpayable": true,
+                        "originalFile": "certora/harness/MathLibHarness.sol",
+                        "paramNames": [
+                            "a",
+                            "b"
+                        ],
+                        "returns": [
+                            {
+                                "location": "stack",
+                                "typeDesc": {
+                                    "primitiveName": "uint256",
+                                    "type": "Primitive"
+                                }
+                            }
+                        ],
+                        "sighash": "6d5433e6",
+                        "sourceBytes": {
+                            "begin": 5304,
+                            "size": 108
+                        },
+                        "stateMutability": "pure",
+                        "visibility": "external",
+                        "vyper_metadata": null
+                    },
+                    {
+                        "contractName": "MathLibHarness",
+                        "fullArgs": [
+                            {
+                                "location": "stack",
+                                "typeDesc": {
+                                    "primitiveName": "uint256",
+                                    "type": "Primitive"
+                                }
+                            },
+                            {
+                                "location": "stack",
+                                "typeDesc": {
+                                    "primitiveName": "uint256",
+                                    "type": "Primitive"
+                                }
+                            }
+                        ],
+                        "isLibrary": false,
+                        "name": "min",
+                        "notpayable": true,
+                        "originalFile": "certora/harness/MathLibHarness.sol",
+                        "paramNames": [
+                            "a",
+                            "b"
+                        ],
+                        "returns": [
+                            {
+                                "location": "stack",
+                                "typeDesc": {
+                                    "primitiveName": "uint256",
+                                    "type": "Primitive"
+                                }
+                            }
+                        ],
+                        "sighash": "7ae2b5c7",
+                        "sourceBytes": {
+                            "begin": 5123,
+                            "size": 108
+                        },
+                        "stateMutability": "pure",
+                        "visibility": "external",
+                        "vyper_metadata": null
+                    },
+                    {
+                        "contractName": "MathLibHarness",
+                        "fullArgs": [
+                            {
+                                "location": "stack",
+                                "typeDesc": {
+                                    "primitiveName": "uint256",
+                                    "type": "Primitive"
+                                }
+                            },
+                            {
+                                "location": "stack",
+                                "typeDesc": {
+                                    "primitiveName": "uint256",
+                                    "type": "Primitive"
+                                }
+                            }
+                        ],
+                        "isLibrary": false,
+                        "name": "mulDiv",
+                        "notpayable": true,
+                        "originalFile": "certora/harness/MathLibHarness.sol",
+                        "paramNames": [
+                            "a",
+                            "b"
+                        ],
+                        "returns": [
+                            {
+                                "location": "stack",
+                                "typeDesc": {
+                                    "primitiveName": "uint256",
+                                    "type": "Primitive"
+                                }
+                            }
+                        ],
+                        "sighash": "e43972ac",
+                        "sourceBytes": {
+                            "begin": 4914,
+                            "size": 136
+                        },
+                        "stateMutability": "pure",
+                        "visibility": "external",
+                        "vyper_metadata": null
+                    }
+                ],
+                "bytecode": "608060405234801561000f575f80fd5b50600436106101c2575f3560e01c80637ae2b5c7116100f7578063e1a4521811610095578063e51d375a1161006f578063e51d375a14610526578063ee97b68914610544578063f24390fa14610574578063fe818b4314610592576101c2565b8063e1a45218146104ba578063e43972ac146104d8578063e4c52f1314610508576101c2565b8063acb1b231116100d1578063acb1b23114610442578063b918ee2514610460578063c47736e41461047e578063cca71e0e1461049c576101c2565b80637ae2b5c7146103c4578063a474adec146103f4578063aaf5eb6814610424576101c2565b806348073b6311610164578063609a99591161013e578063609a99591461033a57806362dd4c64146103585780636d5433e6146103765780636e99d52f146103a6576101c2565b806348073b63146102bc5780634df35a0e146102ec5780635f4866fb1461030a576101c2565b8063374b67c1116101a0578063374b67c1146102445780633d92f4e214610262578063432fa08614610280578063447748701461029e576101c2565b80630b3ad234146101c65780631dff29d7146101e45780632d919b9514610214575b5f80fd5b6101ce6105c2565b6040516101db9190611012565b60405180910390f35b6101fe60048036038101906101f99190611059565b6105d0565b60405161020b9190611012565b60405180910390f35b61022e600480360381019061022991906110ca565b6105e3565b60405161023b9190611012565b60405180910390f35b61024c6105f6565b6040516102599190611012565b60405180910390f35b61026a610605565b6040516102779190611012565b60405180910390f35b610288610614565b6040516102959190611012565b60405180910390f35b6102a6610623565b6040516102b39190611012565b60405180910390f35b6102d660048036038101906102d19190611059565b610631565b6040516102e39190611012565b60405180910390f35b6102f4610644565b6040516103019190611012565b60405180910390f35b610324600480360381019061031f9190611059565b61064c565b6040516103319190611012565b60405180910390f35b61034261065f565b60405161034f9190611012565b60405180910390f35b61036061066e565b60405161036d9190611012565b60405180910390f35b610390600480360381019061038b9190611059565b61067c565b60405161039d9190611012565b60405180910390f35b6103ae61068f565b6040516103bb9190611012565b60405180910390f35b6103de60048036038101906103d99190611059565b610699565b6040516103eb9190611012565b60405180910390f35b61040e60048036038101906104099190611059565b6106ac565b60405161041b9190611012565b60405180910390f35b61042c6106bf565b6040516104399190611012565b60405180910390f35b61044a6106ce565b6040516104579190611012565b60405180910390f35b6104686106dd565b6040516104759190611012565b60405180910390f35b6104866106ec565b6040516104939190611012565b60405180910390f35b6104a46106fb565b6040516104b19190611012565b60405180910390f35b6104c2610709565b6040516104cf9190611012565b60405180910390f35b6104f260048036038101906104ed9190611059565b610712565b6040516104ff9190611012565b60405180910390f35b610510610725565b60405161051d9190611012565b60405180910390f35b61052e610733565b60405161053b9190611012565b60405180910390f35b61055e60048036038101906105599190611108565b610742565b60405161056b9190611012565b60405180910390f35b61057c610753565b6040516105899190611012565b60405180910390f35b6105ac60048036038101906105a79190611059565b610762565b6040516105b99190611012565b60405180910390f35b5f662386f26fc10000905090565b5f6105db8383610775565b905092915050565b5f6105ee8383610869565b905092915050565b5f670f43fc2c04ee0000905090565b5f6701cdda4faccd0000905090565b5f670de0b6b3a7640000905090565b5f66470de4df820000905090565b5f61063c83836109cc565b905092915050565b5f600a905090565b5f6106578383610a87565b905092915050565b5f6701aa535d3d0c0000905090565b5f6620915682a7f000905090565b5f6106878383610b7b565b905092915050565b5f62093a80905090565b5f6106a48383610c26565b905092915050565b5f6106b78383610cd1565b905092915050565b5f670de0b6b3a7640000905090565b5f670e00b027725e8000905090565b5f6702c68af0bb140000905090565b5f670b1a2bc2ec500000905090565b5f66267c8e5cda1000905090565b5f612710905090565b5f61071d8383610d8c565b905092915050565b5f662386f26fc10000905090565b5f670186cc6acd4b0000905090565b5f61074c82610e47565b9050919050565b5f6702c68af0bb140000905090565b5f61076d8383610eef565b905092915050565b5f64f196e500037fffffff6e4604afefe123321beef1b01fffffffffffffffffffffffff000300005260027fffffff6e4604afefe123321beef1b01fffffffffffffffffffffffff000300015260097fffffff6e4604afefe123321beef1b01fffffffffffffffffffffffff0003000552817fffffff6e4604afefe123321beef1b01fffffffffffffffffffffffff00036001525f8203610842576040517f23d359a300000000000000000000000000000000000000000000000000000000815260040160405180910390fd5b81670de0b6b3a7640000846108579190611160565b61086191906111ce565b905092915050565b5f64f196e500067fffffff6e4604afefe123321beef1b01fffffffffffffffffffffffff000600005260027fffffff6e4604afefe123321beef1b01fffffffffffffffffffffffff000600015260097fffffff6e4604afefe123321beef1b01fffffffffffffffffffffffff0006000552817fffffff6e4604afefe123321beef1b01fffffffffffffffffffffffff00066001525f8212610931576127108261271061091591906111fe565b846109209190611160565b61092a91906111ce565b90506109c6565b5f8261093c90611231565b9050807fffffff6e4604afefe123321beef1b02fffffffffffffffffffffffff0000000152612710811061099c576040517f35278d1200000000000000000000000000000000000000000000000000000000815260040160405180910390fd5b612710816127106109ad9190611277565b856109b89190611160565b6109c291906111ce565b9150505b92915050565b5f64f196e500017fffffff6e4604afefe123321beef1b01fffffffffffffffffffffffff000100005260027fffffff6e4604afefe123321beef1b01fffffffffffffffffffffffff000100015260097fffffff6e4604afefe123321beef1b01fffffffffffffffffffffffff0001000552817fffffff6e4604afefe123321beef1b01fffffffffffffffffffffffff0001600152670de0b6b3a76400008284610a759190611160565b610a7f91906111ce565b905092915050565b5f64f196e500007fffffff6e4604afefe123321beef1b01fffffffffffffffffffffffff000000005260027fffffff6e4604afefe123321beef1b01fffffffffffffffffffffffff000000015260097fffffff6e4604afefe123321beef1b01fffffffffffffffffffffffff0000000552817fffffff6e4604afefe123321beef1b01fffffffffffffffffffffffff00006001525f8203610b54576040517f23d359a300000000000000000000000000000000000000000000000000000000815260040160405180910390fd5b81670de0b6b3a764000084610b699190611160565b610b7391906111ce565b905092915050565b5f64f196e500097fffffff6e4604afefe123321beef1b01fffffffffffffffffffffffff000900005260027fffffff6e4604afefe123321beef1b01fffffffffffffffffffffffff000900015260097fffffff6e4604afefe123321beef1b01fffffffffffffffffffffffff0009000552817fffffff6e4604afefe123321beef1b01fffffffffffffffffffffffff0009600152818311610c1c5781610c1e565b825b905092915050565b5f64f196e500087fffffff6e4604afefe123321beef1b01fffffffffffffffffffffffff000800005260027fffffff6e4604afefe123321beef1b01fffffffffffffffffffffffff000800015260097fffffff6e4604afefe123321beef1b01fffffffffffffffffffffffff0008000552817fffffff6e4604afefe123321beef1b01fffffffffffffffffffffffff0008600152818310610cc75781610cc9565b825b905092915050565b5f64f196e500027fffffff6e4604afefe123321beef1b01fffffffffffffffffffffffff000200005260027fffffff6e4604afefe123321beef1b01fffffffffffffffffffffffff000200015260097fffffff6e4604afefe123321beef1b01fffffffffffffffffffffffff0002000552817fffffff6e4604afefe123321beef1b01fffffffffffffffffffffffff0002600152670de0b6b3a76400008284610d7a9190611160565b610d8491906111ce565b905092915050565b5f64f196e500077fffffff6e4604afefe123321beef1b01fffffffffffffffffffffffff000700005260027fffffff6e4604afefe123321beef1b01fffffffffffffffffffffffff000700015260097fffffff6e4604afefe123321beef1b01fffffffffffffffffffffffff0007000552817fffffff6e4604afefe123321beef1b01fffffffffffffffffffffffff0007600152670de0b6b3a76400008284610e359190611160565b610e3f91906111ce565b905092915050565b5f64f196e500057fffffff6e4604afefe123321beef1b01fffffffffffffffffffffffff000500005260017fffffff6e4604afefe123321beef1b01fffffffffffffffffffffffff000500015260017fffffff6e4604afefe123321beef1b01fffffffffffffffffffffffff0005000552817fffffff6e4604afefe123321beef1b01fffffffffffffffffffffffff0005600052600a82610ee89190611160565b9050919050565b5f64f196e500047fffffff6e4604afefe123321beef1b01fffffffffffffffffffffffff000400005260027fffffff6e4604afefe123321beef1b01fffffffffffffffffffffffff000400015260097fffffff6e4604afefe123321beef1b01fffffffffffffffffffffffff0004000552817fffffff6e4604afefe123321beef1b01fffffffffffffffffffffffff00046001525f8203610fbc576040517f23d359a300000000000000000000000000000000000000000000000000000000815260040160405180910390fd5b81600183670de0b6b3a764000086610fd49190611160565b610fde91906111fe565b610fe89190611277565b610ff291906111ce565b905092915050565b5f819050919050565b61100c81610ffa565b82525050565b5f6020820190506110255f830184611003565b92915050565b5f80fd5b61103881610ffa565b8114611042575f80fd5b50565b5f813590506110538161102f565b92915050565b5f806040838503121561106f5761106e61102b565b5b5f61107c85828601611045565b925050602061108d85828601611045565b9150509250929050565b5f819050919050565b6110a981611097565b81146110b3575f80fd5b50565b5f813590506110c4816110a0565b92915050565b5f80604083850312156110e0576110df61102b565b5b5f6110ed85828601611045565b92505060206110fe858286016110b6565b9150509250929050565b5f6020828403121561111d5761111c61102b565b5b5f61112a84828501611045565b91505092915050565b7f4e487b71000000000000000000000000000000000000000000000000000000005f52601160045260245ffd5b5f61116a82610ffa565b915061117583610ffa565b925082820261118381610ffa565b9150828204841483151761119a57611199611133565b5b5092915050565b7f4e487b71000000000000000000000000000000000000000000000000000000005f52601260045260245ffd5b5f6111d882610ffa565b91506111e383610ffa565b9250826111f3576111f26111a1565b5b828204905092915050565b5f61120882610ffa565b915061121383610ffa565b925082820190508082111561122b5761122a611133565b5b92915050565b5f61123b82611097565b91507f8000000000000000000000000000000000000000000000000000000000000000820361126d5761126c611133565b5b815f039050919050565b5f61128182610ffa565b915061128c83610ffa565b92508282039050818111156112a4576112a3611133565b5b9291505056fea2646970667358221220b48ceec207fa777f324295881f96968424e1b7c45bfbd6a29893b970f6481ea364736f6c63430008140033",
+                "compilerName": "solc",
+                "compilerParameters": {
+                    "optimizerOn": false,
+                    "optimizerRuns": null,
+                    "type": "SolcParameters",
+                    "viaIR": false
+                },
+                "compilerVersion": "0.8.20",
+                "constructorBytecode": "608060405234801561000f575f80fd5b506112e08061001d5f395ff3fe608060405234801561000f575f80fd5b50600436106101c2575f3560e01c80637ae2b5c7116100f7578063e1a4521811610095578063e51d375a1161006f578063e51d375a14610526578063ee97b68914610544578063f24390fa14610574578063fe818b4314610592576101c2565b8063e1a45218146104ba578063e43972ac146104d8578063e4c52f1314610508576101c2565b8063acb1b231116100d1578063acb1b23114610442578063b918ee2514610460578063c47736e41461047e578063cca71e0e1461049c576101c2565b80637ae2b5c7146103c4578063a474adec146103f4578063aaf5eb6814610424576101c2565b806348073b6311610164578063609a99591161013e578063609a99591461033a57806362dd4c64146103585780636d5433e6146103765780636e99d52f146103a6576101c2565b806348073b63146102bc5780634df35a0e146102ec5780635f4866fb1461030a576101c2565b8063374b67c1116101a0578063374b67c1146102445780633d92f4e214610262578063432fa08614610280578063447748701461029e576101c2565b80630b3ad234146101c65780631dff29d7146101e45780632d919b9514610214575b5f80fd5b6101ce6105c2565b6040516101db9190611012565b60405180910390f35b6101fe60048036038101906101f99190611059565b6105d0565b60405161020b9190611012565b60405180910390f35b61022e600480360381019061022991906110ca565b6105e3565b60405161023b9190611012565b60405180910390f35b61024c6105f6565b6040516102599190611012565b60405180910390f35b61026a610605565b6040516102779190611012565b60405180910390f35b610288610614565b6040516102959190611012565b60405180910390f35b6102a6610623565b6040516102b39190611012565b60405180910390f35b6102d660048036038101906102d19190611059565b610631565b6040516102e39190611012565b60405180910390f35b6102f4610644565b6040516103019190611012565b60405180910390f35b610324600480360381019061031f9190611059565b61064c565b6040516103319190611012565b60405180910390f35b61034261065f565b60405161034f9190611012565b60405180910390f35b61036061066e565b60405161036d9190611012565b60405180910390f35b610390600480360381019061038b9190611059565b61067c565b60405161039d9190611012565b60405180910390f35b6103ae61068f565b6040516103bb9190611012565b60405180910390f35b6103de60048036038101906103d99190611059565b610699565b6040516103eb9190611012565b60405180910390f35b61040e60048036038101906104099190611059565b6106ac565b60405161041b9190611012565b60405180910390f35b61042c6106bf565b6040516104399190611012565b60405180910390f35b61044a6106ce565b6040516104579190611012565b60405180910390f35b6104686106dd565b6040516104759190611012565b60405180910390f35b6104866106ec565b6040516104939190611012565b60405180910390f35b6104a46106fb565b6040516104b19190611012565b60405180910390f35b6104c2610709565b6040516104cf9190611012565b60405180910390f35b6104f260048036038101906104ed9190611059565b610712565b6040516104ff9190611012565b60405180910390f35b610510610725565b60405161051d9190611012565b60405180910390f35b61052e610733565b60405161053b9190611012565b60405180910390f35b61055e60048036038101906105599190611108565b610742565b60405161056b9190611012565b60405180910390f35b61057c610753565b6040516105899190611012565b60405180910390f35b6105ac60048036038101906105a79190611059565b610762565b6040516105b99190611012565b60405180910390f35b5f662386f26fc10000905090565b5f6105db8383610775565b905092915050565b5f6105ee8383610869565b905092915050565b5f670f43fc2c04ee0000905090565b5f6701cdda4faccd0000905090565b5f670de0b6b3a7640000905090565b5f66470de4df820000905090565b5f61063c83836109cc565b905092915050565b5f600a905090565b5f6106578383610a87565b905092915050565b5f6701aa535d3d0c0000905090565b5f6620915682a7f000905090565b5f6106878383610b7b565b905092915050565b5f62093a80905090565b5f6106a48383610c26565b905092915050565b5f6106b78383610cd1565b905092915050565b5f670de0b6b3a7640000905090565b5f670e00b027725e8000905090565b5f6702c68af0bb140000905090565b5f670b1a2bc2ec500000905090565b5f66267c8e5cda1000905090565b5f612710905090565b5f61071d8383610d8c565b905092915050565b5f662386f26fc10000905090565b5f670186cc6acd4b0000905090565b5f61074c82610e47565b9050919050565b5f6702c68af0bb140000905090565b5f61076d8383610eef565b905092915050565b5f64f196e500037fffffff6e4604afefe123321beef1b01fffffffffffffffffffffffff000300005260027fffffff6e4604afefe123321beef1b01fffffffffffffffffffffffff000300015260097fffffff6e4604afefe123321beef1b01fffffffffffffffffffffffff0003000552817fffffff6e4604afefe123321beef1b01fffffffffffffffffffffffff00036001525f8203610842576040517f23d359a300000000000000000000000000000000000000000000000000000000815260040160405180910390fd5b81670de0b6b3a7640000846108579190611160565b61086191906111ce565b905092915050565b5f64f196e500067fffffff6e4604afefe123321beef1b01fffffffffffffffffffffffff000600005260027fffffff6e4604afefe123321beef1b01fffffffffffffffffffffffff000600015260097fffffff6e4604afefe123321beef1b01fffffffffffffffffffffffff0006000552817fffffff6e4604afefe123321beef1b01fffffffffffffffffffffffff00066001525f8212610931576127108261271061091591906111fe565b846109209190611160565b61092a91906111ce565b90506109c6565b5f8261093c90611231565b9050807fffffff6e4604afefe123321beef1b02fffffffffffffffffffffffff0000000152612710811061099c576040517f35278d1200000000000000000000000000000000000000000000000000000000815260040160405180910390fd5b612710816127106109ad9190611277565b856109b89190611160565b6109c291906111ce565b9150505b92915050565b5f64f196e500017fffffff6e4604afefe123321beef1b01fffffffffffffffffffffffff000100005260027fffffff6e4604afefe123321beef1b01fffffffffffffffffffffffff000100015260097fffffff6e4604afefe123321beef1b01fffffffffffffffffffffffff0001000552817fffffff6e4604afefe123321beef1b01fffffffffffffffffffffffff0001600152670de0b6b3a76400008284610a759190611160565b610a7f91906111ce565b905092915050565b5f64f196e500007fffffff6e4604afefe123321beef1b01fffffffffffffffffffffffff000000005260027fffffff6e4604afefe123321beef1b01fffffffffffffffffffffffff000000015260097fffffff6e4604afefe123321beef1b01fffffffffffffffffffffffff0000000552817fffffff6e4604afefe123321beef1b01fffffffffffffffffffffffff00006001525f8203610b54576040517f23d359a300000000000000000000000000000000000000000000000000000000815260040160405180910390fd5b81670de0b6b3a764000084610b699190611160565b610b7391906111ce565b905092915050565b5f64f196e500097fffffff6e4604afefe123321beef1b01fffffffffffffffffffffffff000900005260027fffffff6e4604afefe123321beef1b01fffffffffffffffffffffffff000900015260097fffffff6e4604afefe123321beef1b01fffffffffffffffffffffffff0009000552817fffffff6e4604afefe123321beef1b01fffffffffffffffffffffffff0009600152818311610c1c5781610c1e565b825b905092915050565b5f64f196e500087fffffff6e4604afefe123321beef1b01fffffffffffffffffffffffff000800005260027fffffff6e4604afefe123321beef1b01fffffffffffffffffffffffff000800015260097fffffff6e4604afefe123321beef1b01fffffffffffffffffffffffff0008000552817fffffff6e4604afefe123321beef1b01fffffffffffffffffffffffff0008600152818310610cc75781610cc9565b825b905092915050565b5f64f196e500027fffffff6e4604afefe123321beef1b01fffffffffffffffffffffffff000200005260027fffffff6e4604afefe123321beef1b01fffffffffffffffffffffffff000200015260097fffffff6e4604afefe123321beef1b01fffffffffffffffffffffffff0002000552817fffffff6e4604afefe123321beef1b01fffffffffffffffffffffffff0002600152670de0b6b3a76400008284610d7a9190611160565b610d8491906111ce565b905092915050565b5f64f196e500077fffffff6e4604afefe123321beef1b01fffffffffffffffffffffffff000700005260027fffffff6e4604afefe123321beef1b01fffffffffffffffffffffffff000700015260097fffffff6e4604afefe123321beef1b01fffffffffffffffffffffffff0007000552817fffffff6e4604afefe123321beef1b01fffffffffffffffffffffffff0007600152670de0b6b3a76400008284610e359190611160565b610e3f91906111ce565b905092915050565b5f64f196e500057fffffff6e4604afefe123321beef1b01fffffffffffffffffffffffff000500005260017fffffff6e4604afefe123321beef1b01fffffffffffffffffffffffff000500015260017fffffff6e4604afefe123321beef1b01fffffffffffffffffffffffff0005000552817fffffff6e4604afefe123321beef1b01fffffffffffffffffffffffff0005600052600a82610ee89190611160565b9050919050565b5f64f196e500047fffffff6e4604afefe123321beef1b01fffffffffffffffffffffffff000400005260027fffffff6e4604afefe123321beef1b01fffffffffffffffffffffffff000400015260097fffffff6e4604afefe123321beef1b01fffffffffffffffffffffffff0004000552817fffffff6e4604afefe123321beef1b01fffffffffffffffffffffffff00046001525f8203610fbc576040517f23d359a300000000000000000000000000000000000000000000000000000000815260040160405180910390fd5b81600183670de0b6b3a764000086610fd49190611160565b610fde91906111fe565b610fe89190611277565b610ff291906111ce565b905092915050565b5f819050919050565b61100c81610ffa565b82525050565b5f6020820190506110255f830184611003565b92915050565b5f80fd5b61103881610ffa565b8114611042575f80fd5b50565b5f813590506110538161102f565b92915050565b5f806040838503121561106f5761106e61102b565b5b5f61107c85828601611045565b925050602061108d85828601611045565b9150509250929050565b5f819050919050565b6110a981611097565b81146110b3575f80fd5b50565b5f813590506110c4816110a0565b92915050565b5f80604083850312156110e0576110df61102b565b5b5f6110ed85828601611045565b92505060206110fe858286016110b6565b9150509250929050565b5f6020828403121561111d5761111c61102b565b5b5f61112a84828501611045565b91505092915050565b7f4e487b71000000000000000000000000000000000000000000000000000000005f52601160045260245ffd5b5f61116a82610ffa565b915061117583610ffa565b925082820261118381610ffa565b9150828204841483151761119a57611199611133565b5b5092915050565b7f4e487b71000000000000000000000000000000000000000000000000000000005f52601260045260245ffd5b5f6111d882610ffa565b91506111e383610ffa565b9250826111f3576111f26111a1565b5b828204905092915050565b5f61120882610ffa565b915061121383610ffa565b925082820190508082111561122b5761122a611133565b5b92915050565b5f61123b82611097565b91507f8000000000000000000000000000000000000000000000000000000000000000820361126d5761126c611133565b5b815f039050919050565b5f61128182610ffa565b915061128c83610ffa565b92508282039050818111156112a4576112a3611133565b5b9291505056fea2646970667358221220b48ceec207fa777f324295881f96968424e1b7c45bfbd6a29893b970f6481ea364736f6c63430008140033",
+                "constructorSrcmap": "308:5106:0:-:0;;;;;;;;;;;;;;;;;;;",
+                "extensionContracts": [],
+                "file": "certora/harness/MathLibHarness.sol",
+                "immutables": [],
+                "internalFuncs": [],
+                "internalFunctionHarnesses": {},
+                "internalFunctionStarts": [
+                    4099,
+                    1541,
+                    2695,
+                    4360,
+                    1801,
+                    3468,
+                    1679,
+                    1810,
+                    4114,
+                    1556,
+                    4247,
+                    1689,
+                    4256,
+                    4513,
+                    1571,
+                    1829,
+                    3110,
+                    4139,
+                    1708,
+                    4143,
+                    1585,
+                    4657,
+                    1843,
+                    4403,
+                    4278,
+                    1727,
+                    1474,
+                    1858,
+                    1604,
+                    2939,
+                    4165,
+                    3655,
+                    4298,
+                    1612,
+                    2508,
+                    1742,
+                    4558,
+                    1488,
+                    3281,
+                    1875,
+                    4185,
+                    1757,
+                    1631,
+                    4448,
+                    1890,
+                    1507,
+                    2153,
+                    1772,
+                    1646,
+                    3823,
+                    1909,
+                    1526,
+                    4727,
+                    4090,
+                    1787,
+                    1660,
+                    4606
+                ],
+                "internalFunctions": {
+                    "0xf196e50000": {
+                        "canonicalId": "src/libraries/MathLib.sol|MathLib",
+                        "declaringContract": "MathLib",
+                        "method": {
+                            "contractName": "MathLib",
+                            "fullArgs": [
+                                {
+                                    "location": "stack",
+                                    "typeDesc": {
+                                        "primitiveName": "uint256",
+                                        "type": "Primitive"
+                                    }
+                                },
+                                {
+                                    "location": "stack",
+                                    "typeDesc": {
+                                        "primitiveName": "uint256",
+                                        "type": "Primitive"
+                                    }
+                                }
+                            ],
+                            "isLibrary": true,
+                            "name": "calculateBackingRatio",
+                            "notpayable": true,
+                            "originalFile": "src/libraries/MathLib.sol",
+                            "paramNames": [
+                                "vaultValue",
+                                "totalSupply"
+                            ],
+                            "returns": [
+                                {
+                                    "location": "stack",
+                                    "typeDesc": {
+                                        "primitiveName": "uint256",
+                                        "type": "Primitive"
+                                    }
+                                }
+                            ],
+                            "sighash": "0",
+                            "sourceBytes": {
+                                "begin": 2466,
+                                "size": 256
+                            },
+                            "stateMutability": "pure",
+                            "visibility": "internal",
+                            "vyper_metadata": null
+                        }
+                    },
+                    "0xf196e50001": {
+                        "canonicalId": "src/libraries/MathLib.sol|MathLib",
+                        "declaringContract": "MathLib",
+                        "method": {
+                            "contractName": "MathLib",
+                            "fullArgs": [
+                                {
+                                    "location": "stack",
+                                    "typeDesc": {
+                                        "primitiveName": "uint256",
+                                        "type": "Primitive"
+                                    }
+                                },
+                                {
+                                    "location": "stack",
+                                    "typeDesc": {
+                                        "primitiveName": "uint256",
+                                        "type": "Primitive"
+                                    }
+                                }
+                            ],
+                            "isLibrary": true,
+                            "name": "calculateBalanceFromShares",
+                            "notpayable": true,
+                            "originalFile": "src/libraries/MathLib.sol",
+                            "paramNames": [
+                                "shares",
+                                "rebaseIndex"
+                            ],
+                            "returns": [
+                                {
+                                    "location": "stack",
+                                    "typeDesc": {
+                                        "primitiveName": "uint256",
+                                        "type": "Primitive"
+                                    }
+                                }
+                            ],
+                            "sighash": "0",
+                            "sourceBytes": {
+                                "begin": 3048,
+                                "size": 193
+                            },
+                            "stateMutability": "pure",
+                            "visibility": "internal",
+                            "vyper_metadata": null
+                        }
+                    },
+                    "0xf196e50002": {
+                        "canonicalId": "src/libraries/MathLib.sol|MathLib",
+                        "declaringContract": "MathLib",
+                        "method": {
+                            "contractName": "MathLib",
+                            "fullArgs": [
+                                {
+                                    "location": "stack",
+                                    "typeDesc": {
+                                        "primitiveName": "uint256",
+                                        "type": "Primitive"
+                                    }
+                                },
+                                {
+                                    "location": "stack",
+                                    "typeDesc": {
+                                        "primitiveName": "uint256",
+                                        "type": "Primitive"
+                                    }
+                                }
+                            ],
+                            "isLibrary": true,
+                            "name": "calculateTotalSupply",
+                            "notpayable": true,
+                            "originalFile": "src/libraries/MathLib.sol",
+                            "paramNames": [
+                                "totalShares",
+                                "rebaseIndex"
+                            ],
+                            "returns": [
+                                {
+                                    "location": "stack",
+                                    "typeDesc": {
+                                        "primitiveName": "uint256",
+                                        "type": "Primitive"
+                                    }
+                                }
+                            ],
+                            "sighash": "0",
+                            "sourceBytes": {
+                                "begin": 4808,
+                                "size": 201
+                            },
+                            "stateMutability": "pure",
+                            "visibility": "internal",
+                            "vyper_metadata": null
+                        }
+                    },
+                    "0xf196e50003": {
+                        "canonicalId": "src/libraries/MathLib.sol|MathLib",
+                        "declaringContract": "MathLib",
+                        "method": {
+                            "contractName": "MathLib",
+                            "fullArgs": [
+                                {
+                                    "location": "stack",
+                                    "typeDesc": {
+                                        "primitiveName": "uint256",
+                                        "type": "Primitive"
+                                    }
+                                },
+                                {
+                                    "location": "stack",
+                                    "typeDesc": {
+                                        "primitiveName": "uint256",
+                                        "type": "Primitive"
+                                    }
+                                }
+                            ],
+                            "isLibrary": true,
+                            "name": "calculateSharesFromBalance",
+                            "notpayable": true,
+                            "originalFile": "src/libraries/MathLib.sol",
+                            "paramNames": [
+                                "balance",
+                                "rebaseIndex"
+                            ],
+                            "returns": [
+                                {
+                                    "location": "stack",
+                                    "typeDesc": {
+                                        "primitiveName": "uint256",
+                                        "type": "Primitive"
+                                    }
+                                }
+                            ],
+                            "sighash": "0",
+                            "sourceBytes": {
+                                "begin": 3540,
+                                "size": 249
+                            },
+                            "stateMutability": "pure",
+                            "visibility": "internal",
+                            "vyper_metadata": null
+                        }
+                    },
+                    "0xf196e50004": {
+                        "canonicalId": "src/libraries/MathLib.sol|MathLib",
+                        "declaringContract": "MathLib",
+                        "method": {
+                            "contractName": "MathLib",
+                            "fullArgs": [
+                                {
+                                    "location": "stack",
+                                    "typeDesc": {
+                                        "primitiveName": "uint256",
+                                        "type": "Primitive"
+                                    }
+                                },
+                                {
+                                    "location": "stack",
+                                    "typeDesc": {
+                                        "primitiveName": "uint256",
+                                        "type": "Primitive"
+                                    }
+                                }
+                            ],
+                            "isLibrary": true,
+                            "name": "calculateSharesFromBalanceCeil",
+                            "notpayable": true,
+                            "originalFile": "src/libraries/MathLib.sol",
+                            "paramNames": [
+                                "balance",
+                                "rebaseIndex"
+                            ],
+                            "returns": [
+                                {
+                                    "location": "stack",
+                                    "typeDesc": {
+                                        "primitiveName": "uint256",
+                                        "type": "Primitive"
+                                    }
+                                }
+                            ],
+                            "sighash": "0",
+                            "sourceBytes": {
+                                "begin": 4184,
+                                "size": 311
+                            },
+                            "stateMutability": "pure",
+                            "visibility": "internal",
+                            "vyper_metadata": null
+                        }
+                    },
+                    "0xf196e50005": {
+                        "canonicalId": "src/libraries/MathLib.sol|MathLib",
+                        "declaringContract": "MathLib",
+                        "method": {
+                            "contractName": "MathLib",
+                            "fullArgs": [
+                                {
+                                    "location": "stack",
+                                    "typeDesc": {
+                                        "primitiveName": "uint256",
+                                        "type": "Primitive"
+                                    }
+                                }
+                            ],
+                            "isLibrary": true,
+                            "name": "calculateDepositCap",
+                            "notpayable": true,
+                            "originalFile": "src/libraries/MathLib.sol",
+                            "paramNames": [
+                                "reserveValue"
+                            ],
+                            "returns": [
+                                {
+                                    "location": "stack",
+                                    "typeDesc": {
+                                        "primitiveName": "uint256",
+                                        "type": "Primitive"
+                                    }
+                                }
+                            ],
+                            "sighash": "0",
+                            "sourceBytes": {
+                                "begin": 5291,
+                                "size": 168
+                            },
+                            "stateMutability": "pure",
+                            "visibility": "internal",
+                            "vyper_metadata": null
+                        }
+                    },
+                    "0xf196e50006": {
+                        "canonicalId": "src/libraries/MathLib.sol|MathLib",
+                        "declaringContract": "MathLib",
+                        "method": {
+                            "contractName": "MathLib",
+                            "fullArgs": [
+                                {
+                                    "location": "stack",
+                                    "typeDesc": {
+                                        "primitiveName": "uint256",
+                                        "type": "Primitive"
+                                    }
+                                },
+                                {
+                                    "location": "stack",
+                                    "typeDesc": {
+                                        "primitiveName": "int256",
+                                        "type": "Primitive"
+                                    }
+                                }
+                            ],
+                            "isLibrary": true,
+                            "name": "applyPercentage",
+                            "notpayable": true,
+                            "originalFile": "src/libraries/MathLib.sol",
+                            "paramNames": [
+                                "value",
+                                "percentageBps"
+                            ],
+                            "returns": [
+                                {
+                                    "location": "stack",
+                                    "typeDesc": {
+                                        "primitiveName": "uint256",
+                                        "type": "Primitive"
+                                    }
+                                }
+                            ],
+                            "sighash": "0",
+                            "sourceBytes": {
+                                "begin": 5719,
+                                "size": 571
+                            },
+                            "stateMutability": "pure",
+                            "visibility": "internal",
+                            "vyper_metadata": null
+                        }
+                    },
+                    "0xf196e50007": {
+                        "canonicalId": "src/libraries/MathLib.sol|MathLib",
+                        "declaringContract": "MathLib",
+                        "method": {
+                            "contractName": "MathLib",
+                            "fullArgs": [
+                                {
+                                    "location": "stack",
+                                    "typeDesc": {
+                                        "primitiveName": "uint256",
+                                        "type": "Primitive"
+                                    }
+                                },
+                                {
+                                    "location": "stack",
+                                    "typeDesc": {
+                                        "primitiveName": "uint256",
+                                        "type": "Primitive"
+                                    }
+                                }
+                            ],
+                            "isLibrary": true,
+                            "name": "mulDiv",
+                            "notpayable": true,
+                            "originalFile": "src/libraries/MathLib.sol",
+                            "paramNames": [
+                                "a",
+                                "b"
+                            ],
+                            "returns": [
+                                {
+                                    "location": "stack",
+                                    "typeDesc": {
+                                        "primitiveName": "uint256",
+                                        "type": "Primitive"
+                                    }
+                                }
+                            ],
+                            "sighash": "0",
+                            "sourceBytes": {
+                                "begin": 6494,
+                                "size": 142
+                            },
+                            "stateMutability": "pure",
+                            "visibility": "internal",
+                            "vyper_metadata": null
+                        }
+                    },
+                    "0xf196e50008": {
+                        "canonicalId": "src/libraries/MathLib.sol|MathLib",
+                        "declaringContract": "MathLib",
+                        "method": {
+                            "contractName": "MathLib",
+                            "fullArgs": [
+                                {
+                                    "location": "stack",
+                                    "typeDesc": {
+                                        "primitiveName": "uint256",
+                                        "type": "Primitive"
+                                    }
+                                },
+                                {
+                                    "location": "stack",
+                                    "typeDesc": {
+                                        "primitiveName": "uint256",
+                                        "type": "Primitive"
+                                    }
+                                }
+                            ],
+                            "isLibrary": true,
+                            "name": "min",
+                            "notpayable": true,
+                            "originalFile": "src/libraries/MathLib.sol",
+                            "paramNames": [
+                                "a",
+                                "b"
+                            ],
+                            "returns": [
+                                {
+                                    "location": "stack",
+                                    "typeDesc": {
+                                        "primitiveName": "uint256",
+                                        "type": "Primitive"
+                                    }
+                                }
+                            ],
+                            "sighash": "0",
+                            "sourceBytes": {
+                                "begin": 6709,
+                                "size": 104
+                            },
+                            "stateMutability": "pure",
+                            "visibility": "internal",
+                            "vyper_metadata": null
+                        }
+                    },
+                    "0xf196e50009": {
+                        "canonicalId": "src/libraries/MathLib.sol|MathLib",
+                        "declaringContract": "MathLib",
+                        "method": {
+                            "contractName": "MathLib",
+                            "fullArgs": [
+                                {
+                                    "location": "stack",
+                                    "typeDesc": {
+                                        "primitiveName": "uint256",
+                                        "type": "Primitive"
+                                    }
+                                },
+                                {
+                                    "location": "stack",
+                                    "typeDesc": {
+                                        "primitiveName": "uint256",
+                                        "type": "Primitive"
+                                    }
+                                }
+                            ],
+                            "isLibrary": true,
+                            "name": "max",
+                            "notpayable": true,
+                            "originalFile": "src/libraries/MathLib.sol",
+                            "paramNames": [
+                                "a",
+                                "b"
+                            ],
+                            "returns": [
+                                {
+                                    "location": "stack",
+                                    "typeDesc": {
+                                        "primitiveName": "uint256",
+                                        "type": "Primitive"
+                                    }
+                                }
+                            ],
+                            "sighash": "0",
+                            "sourceBytes": {
+                                "begin": 6886,
+                                "size": 104
+                            },
+                            "stateMutability": "pure",
+                            "visibility": "internal",
+                            "vyper_metadata": null
+                        }
+                    }
+                },
+                "is_static_address": false,
+                "lang": "Solidity",
+                "localAssignments": {
+                    "1": {
+                        "lhs": "absBps",
+                        "sourceLoc": {
+                            "begin": "6098",
+                            "len": "40",
+                            "source": "1"
+                        }
+                    }
+                },
+                "methods": [
+                    {
+                        "contractName": "MathLibHarness",
+                        "fullArgs": [],
+                        "isLibrary": false,
+                        "name": "SENIOR_TRIGGER_BACKING",
+                        "notpayable": true,
+                        "originalFile": "certora/harness/MathLibHarness.sol",
+                        "paramNames": [],
+                        "returns": [
+                            {
+                                "location": "stack",
+                                "typeDesc": {
+                                    "primitiveName": "uint256",
+                                    "type": "Primitive"
+                                }
+                            }
+                        ],
+                        "sighash": "432fa086",
+                        "sourceBytes": {
+                            "begin": 1769,
+                            "size": 120
+                        },
+                        "stateMutability": "pure",
+                        "visibility": "external",
+                        "vyper_metadata": null
+                    },
+                    {
+                        "contractName": "MathLibHarness",
+                        "fullArgs": [
+                            {
+                                "location": "stack",
+                                "typeDesc": {
+                                    "primitiveName": "uint256",
+                                    "type": "Primitive"
+                                }
+                            }
+                        ],
+                        "isLibrary": false,
+                        "name": "calculateDepositCap",
+                        "notpayable": true,
+                        "originalFile": "certora/harness/MathLibHarness.sol",
+                        "paramNames": [
+                            "reserveValue"
+                        ],
+                        "returns": [
+                            {
+                                "location": "stack",
+                                "typeDesc": {
+                                    "primitiveName": "uint256",
+                                    "type": "Primitive"
+                                }
+                            }
+                        ],
+                        "sighash": "ee97b689",
+                        "sourceBytes": {
+                            "begin": 4415,
+                            "size": 162
+                        },
+                        "stateMutability": "pure",
+                        "visibility": "external",
+                        "vyper_metadata": null
+                    },
+                    {
+                        "contractName": "MathLibHarness",
+                        "fullArgs": [],
+                        "isLibrary": false,
+                        "name": "MAX_MONTHLY_RATE",
+                        "notpayable": true,
+                        "originalFile": "certora/harness/MathLibHarness.sol",
+                        "paramNames": [],
+                        "returns": [
+                            {
+                                "location": "stack",
+                                "typeDesc": {
+                                    "primitiveName": "uint256",
+                                    "type": "Primitive"
+                                }
+                            }
+                        ],
+                        "sighash": "cca71e0e",
+                        "sourceBytes": {
+                            "begin": 1171,
+                            "size": 108
+                        },
+                        "stateMutability": "pure",
+                        "visibility": "external",
+                        "vyper_metadata": null
+                    },
+                    {
+                        "contractName": "MathLibHarness",
+                        "fullArgs": [],
+                        "isLibrary": false,
+                        "name": "DEPOSIT_CAP_MULTIPLIER",
+                        "notpayable": true,
+                        "originalFile": "certora/harness/MathLibHarness.sol",
+                        "paramNames": [],
+                        "returns": [
+                            {
+                                "location": "stack",
+                                "typeDesc": {
+                                    "primitiveName": "uint256",
+                                    "type": "Primitive"
+                                }
+                            }
+                        ],
+                        "sighash": "4df35a0e",
+                        "sourceBytes": {
+                            "begin": 2291,
+                            "size": 120
+                        },
+                        "stateMutability": "pure",
+                        "visibility": "external",
+                        "vyper_metadata": null
+                    },
+                    {
+                        "contractName": "MathLibHarness",
+                        "fullArgs": [],
+                        "isLibrary": false,
+                        "name": "MGMT_FEE_ANNUAL",
+                        "notpayable": true,
+                        "originalFile": "certora/harness/MathLibHarness.sol",
+                        "paramNames": [],
+                        "returns": [
+                            {
+                                "location": "stack",
+                                "typeDesc": {
+                                    "primitiveName": "uint256",
+                                    "type": "Primitive"
+                                }
+                            }
+                        ],
+                        "sighash": "e4c52f13",
+                        "sourceBytes": {
+                            "begin": 1289,
+                            "size": 106
+                        },
+                        "stateMutability": "pure",
+                        "visibility": "external",
+                        "vyper_metadata": null
+                    },
+                    {
+                        "contractName": "MathLibHarness",
+                        "fullArgs": [
+                            {
+                                "location": "stack",
+                                "typeDesc": {
+                                    "primitiveName": "uint256",
+                                    "type": "Primitive"
+                                }
+                            },
+                            {
+                                "location": "stack",
+                                "typeDesc": {
+                                    "primitiveName": "int256",
+                                    "type": "Primitive"
+                                }
+                            }
+                        ],
+                        "isLibrary": false,
+                        "name": "applyPercentage",
+                        "notpayable": true,
+                        "originalFile": "certora/harness/MathLibHarness.sol",
+                        "paramNames": [
+                            "value",
+                            "percentageBps"
+                        ],
+                        "returns": [
+                            {
+                                "location": "stack",
+                                "typeDesc": {
+                                    "primitiveName": "uint256",
+                                    "type": "Primitive"
+                                }
+                            }
+                        ],
+                        "sighash": "2d919b95",
+                        "sourceBytes": {
+                            "begin": 4644,
+                            "size": 185
+                        },
+                        "stateMutability": "pure",
+                        "visibility": "external",
+                        "vyper_metadata": null
+                    },
+                    {
+                        "contractName": "MathLibHarness",
+                        "fullArgs": [],
+                        "isLibrary": false,
+                        "name": "BPS_DENOMINATOR",
+                        "notpayable": true,
+                        "originalFile": "certora/harness/MathLibHarness.sol",
+                        "paramNames": [],
+                        "returns": [
+                            {
+                                "location": "stack",
+                                "typeDesc": {
+                                    "primitiveName": "uint256",
+                                    "type": "Primitive"
+                                }
+                            }
+                        ],
+                        "sighash": "e1a45218",
+                        "sourceBytes": {
+                            "begin": 519,
+                            "size": 106
+                        },
+                        "stateMutability": "pure",
+                        "visibility": "external",
+                        "vyper_metadata": null
+                    },
+                    {
+                        "contractName": "MathLibHarness",
+                        "fullArgs": [],
+                        "isLibrary": false,
+                        "name": "EARLY_WITHDRAWAL_PENALTY",
+                        "notpayable": true,
+                        "originalFile": "certora/harness/MathLibHarness.sol",
+                        "paramNames": [],
+                        "returns": [
+                            {
+                                "location": "stack",
+                                "typeDesc": {
+                                    "primitiveName": "uint256",
+                                    "type": "Primitive"
+                                }
+                            }
+                        ],
+                        "sighash": "b918ee25",
+                        "sourceBytes": {
+                            "begin": 1507,
+                            "size": 124
+                        },
+                        "stateMutability": "pure",
+                        "visibility": "external",
+                        "vyper_metadata": null
+                    },
+                    {
+                        "contractName": "MathLibHarness",
+                        "fullArgs": [
+                            {
+                                "location": "stack",
+                                "typeDesc": {
+                                    "primitiveName": "uint256",
+                                    "type": "Primitive"
+                                }
+                            },
+                            {
+                                "location": "stack",
+                                "typeDesc": {
+                                    "primitiveName": "uint256",
+                                    "type": "Primitive"
+                                }
+                            }
+                        ],
+                        "isLibrary": false,
+                        "name": "mulDiv",
+                        "notpayable": true,
+                        "originalFile": "certora/harness/MathLibHarness.sol",
+                        "paramNames": [
+                            "a",
+                            "b"
+                        ],
+                        "returns": [
+                            {
+                                "location": "stack",
+                                "typeDesc": {
+                                    "primitiveName": "uint256",
+                                    "type": "Primitive"
+                                }
+                            }
+                        ],
+                        "sighash": "e43972ac",
+                        "sourceBytes": {
+                            "begin": 4914,
+                            "size": 136
+                        },
+                        "stateMutability": "pure",
+                        "visibility": "external",
+                        "vyper_metadata": null
+                    },
+                    {
+                        "contractName": "MathLibHarness",
+                        "fullArgs": [],
+                        "isLibrary": false,
+                        "name": "COOLDOWN_PERIOD",
+                        "notpayable": true,
+                        "originalFile": "certora/harness/MathLibHarness.sol",
+                        "paramNames": [],
+                        "returns": [
+                            {
+                                "location": "stack",
+                                "typeDesc": {
+                                    "primitiveName": "uint256",
+                                    "type": "Primitive"
+                                }
+                            }
+                        ],
+                        "sighash": "6e99d52f",
+                        "sourceBytes": {
+                            "begin": 2421,
+                            "size": 106
+                        },
+                        "stateMutability": "pure",
+                        "visibility": "external",
+                        "vyper_metadata": null
+                    },
+                    {
+                        "contractName": "MathLibHarness",
+                        "fullArgs": [],
+                        "isLibrary": false,
+                        "name": "SENIOR_RESTORE_BACKING",
+                        "notpayable": true,
+                        "originalFile": "certora/harness/MathLibHarness.sol",
+                        "paramNames": [],
+                        "returns": [
+                            {
+                                "location": "stack",
+                                "typeDesc": {
+                                    "primitiveName": "uint256",
+                                    "type": "Primitive"
+                                }
+                            }
+                        ],
+                        "sighash": "acb1b231",
+                        "sourceBytes": {
+                            "begin": 1899,
+                            "size": 120
+                        },
+                        "stateMutability": "pure",
+                        "visibility": "external",
+                        "vyper_metadata": null
+                    },
+                    {
+                        "contractName": "MathLibHarness",
+                        "fullArgs": [],
+                        "isLibrary": false,
+                        "name": "MID_MONTHLY_RATE",
+                        "notpayable": true,
+                        "originalFile": "certora/harness/MathLibHarness.sol",
+                        "paramNames": [],
+                        "returns": [
+                            {
+                                "location": "stack",
+                                "typeDesc": {
+                                    "primitiveName": "uint256",
+                                    "type": "Primitive"
+                                }
+                            }
+                        ],
+                        "sighash": "0b3ad234",
+                        "sourceBytes": {
+                            "begin": 1053,
+                            "size": 108
+                        },
+                        "stateMutability": "pure",
+                        "visibility": "external",
+                        "vyper_metadata": null
+                    },
+                    {
+                        "contractName": "MathLibHarness",
+                        "fullArgs": [],
+                        "isLibrary": false,
+                        "name": "SENIOR_TARGET_BACKING",
+                        "notpayable": true,
+                        "originalFile": "certora/harness/MathLibHarness.sol",
+                        "paramNames": [],
+                        "returns": [
+                            {
+                                "location": "stack",
+                                "typeDesc": {
+                                    "primitiveName": "uint256",
+                                    "type": "Primitive"
+                                }
+                            }
+                        ],
+                        "sighash": "374b67c1",
+                        "sourceBytes": {
+                            "begin": 1641,
+                            "size": 118
+                        },
+                        "stateMutability": "pure",
+                        "visibility": "external",
+                        "vyper_metadata": null
+                    },
+                    {
+                        "contractName": "MathLibHarness",
+                        "fullArgs": [
+                            {
+                                "location": "stack",
+                                "typeDesc": {
+                                    "primitiveName": "uint256",
+                                    "type": "Primitive"
+                                }
+                            },
+                            {
+                                "location": "stack",
+                                "typeDesc": {
+                                    "primitiveName": "uint256",
+                                    "type": "Primitive"
+                                }
+                            }
+                        ],
+                        "isLibrary": false,
+                        "name": "calculateSharesFromBalanceCeil",
+                        "notpayable": true,
+                        "originalFile": "certora/harness/MathLibHarness.sol",
+                        "paramNames": [
+                            "balance",
+                            "rebaseIndex"
+                        ],
+                        "returns": [
+                            {
+                                "location": "stack",
+                                "typeDesc": {
+                                    "primitiveName": "uint256",
+                                    "type": "Primitive"
+                                }
+                            }
+                        ],
+                        "sighash": "fe818b43",
+                        "sourceBytes": {
+                            "begin": 3730,
+                            "size": 216
+                        },
+                        "stateMutability": "pure",
+                        "visibility": "external",
+                        "vyper_metadata": null
+                    },
+                    {
+                        "contractName": "MathLibHarness",
+                        "fullArgs": [
+                            {
+                                "location": "stack",
+                                "typeDesc": {
+                                    "primitiveName": "uint256",
+                                    "type": "Primitive"
+                                }
+                            },
+                            {
+                                "location": "stack",
+                                "typeDesc": {
+                                    "primitiveName": "uint256",
+                                    "type": "Primitive"
+                                }
+                            }
+                        ],
+                        "isLibrary": false,
+                        "name": "min",
+                        "notpayable": true,
+                        "originalFile": "certora/harness/MathLibHarness.sol",
+                        "paramNames": [
+                            "a",
+                            "b"
+                        ],
+                        "returns": [
+                            {
+                                "location": "stack",
+                                "typeDesc": {
+                                    "primitiveName": "uint256",
+                                    "type": "Primitive"
+                                }
+                            }
+                        ],
+                        "sighash": "7ae2b5c7",
+                        "sourceBytes": {
+                            "begin": 5123,
+                            "size": 108
+                        },
+                        "stateMutability": "pure",
+                        "visibility": "external",
+                        "vyper_metadata": null
+                    },
+                    {
+                        "contractName": "MathLibHarness",
+                        "fullArgs": [
+                            {
+                                "location": "stack",
+                                "typeDesc": {
+                                    "primitiveName": "uint256",
+                                    "type": "Primitive"
+                                }
+                            },
+                            {
+                                "location": "stack",
+                                "typeDesc": {
+                                    "primitiveName": "uint256",
+                                    "type": "Primitive"
+                                }
+                            }
+                        ],
+                        "isLibrary": false,
+                        "name": "calculateSharesFromBalance",
+                        "notpayable": true,
+                        "originalFile": "certora/harness/MathLibHarness.sol",
+                        "paramNames": [
+                            "balance",
+                            "rebaseIndex"
+                        ],
+                        "returns": [
+                            {
+                                "location": "stack",
+                                "typeDesc": {
+                                    "primitiveName": "uint256",
+                                    "type": "Primitive"
+                                }
+                            }
+                        ],
+                        "sighash": "1dff29d7",
+                        "sourceBytes": {
+                            "begin": 3385,
+                            "size": 208
+                        },
+                        "stateMutability": "pure",
+                        "visibility": "external",
+                        "vyper_metadata": null
+                    },
+                    {
+                        "contractName": "MathLibHarness",
+                        "fullArgs": [],
+                        "isLibrary": false,
+                        "name": "MID_APY",
+                        "notpayable": true,
+                        "originalFile": "certora/harness/MathLibHarness.sol",
+                        "paramNames": [],
+                        "returns": [
+                            {
+                                "location": "stack",
+                                "typeDesc": {
+                                    "primitiveName": "uint256",
+                                    "type": "Primitive"
+                                }
+                            }
+                        ],
+                        "sighash": "609a9959",
+                        "sourceBytes": {
+                            "begin": 735,
+                            "size": 90
+                        },
+                        "stateMutability": "pure",
+                        "visibility": "external",
+                        "vyper_metadata": null
+                    },
+                    {
+                        "contractName": "MathLibHarness",
+                        "fullArgs": [],
+                        "isLibrary": false,
+                        "name": "MIN_APY",
+                        "notpayable": true,
+                        "originalFile": "certora/harness/MathLibHarness.sol",
+                        "paramNames": [],
+                        "returns": [
+                            {
+                                "location": "stack",
+                                "typeDesc": {
+                                    "primitiveName": "uint256",
+                                    "type": "Primitive"
+                                }
+                            }
+                        ],
+                        "sighash": "e51d375a",
+                        "sourceBytes": {
+                            "begin": 635,
+                            "size": 90
+                        },
+                        "stateMutability": "pure",
+                        "visibility": "external",
+                        "vyper_metadata": null
+                    },
+                    {
+                        "contractName": "MathLibHarness",
+                        "fullArgs": [],
+                        "isLibrary": false,
+                        "name": "MAX_APY",
+                        "notpayable": true,
+                        "originalFile": "certora/harness/MathLibHarness.sol",
+                        "paramNames": [],
+                        "returns": [
+                            {
+                                "location": "stack",
+                                "typeDesc": {
+                                    "primitiveName": "uint256",
+                                    "type": "Primitive"
+                                }
+                            }
+                        ],
+                        "sighash": "3d92f4e2",
+                        "sourceBytes": {
+                            "begin": 835,
+                            "size": 90
+                        },
+                        "stateMutability": "pure",
+                        "visibility": "external",
+                        "vyper_metadata": null
+                    },
+                    {
+                        "contractName": "MathLibHarness",
+                        "fullArgs": [
+                            {
+                                "location": "stack",
+                                "typeDesc": {
+                                    "primitiveName": "uint256",
+                                    "type": "Primitive"
+                                }
+                            },
+                            {
+                                "location": "stack",
+                                "typeDesc": {
+                                    "primitiveName": "uint256",
+                                    "type": "Primitive"
+                                }
+                            }
+                        ],
+                        "isLibrary": false,
+                        "name": "calculateBalanceFromShares",
+                        "notpayable": true,
+                        "originalFile": "certora/harness/MathLibHarness.sol",
+                        "paramNames": [
+                            "shares",
+                            "rebaseIndex"
+                        ],
+                        "returns": [
+                            {
+                                "location": "stack",
+                                "typeDesc": {
+                                    "primitiveName": "uint256",
+                                    "type": "Primitive"
+                                }
+                            }
+                        ],
+                        "sighash": "48073b63",
+                        "sourceBytes": {
+                            "begin": 3037,
+                            "size": 206
+                        },
+                        "stateMutability": "pure",
+                        "visibility": "external",
+                        "vyper_metadata": null
+                    },
+                    {
+                        "contractName": "MathLibHarness",
+                        "fullArgs": [],
+                        "isLibrary": false,
+                        "name": "MIN_MONTHLY_RATE",
+                        "notpayable": true,
+                        "originalFile": "certora/harness/MathLibHarness.sol",
+                        "paramNames": [],
+                        "returns": [
+                            {
+                                "location": "stack",
+                                "typeDesc": {
+                                    "primitiveName": "uint256",
+                                    "type": "Primitive"
+                                }
+                            }
+                        ],
+                        "sighash": "62dd4c64",
+                        "sourceBytes": {
+                            "begin": 935,
+                            "size": 108
+                        },
+                        "stateMutability": "pure",
+                        "visibility": "external",
+                        "vyper_metadata": null
+                    },
+                    {
+                        "contractName": "MathLibHarness",
+                        "fullArgs": [],
+                        "isLibrary": false,
+                        "name": "JUNIOR_SPILLOVER_SHARE",
+                        "notpayable": true,
+                        "originalFile": "certora/harness/MathLibHarness.sol",
+                        "paramNames": [],
+                        "returns": [
+                            {
+                                "location": "stack",
+                                "typeDesc": {
+                                    "primitiveName": "uint256",
+                                    "type": "Primitive"
+                                }
+                            }
+                        ],
+                        "sighash": "c47736e4",
+                        "sourceBytes": {
+                            "begin": 2029,
+                            "size": 120
+                        },
+                        "stateMutability": "pure",
+                        "visibility": "external",
+                        "vyper_metadata": null
+                    },
+                    {
+                        "contractName": "MathLibHarness",
+                        "fullArgs": [
+                            {
+                                "location": "stack",
+                                "typeDesc": {
+                                    "primitiveName": "uint256",
+                                    "type": "Primitive"
+                                }
+                            },
+                            {
+                                "location": "stack",
+                                "typeDesc": {
+                                    "primitiveName": "uint256",
+                                    "type": "Primitive"
+                                }
+                            }
+                        ],
+                        "isLibrary": false,
+                        "name": "max",
+                        "notpayable": true,
+                        "originalFile": "certora/harness/MathLibHarness.sol",
+                        "paramNames": [
+                            "a",
+                            "b"
+                        ],
+                        "returns": [
+                            {
+                                "location": "stack",
+                                "typeDesc": {
+                                    "primitiveName": "uint256",
+                                    "type": "Primitive"
+                                }
+                            }
+                        ],
+                        "sighash": "6d5433e6",
+                        "sourceBytes": {
+                            "begin": 5304,
+                            "size": 108
+                        },
+                        "stateMutability": "pure",
+                        "visibility": "external",
+                        "vyper_metadata": null
+                    },
+                    {
+                        "contractName": "MathLibHarness",
+                        "fullArgs": [],
+                        "isLibrary": false,
+                        "name": "PRECISION",
+                        "notpayable": true,
+                        "originalFile": "certora/harness/MathLibHarness.sol",
+                        "paramNames": [],
+                        "returns": [
+                            {
+                                "location": "stack",
+                                "typeDesc": {
+                                    "primitiveName": "uint256",
+                                    "type": "Primitive"
+                                }
+                            }
+                        ],
+                        "sighash": "aaf5eb68",
+                        "sourceBytes": {
+                            "begin": 415,
+                            "size": 94
+                        },
+                        "stateMutability": "pure",
+                        "visibility": "external",
+                        "vyper_metadata": null
+                    },
+                    {
+                        "contractName": "MathLibHarness",
+                        "fullArgs": [
+                            {
+                                "location": "stack",
+                                "typeDesc": {
+                                    "primitiveName": "uint256",
+                                    "type": "Primitive"
+                                }
+                            },
+                            {
+                                "location": "stack",
+                                "typeDesc": {
+                                    "primitiveName": "uint256",
+                                    "type": "Primitive"
+                                }
+                            }
+                        ],
+                        "isLibrary": false,
+                        "name": "calculateTotalSupply",
+                        "notpayable": true,
+                        "originalFile": "certora/harness/MathLibHarness.sol",
+                        "paramNames": [
+                            "totalShares",
+                            "rebaseIndex"
+                        ],
+                        "returns": [
+                            {
+                                "location": "stack",
+                                "typeDesc": {
+                                    "primitiveName": "uint256",
+                                    "type": "Primitive"
+                                }
+                            }
+                        ],
+                        "sighash": "a474adec",
+                        "sourceBytes": {
+                            "begin": 4070,
+                            "size": 204
+                        },
+                        "stateMutability": "pure",
+                        "visibility": "external",
+                        "vyper_metadata": null
+                    },
+                    {
+                        "contractName": "MathLibHarness",
+                        "fullArgs": [],
+                        "isLibrary": false,
+                        "name": "PERF_FEE",
+                        "notpayable": true,
+                        "originalFile": "certora/harness/MathLibHarness.sol",
+                        "paramNames": [],
+                        "returns": [
+                            {
+                                "location": "stack",
+                                "typeDesc": {
+                                    "primitiveName": "uint256",
+                                    "type": "Primitive"
+                                }
+                            }
+                        ],
+                        "sighash": "44774870",
+                        "sourceBytes": {
+                            "begin": 1405,
+                            "size": 92
+                        },
+                        "stateMutability": "pure",
+                        "visibility": "external",
+                        "vyper_metadata": null
+                    },
+                    {
+                        "contractName": "MathLibHarness",
+                        "fullArgs": [],
+                        "isLibrary": false,
+                        "name": "RESERVE_SPILLOVER_SHARE",
+                        "notpayable": true,
+                        "originalFile": "certora/harness/MathLibHarness.sol",
+                        "paramNames": [],
+                        "returns": [
+                            {
+                                "location": "stack",
+                                "typeDesc": {
+                                    "primitiveName": "uint256",
+                                    "type": "Primitive"
+                                }
+                            }
+                        ],
+                        "sighash": "f24390fa",
+                        "sourceBytes": {
+                            "begin": 2159,
+                            "size": 122
+                        },
+                        "stateMutability": "pure",
+                        "visibility": "external",
+                        "vyper_metadata": null
+                    },
+                    {
+                        "contractName": "MathLibHarness",
+                        "fullArgs": [
+                            {
+                                "location": "stack",
+                                "typeDesc": {
+                                    "primitiveName": "uint256",
+                                    "type": "Primitive"
+                                }
+                            },
+                            {
+                                "location": "stack",
+                                "typeDesc": {
+                                    "primitiveName": "uint256",
+                                    "type": "Primitive"
+                                }
+                            }
+                        ],
+                        "isLibrary": false,
+                        "name": "calculateBackingRatio",
+                        "notpayable": true,
+                        "originalFile": "certora/harness/MathLibHarness.sol",
+                        "paramNames": [
+                            "vaultValue",
+                            "totalSupply"
+                        ],
+                        "returns": [
+                            {
+                                "location": "stack",
+                                "typeDesc": {
+                                    "primitiveName": "uint256",
+                                    "type": "Primitive"
+                                }
+                            }
+                        ],
+                        "sighash": "5f4866fb",
+                        "sourceBytes": {
+                            "begin": 2693,
+                            "size": 204
+                        },
+                        "stateMutability": "pure",
+                        "visibility": "external",
+                        "vyper_metadata": null
+                    }
+                ],
+                "name": "MathLibHarness",
+                "original_file": "certora/harness/MathLibHarness.sol",
+                "solidityTypes": [],
+                "sourceBytes": {
+                    "begin": 308,
+                    "size": 5106
+                },
+                "srcmap": "308:5106:0:-:0;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;1053:108;;;:::i;:::-;;;;;;;:::i;:::-;;;;;;;;3385:208;;;;;;;;;;;;;:::i;:::-;;:::i;:::-;;;;;;;:::i;:::-;;;;;;;;4644:185;;;;;;;;;;;;;:::i;:::-;;:::i;:::-;;;;;;;:::i;:::-;;;;;;;;1641:118;;;:::i;:::-;;;;;;;:::i;:::-;;;;;;;;835:90;;;:::i;:::-;;;;;;;:::i;:::-;;;;;;;;1769:120;;;:::i;:::-;;;;;;;:::i;:::-;;;;;;;;1405:92;;;:::i;:::-;;;;;;;:::i;:::-;;;;;;;;3037:206;;;;;;;;;;;;;:::i;:::-;;:::i;:::-;;;;;;;:::i;:::-;;;;;;;;2291:120;;;:::i;:::-;;;;;;;:::i;:::-;;;;;;;;2693:204;;;;;;;;;;;;;:::i;:::-;;:::i;:::-;;;;;;;:::i;:::-;;;;;;;;735:90;;;:::i;:::-;;;;;;;:::i;:::-;;;;;;;;935:108;;;:::i;:::-;;;;;;;:::i;:::-;;;;;;;;5304;;;;;;;;;;;;;:::i;:::-;;:::i;:::-;;;;;;;:::i;:::-;;;;;;;;2421:106;;;:::i;:::-;;;;;;;:::i;:::-;;;;;;;;5123:108;;;;;;;;;;;;;:::i;:::-;;:::i;:::-;;;;;;;:::i;:::-;;;;;;;;4070:204;;;;;;;;;;;;;:::i;:::-;;:::i;:::-;;;;;;;:::i;:::-;;;;;;;;415:94;;;:::i;:::-;;;;;;;:::i;:::-;;;;;;;;1899:120;;;:::i;:::-;;;;;;;:::i;:::-;;;;;;;;1507:124;;;:::i;:::-;;;;;;;:::i;:::-;;;;;;;;2029:120;;;:::i;:::-;;;;;;;:::i;:::-;;;;;;;;1171:108;;;:::i;:::-;;;;;;;:::i;:::-;;;;;;;;519:106;;;:::i;:::-;;;;;;;:::i;:::-;;;;;;;;4914:136;;;;;;;;;;;;;:::i;:::-;;:::i;:::-;;;;;;;:::i;:::-;;;;;;;;1289:106;;;:::i;:::-;;;;;;;:::i;:::-;;;;;;;;635:90;;;:::i;:::-;;;;;;;:::i;:::-;;;;;;;;4415:162;;;;;;;;;;;;;:::i;:::-;;:::i;:::-;;;;;;;:::i;:::-;;;;;;;;2159:122;;;:::i;:::-;;;;;;;:::i;:::-;;;;;;;;3730:216;;;;;;;;;;;;;:::i;:::-;;:::i;:::-;;;;;;;:::i;:::-;;;;;;;;1053:108;1104:7;981:8:1;1123:31:0;;1053:108;:::o;3385:208::-;3504:7;3530:56;3565:7;3574:11;3530:34;:56::i;:::-;3523:63;;3385:208;;;;:::o;4644:185::-;4751:7;4777:45;4801:5;4808:13;4777:23;:45::i;:::-;4770:52;;4644:185;;;;:::o;1641:118::-;1697:7;1487:6:1;1716:36:0;;1641:118;:::o;835:90::-;877:7;809:5:1;896:22:0;;835:90;:::o;1769:120::-;1826:7;1575:6:1;1845:37:0;;1769:120;:::o;1405:92::-;1448:7;1236:4:1;1467:23:0;;1405:92;:::o;3037:206::-;3155:7;3181:55;3216:6;3224:11;3181:34;:55::i;:::-;3174:62;;3037:206;;;;:::o;2291:120::-;2348:7;1950:2:1;2367:37:0;;2291:120;:::o;2693:204::-;2810:7;2836:54;2866:10;2878:11;2836:29;:54::i;:::-;2829:61;;2693:204;;;;:::o;735:90::-;777:7;742:5:1;796:22:0;;735:90;:::o;935:108::-;986:7;890::1;1005:31:0;;935:108;:::o;5304:::-;5362:7;5388:17;5400:1;5403;5388:11;:17::i;:::-;5381:24;;5304:108;;;;:::o;2421:106::-;2471:7;2006:6:1;2490:30:0;;2421:106;:::o;5123:108::-;5181:7;5207:17;5219:1;5222;5207:11;:17::i;:::-;5200:24;;5123:108;;;;:::o;4070:204::-;4187:7;4213:54;4242:11;4255;4213:28;:54::i;:::-;4206:61;;4070:204;;;;:::o;415:94::-;459:7;423:4:1;478:24:0;;415:94;:::o;1899:120::-;1956:7;1664::1;1975:37:0;;1899:120;:::o;1507:124::-;1566:7;1319:4:1;1585:39:0;;1507:124;:::o;2029:120::-;2086:7;1762:5:1;2105:37:0;;2029:120;:::o;1171:108::-;1222:7;1073:8:1;1241:31:0;;1171:108;:::o;519:106::-;569:7;483:5:1;588:30:0;;519:106;:::o;4914:136::-;4997:7;5023:20;5038:1;5041;5023:14;:20::i;:::-;5016:27;;4914:136;;;;:::o;1289:106::-;1339:7;1169:4:1;1358:30:0;;1289:106;:::o;635:90::-;677:7;675:5:1;696:22:0;;635:90;:::o;4415:162::-;4503:7;4529:41;4557:12;4529:27;:41::i;:::-;4522:48;;4415:162;;;:::o;2159:122::-;2217:7;1854:5:1;2236:38:0;;2159:122;:::o;3730:216::-;3853:7;3879:60;3918:7;3927:11;3879:38;:60::i;:::-;3872:67;;3730:216;;;;:::o;4264:611:1:-;4383:14;4502:13;4434:66;4427:89;4592:1;4524:66;4517:77;4670:1;4602:66;4595:77;4748:11;4680:66;4673:87;4790:1;4775:11;:16;4771:45;;4800:16;;;;;;;;;;;;;;4771:45;4857:11;423:4;4834:7;:19;;;;:::i;:::-;4833:35;;;;:::i;:::-;4826:42;;4264:611;;;;:::o;7892:1042::-;7999:16;8120:13;8052:66;8045:89;8210:1;8142:66;8135:77;8288:1;8220:66;8213:77;8366:13;8298:66;8291:89;8412:1;8395:13;:18;8391:537;;483:5;8521:13;483:5;8495:40;;;;:::i;:::-;8486:5;:50;;;;:::i;:::-;:68;;;;:::i;:::-;8479:75;;;;8391:537;8635:14;8661:13;8660:14;;;:::i;:::-;8635:40;;8775:6;8708:66;8701:81;483:5;8800:6;:25;8796:48;;8834:10;;;;;;;;;;;;;;8796:48;483:5;8892:6;483:5;8874:24;;;;:::i;:::-;8865:5;:34;;;;:::i;:::-;:52;;;;:::i;:::-;8858:59;;;7892:1042;;;;;:::o;3410:555::-;3528:15;3648:13;3580:66;3573:89;3738:1;3670:66;3663:77;3816:1;3748:66;3741:77;3894:11;3826:66;3819:87;423:4;3934:11;3925:6;:20;;;;:::i;:::-;3924:34;;;;:::i;:::-;3917:41;;3410:555;;;;:::o;2466:618::-;2583:20;2708:13;2640:66;2633:89;2798:1;2730:66;2723:77;2876:1;2808:66;2801:77;2954:11;2886:66;2879:87;2996:1;2981:11;:16;2977:45;;3006:16;;;;;;;;;;;;;;2977:45;3066:11;423:4;3040:10;:22;;;;:::i;:::-;3039:38;;;;:::i;:::-;3032:45;;2466:618;;;;:::o;10234:456::-;10292:7;10404:13;10336:66;10329:89;10494:1;10426:66;10419:77;10572:1;10504:66;10497:77;10650:1;10582:66;10575:77;10674:1;10670;:5;:13;;10682:1;10670:13;;;10678:1;10670:13;10663:20;;10234:456;;;;:::o;9705:::-;9763:7;9875:13;9807:66;9800:89;9965:1;9897:66;9890:77;10043:1;9975:66;9968:77;10121:1;10053:66;10046:77;10145:1;10141;:5;:13;;10153:1;10141:13;;;10149:1;10141:13;10134:20;;9705:456;;;;:::o;6256:563::-;6373:19;6497:13;6429:66;6422:89;6587:1;6519:66;6512:77;6665:1;6597:66;6590:77;6743:11;6675:66;6668:87;423:4;6788:11;6774;:25;;;;:::i;:::-;6773:39;;;;:::i;:::-;6766:46;;6256:563;;;;:::o;9138:494::-;9221:14;9340:13;9272:66;9265:89;9430:1;9362:66;9355:77;9508:1;9440:66;9433:77;9586:1;9518:66;9511:77;423:4;9611:1;9607;:5;;;;:::i;:::-;9606:19;;;;:::i;:::-;9599:26;;9138:494;;;;:::o;7101:531::-;7189:17;7311:13;7243:66;7236:89;7401:1;7333:66;7326:77;7479:1;7411:66;7404:77;7557:12;7489:66;7482:88;1950:2;7588:12;:37;;;;:::i;:::-;7581:44;;7101:531;;;:::o;5270:673::-;5393:14;5512:13;5444:66;5437:89;5602:1;5534:66;5527:77;5680:1;5612:66;5605:77;5758:11;5690:66;5683:87;5800:1;5785:11;:16;5781:45;;5810:16;;;;;;;;;;;;;;5781:45;5925:11;5920:1;5906:11;423:4;5884:7;:19;;;;:::i;:::-;:33;;;;:::i;:::-;:37;;;;:::i;:::-;5883:53;;;;:::i;:::-;5876:60;;5270:673;;;;:::o;7:77:2:-;44:7;73:5;62:16;;7:77;;;:::o;90:118::-;177:24;195:5;177:24;:::i;:::-;172:3;165:37;90:118;;:::o;214:222::-;307:4;345:2;334:9;330:18;322:26;;358:71;426:1;415:9;411:17;402:6;358:71;:::i;:::-;214:222;;;;:::o;523:117::-;632:1;629;622:12;769:122;842:24;860:5;842:24;:::i;:::-;835:5;832:35;822:63;;881:1;878;871:12;822:63;769:122;:::o;897:139::-;943:5;981:6;968:20;959:29;;997:33;1024:5;997:33;:::i;:::-;897:139;;;;:::o;1042:474::-;1110:6;1118;1167:2;1155:9;1146:7;1142:23;1138:32;1135:119;;;1173:79;;:::i;:::-;1135:119;1293:1;1318:53;1363:7;1354:6;1343:9;1339:22;1318:53;:::i;:::-;1308:63;;1264:117;1420:2;1446:53;1491:7;1482:6;1471:9;1467:22;1446:53;:::i;:::-;1436:63;;1391:118;1042:474;;;;;:::o;1522:76::-;1558:7;1587:5;1576:16;;1522:76;;;:::o;1604:120::-;1676:23;1693:5;1676:23;:::i;:::-;1669:5;1666:34;1656:62;;1714:1;1711;1704:12;1656:62;1604:120;:::o;1730:137::-;1775:5;1813:6;1800:20;1791:29;;1829:32;1855:5;1829:32;:::i;:::-;1730:137;;;;:::o;1873:472::-;1940:6;1948;1997:2;1985:9;1976:7;1972:23;1968:32;1965:119;;;2003:79;;:::i;:::-;1965:119;2123:1;2148:53;2193:7;2184:6;2173:9;2169:22;2148:53;:::i;:::-;2138:63;;2094:117;2250:2;2276:52;2320:7;2311:6;2300:9;2296:22;2276:52;:::i;:::-;2266:62;;2221:117;1873:472;;;;;:::o;2351:329::-;2410:6;2459:2;2447:9;2438:7;2434:23;2430:32;2427:119;;;2465:79;;:::i;:::-;2427:119;2585:1;2610:53;2655:7;2646:6;2635:9;2631:22;2610:53;:::i;:::-;2600:63;;2556:117;2351:329;;;;:::o;2686:180::-;2734:77;2731:1;2724:88;2831:4;2828:1;2821:15;2855:4;2852:1;2845:15;2872:410;2912:7;2935:20;2953:1;2935:20;:::i;:::-;2930:25;;2969:20;2987:1;2969:20;:::i;:::-;2964:25;;3024:1;3021;3017:9;3046:30;3064:11;3046:30;:::i;:::-;3035:41;;3225:1;3216:7;3212:15;3209:1;3206:22;3186:1;3179:9;3159:83;3136:139;;3255:18;;:::i;:::-;3136:139;2920:362;2872:410;;;;:::o;3288:180::-;3336:77;3333:1;3326:88;3433:4;3430:1;3423:15;3457:4;3454:1;3447:15;3474:185;3514:1;3531:20;3549:1;3531:20;:::i;:::-;3526:25;;3565:20;3583:1;3565:20;:::i;:::-;3560:25;;3604:1;3594:35;;3609:18;;:::i;:::-;3594:35;3651:1;3648;3644:9;3639:14;;3474:185;;;;:::o;3665:191::-;3705:3;3724:20;3742:1;3724:20;:::i;:::-;3719:25;;3758:20;3776:1;3758:20;:::i;:::-;3753:25;;3801:1;3798;3794:9;3787:16;;3822:3;3819:1;3816:10;3813:36;;;3829:18;;:::i;:::-;3813:36;3665:191;;;;:::o;3862:228::-;3897:3;3920:23;3937:5;3920:23;:::i;:::-;3911:32;;3965:66;3958:5;3955:77;3952:103;;4035:18;;:::i;:::-;3952:103;4078:5;4075:1;4071:13;4064:20;;3862:228;;;:::o;4096:194::-;4136:4;4156:20;4174:1;4156:20;:::i;:::-;4151:25;;4190:20;4208:1;4190:20;:::i;:::-;4185:25;;4234:1;4231;4227:9;4219:17;;4258:1;4252:4;4249:11;4246:37;;;4263:18;;:::i;:::-;4246:37;4096:194;;;;:::o",
+                "storageLayout": {
+                    "storage": [],
+                    "types": null
+                },
+                "transientStorageLayout": null,
+                "varmap": ""
+            }
+        ],
+        "legacyStructLinking": {},
+        "library_addresses": [],
+        "origSourceDir": ".pre_autofinders.0",
+        "primary_contract": "MathLibHarness",
+        "primary_contract_address": "00000000ce4604a0000000000000000000000002",
+        "prototypeFor": [],
+        "sdc_name": "MathLibHarness.sol_0",
+        "sourceDir": ".post_autofinders.0",
+        "srclist": {
+            "0": "certora/harness/MathLibHarness.sol",
+            "1": "src/libraries/MathLib.sol"
+        },
+        "state": {},
+        "structLinkingInfo": {}
+    }
+}

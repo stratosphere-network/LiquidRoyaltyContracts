@@ -585,21 +585,34 @@ graph TB
     style J fill:#4169E1
 ```
 
-#### Step 1: Calculate Management Fee Tokens
+#### Step 1: Calculate Management Fee Tokens (TIME-BASED)
 
-**Management Fee (monthly) - Minted as snrUSD tokens:**
+**Management Fee - Minted as snrUSD tokens based on actual time elapsed:**
 $$
-S_{mgmt} = V_s \cdot \frac{f_{mgmt}}{12} = V_s \cdot 0.000833
+S_{mgmt} = V_s \cdot f_{mgmt} \cdot \frac{t_{elapsed}}{365 \text{ days}}
 $$
 
-In simple terms: Monthly Management Fee Tokens = Senior Value × (1% ÷ 12)
+Where:
+- $V_s$ = Current vault value
+- $f_{mgmt}$ = Annual management fee rate (1% = 0.01)
+- $t_{elapsed}$ = Time since last rebase in seconds
+- $365 \text{ days}$ = Seconds per year (31,536,000 seconds)
 
-**Key Point:** Management fee is NOT deducted from vault value. Instead, it's minted as snrUSD tokens to the treasury.
+**Example for 30-day rebase:**
+$$
+S_{mgmt} = V_s \cdot 0.01 \cdot \frac{30 \text{ days}}{365 \text{ days}} = V_s \cdot 0.000822
+$$
 
-**Vault value stays the same:**
-$$
-V_s = V_s \quad \text{(no deduction)}
-$$
+**Key Points:**
+- ✅ **TIME-BASED:** Calculates based on actual time elapsed (not fixed monthly)
+- ✅ **MINTED as tokens:** NOT deducted from vault value
+- ✅ **Fair charging:** Prevents over-charging if rebases happen more frequently
+- ✅ **Vault value unchanged:** $V_s$ stays the same (no deduction)
+
+**Implementation:**
+```solidity
+mgmtFeeTokens = (vaultValue × MGMT_FEE_ANNUAL × timeElapsed) / (365 days × PRECISION)
+```
 
 #### Step 2: Dynamic APY Selection
 
@@ -627,9 +640,9 @@ graph LR
 
 **Try 13% APY first (greedy maximization):**
 
-User tokens minted:
+User tokens minted (TIME-SCALED):
 $$
-S_{users}^{13} = S \cdot r_{month}^{max} = S \cdot 0.010833
+S_{users}^{13} = S \cdot r_{month}^{max} \cdot \frac{t_{elapsed}}{30 \text{ days}} = S \cdot 0.010833 \cdot \frac{t_{elapsed}}{30 \text{ days}}
 $$
 
 Performance fee (2% of user tokens, minted to treasury):
@@ -637,23 +650,31 @@ $$
 S_{fee}^{13} = S_{users}^{13} \cdot f_{perf} = S_{users}^{13} \cdot 0.02
 $$
 
-Total new supply (users + treasury):
+Total new supply (users + performance fee + management fee):
 $$
-S_{new}^{13} = S + S_{users}^{13} + S_{fee}^{13} = S \cdot (1 + 0.010833 \cdot 1.02) = S \cdot 1.011050
+S_{new}^{13} = S + S_{users}^{13} + S_{fee}^{13} + S_{mgmt}
 $$
 
-Backing check (using FULL vault value, not reduced):
+**For 30-day rebase (typical monthly):**
 $$
-R_{13} = \frac{V_s}{S_{new}^{13}}
+S_{new}^{13} = S + S \cdot 0.010833 + S \cdot 0.010833 \cdot 0.02 + S_{mgmt}
+$$
+$$
+S_{new}^{13} = S \cdot 1.011050 + S_{mgmt}
+$$
+
+Backing check (using FULL vault value, includes ALL fees):
+$$
+R_{13} = \frac{V_s}{S_{new}^{13}} = \frac{V_s}{S + S_{users}^{13} + S_{fee}^{13} + S_{mgmt}}
 $$
 
 **If $R_{13} \geq 1.00$:** ✅ Use 13% APY, set $S_{new} = S_{new}^{13}$, $r_{selected} = 0.010833$
 
 **Else, try 12% APY:**
 
-User tokens:
+User tokens (TIME-SCALED):
 $$
-S_{users}^{12} = S \cdot 0.010000
+S_{users}^{12} = S \cdot r_{month}^{mid} \cdot \frac{t_{elapsed}}{30 \text{ days}} = S \cdot 0.010000 \cdot \frac{t_{elapsed}}{30 \text{ days}}
 $$
 
 Performance fee:
@@ -661,23 +682,28 @@ $$
 S_{fee}^{12} = S_{users}^{12} \cdot 0.02
 $$
 
-Total new supply:
+Total new supply (includes management fee):
 $$
-S_{new}^{12} = S \cdot (1 + 0.010000 \cdot 1.02) = S \cdot 1.010200
+S_{new}^{12} = S + S_{users}^{12} + S_{fee}^{12} + S_{mgmt}
 $$
 
-Backing check (using FULL vault value):
+**For 30-day rebase:**
 $$
-R_{12} = \frac{V_s}{S_{new}^{12}}
+S_{new}^{12} = S \cdot 1.010200 + S_{mgmt}
+$$
+
+Backing check (using FULL vault value, includes ALL fees):
+$$
+R_{12} = \frac{V_s}{S_{new}^{12}} = \frac{V_s}{S + S_{users}^{12} + S_{fee}^{12} + S_{mgmt}}
 $$
 
 **If $R_{12} \geq 1.00$:** ✅ Use 12% APY, set $S_{new} = S_{new}^{12}$, $r_{selected} = 0.010000$
 
 **Else, try 11% APY:**
 
-User tokens:
+User tokens (TIME-SCALED):
 $$
-S_{users}^{11} = S \cdot 0.009167
+S_{users}^{11} = S \cdot r_{month}^{min} \cdot \frac{t_{elapsed}}{30 \text{ days}} = S \cdot 0.009167 \cdot \frac{t_{elapsed}}{30 \text{ days}}
 $$
 
 Performance fee:
@@ -685,14 +711,19 @@ $$
 S_{fee}^{11} = S_{users}^{11} \cdot 0.02
 $$
 
-Total new supply:
+Total new supply (includes management fee):
 $$
-S_{new}^{11} = S \cdot (1 + 0.009167 \cdot 1.02) = S \cdot 1.009350
+S_{new}^{11} = S + S_{users}^{11} + S_{fee}^{11} + S_{mgmt}
 $$
 
-Backing check (using FULL vault value):
+**For 30-day rebase:**
 $$
-R_{11} = \frac{V_s}{S_{new}^{11}}
+S_{new}^{11} = S \cdot 1.009350 + S_{mgmt}
+$$
+
+Backing check (using FULL vault value, includes ALL fees):
+$$
+R_{11} = \frac{V_s}{S_{new}^{11}} = \frac{V_s}{S + S_{users}^{11} + S_{fee}^{11} + S_{mgmt}}
 $$
 
 **If $R_{11} \geq 1.00$:** ✅ Use 11% APY, set $S_{new} = S_{new}^{11}$, $r_{selected} = 0.009167$
@@ -703,12 +734,20 @@ $$
 
 **IMPORTANT:** This calculates the *conceptual* new supply. The actual tokens are minted in Step 6!
 
-**Fee Model Summary:**
-- ✅ **Management fee:** Minted as tokens (1% annual / 12 = ~$S_{mgmt}$ tokens/month)
+**Fee Model Summary (UPDATED - TIME-BASED):**
+- ✅ **Management fee:** Minted as tokens based on time elapsed
+  - Formula: $S_{mgmt} = V_s \cdot 0.01 \cdot \frac{t_{elapsed}}{365 \text{ days}}$
+  - 30-day example: $S_{mgmt} = V_s \cdot 0.000822$
 - ✅ **Performance fee:** 2% extra tokens minted on top of user APY
-- ✅ Both minted to protocol treasury
-- ✅ Both dilute backing ratio (accounted for in backing checks)
-- ✅ Example: 11% APY + fees → Users get 0.009167, Mgmt fee tokens = $V_s \cdot 0.000833$, Perf fee = 0.000183 (2% of user tokens)
+  - Formula: $S_{fee} = S_{users} \cdot 0.02$
+- ✅ **Both minted to protocol treasury** (NOT deducted from $V_s$)
+- ✅ **Both dilute backing ratio** (included in all $S_{new}$ calculations)
+- ✅ **Time-based scaling:** Prevents over-charging if rebases happen more frequently
+- ✅ **Example (30-day rebase with 11% APY):**
+  - User tokens: $S \cdot 0.009167$
+  - Performance fee: $S \cdot 0.009167 \cdot 0.02 = S \cdot 0.000183$
+  - Management fee: $V_s \cdot 0.000822$ (time-based!)
+  - Total new supply: $S \cdot 1.009350 + V_s \cdot 0.000822$
 
 #### Step 3: Determine Operating Zone
 
@@ -1031,41 +1070,59 @@ Final state:
 1. Update the rebase index (user balances automatically increase)
 2. Mint fee tokens to treasury (management + performance)
 
-**A. Update Rebase Index:**
+**A. Update Rebase Index (TIME-BASED):**
 
-The rebase index multiplier includes BOTH user APY and performance fee:
+The rebase index multiplier is TIME-SCALED based on actual time elapsed:
 
 $$
-I_{new} = I_{old} \cdot (1 + r_{selected} \cdot (1 + f_{perf}))
+I_{new} = I_{old} \cdot \left(1 + r_{selected} \cdot \frac{t_{elapsed}}{30 \text{ days}}\right)
 $$
 
 Where:
-- $r_{selected}$ = the dynamically chosen rate from Step 2 (0.010833, 0.010000, or 0.009167)
-- $f_{perf}$ = 0.02 (2% performance fee)
+- $r_{selected}$ = the dynamically chosen monthly rate (0.010833, 0.010000, or 0.009167)
+- $t_{elapsed}$ = time since last rebase in seconds
+- $30 \text{ days}$ = assumed monthly period (2,592,000 seconds)
 
-**Expanded formulas:**
+**IMPORTANT:** Performance fee ($f_{perf}$ = 2%) is NOT included in index calculation!
+- Performance fee is handled via token minting to treasury
+- Only the base user APY affects the rebase index
+- This prevents double-counting the performance fee
+
+**Expanded formulas (for 30-day rebase):**
 
 If 13% APY selected:
 $$
-I_{new} = I_{old} \cdot (1 + 0.010833 \cdot 1.02) = I_{old} \cdot 1.011050
+I_{new} = I_{old} \cdot (1 + 0.010833) = I_{old} \cdot 1.010833
 $$
 
 If 12% APY selected:
 $$
-I_{new} = I_{old} \cdot (1 + 0.010000 \cdot 1.02) = I_{old} \cdot 1.010200
+I_{new} = I_{old} \cdot (1 + 0.010000) = I_{old} \cdot 1.010000
 $$
 
 If 11% APY selected:
 $$
-I_{new} = I_{old} \cdot (1 + 0.009167 \cdot 1.02) = I_{old} \cdot 1.009350
+I_{new} = I_{old} \cdot (1 + 0.009167) = I_{old} \cdot 1.009167
 $$
+
+**For non-30-day rebases, the rate scales proportionally:**
+- 15-day rebase: multiply rate by 0.5
+- 60-day rebase: multiply rate by 2.0
+- Example: 15 days with 11% APY → $I_{new} = I_{old} \cdot (1 + 0.009167 \cdot 0.5) = I_{old} \cdot 1.004584$
 
 **After rebase, user balances automatically increase:**
 $$
 b_i^{new} = \sigma_i \cdot I_{new}
 $$
 
-In simple terms: new_rebase_index = old_rebase_index × (1 + selected_rate × 1.02)
+**Implementation:**
+```solidity
+// Calculate scaled rate
+scaledRate = (monthlyRate × timeElapsed) / 30 days
+
+// Update index (NO performance fee in index!)
+I_new = I_old × (PRECISION + scaledRate) / PRECISION
+```
 
 **B. Mint Fee Tokens to Treasury:**
 
@@ -1595,10 +1652,22 @@ graph TB
 - Current backing: $11,150,000 / 10,000,000 = 111.5%$ (Zone 1!)
 - $V_j = 5,000,000$ USD (Junior vault value)
 - $V_r = 2,000,000$ USD (Reserve vault value)
+- $t_{elapsed} = 30 \text{ days}$ (time since last rebase)
+- Last rebase: 30 days ago
 
-#### Step 1: Calculate Management Fee Tokens
+#### Step 1: Calculate Management Fee Tokens (TIME-BASED)
+
+**Using actual time elapsed (30 days):**
 $$
-S_{mgmt} = 11,150,000 \times 0.000833 = 9,288 \text{ snrUSD tokens}
+S_{mgmt} = V_s \cdot f_{mgmt} \cdot \frac{t_{elapsed}}{365 \text{ days}}
+$$
+
+$$
+S_{mgmt} = 11,150,000 \cdot 0.01 \cdot \frac{30 \text{ days}}{365 \text{ days}}
+$$
+
+$$
+S_{mgmt} = 11,150,000 \cdot 0.000822 = 9,165 \text{ snrUSD tokens}
 $$
 
 **Vault value stays the same (fee NOT deducted!):**
@@ -1606,15 +1675,18 @@ $$
 V_s = 11,150,000 \text{ USD (unchanged!)}
 $$
 
-**Note:** Management fee is minted as tokens in Step 6, not deducted from vault value!
+**Key Points:**
+- ✅ Management fee is TIME-BASED (based on actual 30 days elapsed)
+- ✅ Fee is MINTED as tokens (not deducted from vault value)
+- ✅ This fee will be included in ALL supply calculations below
 
-#### Step 2: Dynamic APY Selection + Performance Fee
+#### Step 2: Dynamic APY Selection + Performance Fee (Includes Management Fee!)
 
 **Try 13% APY first (using FULL vault value):**
 
-User tokens to mint:
+User tokens to mint (TIME-SCALED for 30 days):
 $$
-S_{users}^{13} = 10,000,000 \times 0.010833 = 108,330 \text{ snrUSD}
+S_{users}^{13} = S \cdot r_{month}^{max} \cdot \frac{30 \text{ days}}{30 \text{ days}} = 10,000,000 \times 0.010833 = 108,330 \text{ snrUSD}
 $$
 
 Performance fee (2% extra):
@@ -1622,104 +1694,138 @@ $$
 S_{fee}^{13} = 108,330 \times 0.02 = 2,167 \text{ snrUSD}
 $$
 
-Total new supply:
+Total new supply (**NOW includes management fee!**):
 $$
-S_{new}^{13} = 10,000,000 + 108,330 + 2,167 = 10,110,497 \text{ snrUSD}
-$$
-
-Backing check (using FULL vault value):
-$$
-R_{13} = \frac{11,150,000}{10,110,497} = 1.1029 = 110.29\%
+S_{new}^{13} = S + S_{users}^{13} + S_{fee}^{13} + S_{mgmt}
 $$
 
-**Check: $R_{13} = 110.29\% \geq 100\%$** ✅ **USE 13% APY!**
+$$
+S_{new}^{13} = 10,000,000 + 108,330 + 2,167 + 9,165 = 10,119,662 \text{ snrUSD}
+$$
+
+Backing check (using FULL vault value, includes ALL fees):
+$$
+R_{13} = \frac{11,150,000}{10,119,662} = 1.1018 = 110.18\%
+$$
+
+**Check: $R_{13} = 110.18\% \geq 100\%$** ✅ **USE 13% APY!**
 
 **Selected:**
-- $S_{new} = 10,110,497$ snrUSD
+- $S_{new} = 10,119,662$ snrUSD (includes mgmt fee!)
 - $r_{selected} = 0.010833$ (13% APY)
 - User tokens: $108,330$ snrUSD
 - Performance fee tokens: $2,167$ snrUSD
+- Management fee tokens: $9,165$ snrUSD
 
-**Why 13% works:** Using full vault value ($11,150,000), even after conceptually minting 108,330 for users + 2,167 for performance fee, backing is still 110.29% > 100%!
+**Why 13% works:** Using full vault value ($11,150,000), even after including ALL fees (user tokens + performance fee + management fee), backing is still 110.18% > 100%!
 
 #### Step 3: Determine Zone & Check for Spillover
 
-**Calculate backing ratio (with 13% APY + performance fee, using full vault value):**
+**Calculate backing ratio (with ALL fees included, using full vault value):**
 $$
-R_{senior} = \frac{11,150,000}{10,110,497} = 1.1029 = 110.29\%
+R_{senior} = \frac{V_s}{S_{new}} = \frac{11,150,000}{10,119,662} = 1.1018 = 110.18\%
 $$
 
 **Check which zone:**
 $$
-R_{senior} = 110.29\% > 110\%
+R_{senior} = 110.18\% > 110\%
 $$
 
 **ZONE 1: Profit Spillover! 🎉**
 
-**Calculate 110% target:**
+**Calculate 110% target (based on new supply INCLUDING all fees):**
 $$
-V_{target} = 1.10 \times 10,110,497 = 11,121,547 \text{ USD}
+V_{target} = 1.10 \times S_{new} = 1.10 \times 10,119,662 = 11,131,628 \text{ USD}
 $$
 
 **Calculate excess:**
 $$
-E = 11,150,000 - 11,121,547 = 28,453 \text{ USD}
+E = V_s - V_{target} = 11,150,000 - 11,131,628 = 18,372 \text{ USD}
 $$
 
-**Senior has excess backing! Will share $28,453 with Junior/Reserve.**
+**Senior has excess backing! Will share $18,372 with Junior/Reserve.**
 
 #### Step 4: Execute Profit Spillover
 
 **Split 80/20:**
 $$
-E_j = 28,453 \times 0.80 = 22,762 \text{ USD to Junior}
+E_j = E \times 0.80 = 18,372 \times 0.80 = 14,698 \text{ USD to Junior}
 $$
 $$
-E_r = 28,453 \times 0.20 = 5,691 \text{ USD to Reserve}
+E_r = E \times 0.20 = 18,372 \times 0.20 = 3,674 \text{ USD to Reserve}
 $$
 
 **Final values:**
 $$
-V_s^{final} = 11,150,000 - 28,453 = 11,121,547 \text{ USD (exactly 110%)}
+V_s^{final} = V_s - E = 11,150,000 - 18,372 = 11,131,628 \text{ USD (exactly 110%)}
 $$
 $$
-V_j^{new} = 5,000,000 + 22,762 = 5,022,762 \text{ USD}
+V_j^{new} = V_j + E_j = 5,000,000 + 14,698 = 5,014,698 \text{ USD}
 $$
 $$
-V_r^{new} = 2,000,000 + 5,691 = 2,005,691 \text{ USD}
-$$
-
-#### Step 5: Update Index (with 13% APY + 2% fee!)
-$$
-I_{new} = 1.0 \times (1 + 0.010833 \times 1.02) = 1.0 \times 1.011050 = 1.011050
+V_r^{new} = V_r + E_r = 2,000,000 + 3,674 = 2,003,674 \text{ USD}
 $$
 
-#### Step 6: Mint Fee Tokens to Treasury
+#### Step 5: Update Index (TIME-BASED, NO performance fee in index!)
 
-**Total fee tokens:**
+**Calculate scaled rate for 30 days:**
 $$
-S_{total\_fees} = S_{mgmt} + S_{fee}^{13} = 9,288 + 2,167 = 11,455 \text{ snrUSD}
+\text{scaledRate} = r_{selected} \times \frac{t_{elapsed}}{30 \text{ days}} = 0.010833 \times \frac{30 \text{ days}}{30 \text{ days}} = 0.010833
 $$
 
-**Treasury receives:** 11,455 snrUSD tokens (which grow with future rebases!)
+**Update rebase index (NO performance fee!):**
+$$
+I_{new} = I_{old} \times (1 + \text{scaledRate}) = 1.0 \times (1 + 0.010833) = 1.010833
+$$
+
+**IMPORTANT:**
+- ✅ Only base APY affects the index (13% = 0.010833)
+- ✅ Performance fee is handled via token minting (not index)
+- ✅ This prevents double-counting the performance fee
+- ✅ Old formula ($I_{new} = I_{old} \times 1.011050$) was INCORRECT
+
+#### Step 6: Mint ALL Fee Tokens to Treasury
+
+**Total fee tokens (management + performance):**
+$$
+S_{total\_fees} = S_{mgmt} + S_{fee}^{13} = 9,165 + 2,167 = 11,332 \text{ snrUSD}
+$$
+
+**Breakdown:**
+- Management fee tokens: $9,165$ snrUSD (time-based, 30 days)
+- Performance fee tokens: $2,167$ snrUSD (2% of user APY)
+- **Total minted to treasury:** $11,332$ snrUSD
+
+**Key Points:**
+- ✅ Both fees are MINTED as tokens (not deducted from vault value)
+- ✅ Treasury tokens will grow with future rebases via index
+- ✅ These tokens were already included in $S_{new}$ for backing ratio checks
 
 #### Result:
 - ✅ **Senior holders:** Balances increased by 1.0833% (13% APY!) 🎉
-- ✅ **Protocol treasury:** Received 11,455 snrUSD total (9,288 mgmt + 2,167 perf fee)
+  - Old balance: 10,000,000 snrUSD
+  - New balance: 10,108,330 snrUSD (via index increase)
+- ✅ **Protocol treasury:** Received 11,332 snrUSD total fees
+  - Management fee: 9,165 snrUSD (time-based, 30 days)
+  - Performance fee: 2,167 snrUSD (2% of user APY)
 - ✅ **Senior vault:** Exactly 110% backing maintained
-- ✅ **Junior holders:** Received $22,762 profit share (0.46% bonus!)
-- ✅ **Reserve:** Received $5,691 (0.28% growth)
-- ✅ **Management fee:** 9,288 snrUSD (MINTED, not deducted!)
-- ✅ **Performance fee:** 2,167 snrUSD (MINTED as extra tokens!)
+  - Final value: $11,131,628 (exactly 110% of $10,119,662 supply)
+- ✅ **Junior holders:** Received $14,698 profit share (+0.29% growth!)
+  - Final value: $5,014,698
+- ✅ **Reserve:** Received $3,674 profit share (+0.18% growth)
+  - Final value: $2,003,674
 
 **🎯 Key Insights:** 
-- Dynamic APY selection means users got 13% APY this month (not just 11%)! 
-- **Both fees are minted as tokens, NOT deducted from vault value!**
-- Management fee: 9,288 snrUSD minted (1% annual / 12)
-- Performance fee: 2,167 snrUSD minted (2% of user APY)
-- Treasury receives 11,455 snrUSD total that will grow with future rebases
-- System automatically maximized returns while maintaining the peg
-- Vault value used is FULL $11,150,000 (not reduced by fees!)
+- ✅ **Dynamic APY:** System selected 13% (highest sustainable rate)
+- ✅ **TIME-BASED fees:** Management fee calculated on actual 30 days
+- ✅ **Both fees MINTED as tokens** (NOT deducted from vault value!)
+  - Vault value stayed at $11,150,000 through fee calculation
+  - Then reduced to $11,131,628 via spillover to Junior/Reserve
+- ✅ **Rebase index calculation:** Only base APY (no performance fee)
+  - Old formula was wrong: $I \times 1.011050$ ❌
+  - Correct formula: $I \times 1.010833$ ✅
+- ✅ **Supply includes ALL fees:** $S_{new} = S + S_{users} + S_{fee} + S_{mgmt}$
+- ✅ **Treasury tokens grow:** 11,332 snrUSD will rebase with all other holders
 
 ### 8.2 Market Scenario Analysis
 
@@ -1892,15 +1998,17 @@ Try 11%: 1,009,167 → Backing 99.6% ❌
 | Concept | Formula |
 |---------|---------|
 | User balance | $b_i = \sigma_i \cdot I$ |
-| **Fee Calculations (Both Minted as Tokens!)** | |
-| Management fee tokens | $S_{mgmt} = V_s \cdot \frac{1\%}{12}$ (minted monthly) |
+| **Fee Calculations (Both Minted as Tokens - TIME-BASED!)** | |
+| Management fee tokens | $S_{mgmt} = V_s \cdot 0.01 \cdot \frac{t_{elapsed}}{365 \text{ days}}$ (time-based!) |
 | Performance fee tokens | $S_{fee} = S_{users} \cdot 0.02$ (minted at rebase) |
 | Total fee tokens | $S_{total\_fees} = S_{mgmt} + S_{fee}$ |
-| **Dynamic APY Selection (Using Full $V_s$!)** | |
-| Try 13% APY | $S_{new}^{13} = S \cdot 1.011050$ (includes 2% fee), use if $\frac{V_s}{S_{new}^{13}} \geq 1.00$ |
-| Try 12% APY | $S_{new}^{12} = S \cdot 1.010200$ (includes 2% fee), use if $\frac{V_s}{S_{new}^{12}} \geq 1.00$ |
-| Try 11% APY | $S_{new}^{11} = S \cdot 1.009350$ (includes 2% fee), use if $\frac{V_s}{S_{new}^{11}} \geq 1.00$ (or use + backstop) |
-| Rebase index update | $I_{new} = I_{old} \cdot (1 + r_{selected} \cdot 1.02)$ |
+| User tokens (time-scaled) | $S_{users} = S \cdot r_{month} \cdot \frac{t_{elapsed}}{30 \text{ days}}$ |
+| **Dynamic APY Selection (Using Full $V_s$, Includes ALL Fees!)** | |
+| Total new supply | $S_{new} = S + S_{users} + S_{fee} + S_{mgmt}$ (includes mgmt fee!) |
+| Try 13% APY (30 days) | $S_{new}^{13} = S \cdot 1.011050 + S_{mgmt}$, use if $\frac{V_s}{S_{new}^{13}} \geq 1.00$ |
+| Try 12% APY (30 days) | $S_{new}^{12} = S \cdot 1.010200 + S_{mgmt}$, use if $\frac{V_s}{S_{new}^{12}} \geq 1.00$ |
+| Try 11% APY (30 days) | $S_{new}^{11} = S \cdot 1.009350 + S_{mgmt}$, use if $\frac{V_s}{S_{new}^{11}} \geq 1.00$ |
+| **Rebase index update (TIME-BASED, NO perf fee!)** | $I_{new} = I_{old} \cdot (1 + r_{selected} \cdot \frac{t_{elapsed}}{30 \text{ days}})$ |
 | **Three-Zone Spillover (Using Full $V_s$!)** | |
 | Backing ratio | $R_{senior} = \frac{V_s}{S_{new}}$ |
 | Profit spillover trigger | $R_{senior} > 1.10$ (Zone 1) |
@@ -2147,3 +2255,4 @@ $$
 *For implementation details, see Solidity contracts in `/src` directory.*  
 *For operational procedures, see `admin_operations.md`.*  
 *For deployment addresses, see `prod_addresses.md`.*
+

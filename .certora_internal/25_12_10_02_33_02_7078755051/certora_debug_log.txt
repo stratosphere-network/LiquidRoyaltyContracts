@@ -1,0 +1,77 @@
+Saving last configuration file to .certora_internal/25_12_10_02_33_02_7078755051/run.conf
+There is no TAC file. Going to script CertoraProver/certoraBuild.py to main_with_args()
+main build cache key computed based on {'files': ['certora/harness/MathLibHarness.sol'], 'package_version_for_build_cache': 'certora-cli 8.6.1', 'packages': ['@openzeppelin/contracts-upgradeable/=lib/openzeppelin-contracts-upgradeable/contracts', '@openzeppelin/contracts-upgradeable/contracts/=lib/openzeppelin-contracts-upgradeable/contracts', '@openzeppelin/contracts/=lib/openzeppelin-contracts/contracts', 'ds-test/=lib/openzeppelin-contracts/lib/forge-std/lib/ds-test/src', 'ds-test/src/=lib/openzeppelin-contracts/lib/forge-std/lib/ds-test/src', 'erc4626-tests/=lib/openzeppelin-contracts/lib/erc4626-tests', 'forge-std/=lib/forge-std/src', 'forge-std/src/=lib/forge-std/src', 'halmos-cheatcodes/=lib/openzeppelin-contracts/lib/halmos-cheatcodes/src', 'halmos-cheatcodes/src/=lib/openzeppelin-contracts/lib/halmos-cheatcodes/src', 'openzeppelin-contracts-upgradeable/=lib/openzeppelin-contracts-upgradeable', 'openzeppelin-contracts/=lib/openzeppelin-contracts', 'puppeteer=node_modules/puppeteer'], 'packages_path': 'node_modules', 'solc': '/home/amschel/.local/bin/solc', 'solc_allow_path': '.', 'test_condition': 'True'}
+Creating dir /home/amschel/stratosphere/tranching/.certora_internal/25_12_10_02_33_02_7078755051/.certora_config
+In /home/amschel/stratosphere/tranching/certora/specs/MathLib.spec, found the imports: []
+copying spec file /home/amschel/stratosphere/tranching/certora/specs/MathLib.spec to /home/amschel/stratosphere/tranching/.certora_internal/25_12_10_02_33_02_7078755051/.certora_sources/.0_MathLib.spec.spec
+writing /home/amschel/stratosphere/tranching/.certora_internal/25_12_10_02_33_02_7078755051/.certora_verify.json
+Local checks of CVL specification files disabled. It is recommended to enable the checks.
+Installed Java version is too old to check CVL specification files locally.  Java version should be at least 19 to allow local java-based type checking
+
+building file certora/harness/MathLibHarness.sol
+Running cmd /home/amschel/.local/bin/solc --version
+stdout, stderr = .certora_internal/25_12_10_02_33_02_7078755051/.certora_config/version_check_solc.stdout, .certora_internal/25_12_10_02_33_02_7078755051/.certora_config/version_check_solc.stderr
+Exitcode 0
+Solc run /home/amschel/.local/bin/solc --version time: 0.457
+Running cmd /home/amschel/.local/bin/solc -o ".certora_internal/25_12_10_02_33_02_7078755051/.certora_config/MathLibHarness.sol_0/" --overwrite --allow-paths ".",.,"lib/openzeppelin-contracts-upgradeable/contracts/","lib/openzeppelin-contracts-upgradeable/contracts/","lib/openzeppelin-contracts/contracts/","lib/openzeppelin-contracts/lib/forge-std/lib/ds-test/src/","lib/openzeppelin-contracts/lib/forge-std/lib/ds-test/src/","lib/openzeppelin-contracts/lib/erc4626-tests/","lib/forge-std/src/","lib/forge-std/src/","lib/openzeppelin-contracts/lib/halmos-cheatcodes/src/","lib/openzeppelin-contracts/lib/halmos-cheatcodes/src/","lib/openzeppelin-contracts-upgradeable/","lib/openzeppelin-contracts/","node_modules/puppeteer" --standard-json
+stdout, stderr = .certora_internal/25_12_10_02_33_02_7078755051/.certora_config/MathLibHarness.sol_0.standard.stdout.json, .certora_internal/25_12_10_02_33_02_7078755051/.certora_config/MathLibHarness.sol_0.standard.stderr.json
+Exitcode 0
+Solc run /home/amschel/.local/bin/solc -o ".certora_internal/25_12_10_02_33_02_7078755051/.certora_config/MathLibHarness.sol_0/" --overwrite --allow-paths ".",.,"lib/openzeppelin-contracts-upgradeable/contracts/","lib/openzeppelin-contracts-upgradeable/contracts/","lib/openzeppelin-contracts/contracts/","lib/openzeppelin-contracts/lib/forge-std/lib/ds-test/src/","lib/openzeppelin-contracts/lib/forge-std/lib/ds-test/src/","lib/openzeppelin-contracts/lib/erc4626-tests/","lib/forge-std/src/","lib/forge-std/src/","lib/openzeppelin-contracts/lib/halmos-cheatcodes/src/","lib/openzeppelin-contracts/lib/halmos-cheatcodes/src/","lib/openzeppelin-contracts-upgradeable/","lib/openzeppelin-contracts/","node_modules/puppeteer" --standard-json time: 0.5982
+reading standard json data from .certora_internal/25_12_10_02_33_02_7078755051/.certora_config/MathLibHarness.sol_0.standard.stdout.json
+collecting worklist for /home/amschel/stratosphere/tranching/certora/harness/MathLibHarness.sol
+Processing dependencies from file /home/amschel/stratosphere/tranching/certora/harness/MathLibHarness.sol
+available keys: dict_keys(['/home/amschel/stratosphere/tranching/certora/harness/MathLibHarness.sol', '/home/amschel/stratosphere/tranching/src/libraries/MathLib.sol'])
+Adding internal link ref /home/amschel/stratosphere/tranching/src/libraries/MathLib.sol to worklist
+Processing dependencies from file /home/amschel/stratosphere/tranching/src/libraries/MathLib.sol
+available keys: dict_keys(['/home/amschel/stratosphere/tranching/certora/harness/MathLibHarness.sol', '/home/amschel/stratosphere/tranching/src/libraries/MathLib.sol'])
+Contracts in MathLibHarness.sol_0 (file certora/harness/MathLibHarness.sol): ['MathLibHarness']
+Contracts with their chosen addresses: [(274184521717934524641157099916833587200, '/home/amschel/stratosphere/tranching/certora/harness/MathLibHarness.sol:MathLibHarness'), (274184521717934524641157099916833587201, '/home/amschel/stratosphere/tranching/src/libraries/MathLib.sol:MathLib')]
+Report source list={0: '/home/amschel/stratosphere/tranching/certora/harness/MathLibHarness.sol', 1: '/home/amschel/stratosphere/tranching/src/libraries/MathLib.sol'}
+Finding report source file, abs path /home/amschel/stratosphere/tranching/certora/harness/MathLibHarness.sol relative to /home/amschel/stratosphere/tranching
+Working on contract MathLibHarness
+Working on contract MathLibHarness
+Working on contract MathLib
+Working on contract MathLib
+For contracts of primary MathLibHarness
+finding primary contract address of /home/amschel/stratosphere/tranching/certora/harness/MathLibHarness.sol:MathLibHarness in [(274184521717934524641157099916833587200, '/home/amschel/stratosphere/tranching/certora/harness/MathLibHarness.sol:MathLibHarness'), (274184521717934524641157099916833587201, '/home/amschel/stratosphere/tranching/src/libraries/MathLib.sol:MathLib')]
+Contracts in SDC MathLibHarness.sol_0: ['MathLibHarness', 'MathLib']
+Building source tree
+Copying /home/amschel/stratosphere/tranching/src/libraries/MathLib.sol to .certora_internal/25_12_10_02_33_02_7078755051/.certora_sources/src/libraries/MathLib.sol
+Copying /home/amschel/stratosphere/tranching/certora/specs/MathLib.spec to .certora_internal/25_12_10_02_33_02_7078755051/.certora_sources/certora/specs/MathLib.spec
+Copying /home/amschel/stratosphere/tranching/package.json to .certora_internal/25_12_10_02_33_02_7078755051/.certora_sources/package.json
+Copying /home/amschel/stratosphere/tranching/foundry.toml to .certora_internal/25_12_10_02_33_02_7078755051/.certora_sources/foundry.toml
+Copying /home/amschel/stratosphere/tranching/certora/harness/MathLibHarness.sol to .certora_internal/25_12_10_02_33_02_7078755051/.certora_sources/certora/harness/MathLibHarness.sol
+Copying /home/amschel/stratosphere/tranching/certora/conf/MathLib.conf to .certora_internal/25_12_10_02_33_02_7078755051/.certora_sources/certora/conf/MathLib.conf
+Copying /home/amschel/stratosphere/tranching/remappings.txt to .certora_internal/25_12_10_02_33_02_7078755051/.certora_sources/remappings.txt
+Report source list={0: 'certora/harness/MathLibHarness.sol', 1: 'src/libraries/MathLib.sol'}
+Backing up current .certora_sources to .certora_internal/25_12_10_02_33_02_7078755051/.certora_sources/.pre_autofinders.0
+Running cmd /home/amschel/.local/bin/solc -o ".certora_internal/25_12_10_02_33_02_7078755051/.certora_config/MathLibHarness.sol_0/" --overwrite --allow-paths "/home/amschel/stratosphere/tranching/.certora_internal/25_12_10_02_33_02_7078755051/.certora_sources",.,"lib/openzeppelin-contracts-upgradeable/contracts/","lib/openzeppelin-contracts-upgradeable/contracts/","lib/openzeppelin-contracts/contracts/","lib/openzeppelin-contracts/lib/forge-std/lib/ds-test/src/","lib/openzeppelin-contracts/lib/forge-std/lib/ds-test/src/","lib/openzeppelin-contracts/lib/erc4626-tests/","lib/forge-std/src/","lib/forge-std/src/","lib/openzeppelin-contracts/lib/halmos-cheatcodes/src/","lib/openzeppelin-contracts/lib/halmos-cheatcodes/src/","lib/openzeppelin-contracts-upgradeable/","lib/openzeppelin-contracts/","node_modules/puppeteer" --standard-json
+stdout, stderr = .certora_internal/25_12_10_02_33_02_7078755051/.certora_config/MathLibHarness.sol_0.standard.stdout.json, .certora_internal/25_12_10_02_33_02_7078755051/.certora_config/MathLibHarness.sol_0.standard.stderr.json
+Exitcode 0
+Solc run /home/amschel/.local/bin/solc -o ".certora_internal/25_12_10_02_33_02_7078755051/.certora_config/MathLibHarness.sol_0/" --overwrite --allow-paths "/home/amschel/stratosphere/tranching/.certora_internal/25_12_10_02_33_02_7078755051/.certora_sources",.,"lib/openzeppelin-contracts-upgradeable/contracts/","lib/openzeppelin-contracts-upgradeable/contracts/","lib/openzeppelin-contracts/contracts/","lib/openzeppelin-contracts/lib/forge-std/lib/ds-test/src/","lib/openzeppelin-contracts/lib/forge-std/lib/ds-test/src/","lib/openzeppelin-contracts/lib/erc4626-tests/","lib/forge-std/src/","lib/forge-std/src/","lib/openzeppelin-contracts/lib/halmos-cheatcodes/src/","lib/openzeppelin-contracts/lib/halmos-cheatcodes/src/","lib/openzeppelin-contracts-upgradeable/","lib/openzeppelin-contracts/","node_modules/puppeteer" --standard-json time: 0.6384
+reading standard json data from .certora_internal/25_12_10_02_33_02_7078755051/.certora_config/MathLibHarness.sol_0.standard.stdout.json
+collecting worklist for /home/amschel/stratosphere/tranching/.certora_internal/25_12_10_02_33_02_7078755051/.certora_sources/certora/harness/MathLibHarness.sol
+Processing dependencies from file /home/amschel/stratosphere/tranching/.certora_internal/25_12_10_02_33_02_7078755051/.certora_sources/certora/harness/MathLibHarness.sol
+available keys: dict_keys(['/home/amschel/stratosphere/tranching/.certora_internal/25_12_10_02_33_02_7078755051/.certora_sources/certora/harness/MathLibHarness.sol', '/home/amschel/stratosphere/tranching/.certora_internal/25_12_10_02_33_02_7078755051/.certora_sources/src/libraries/MathLib.sol'])
+Adding internal link ref /home/amschel/stratosphere/tranching/.certora_internal/25_12_10_02_33_02_7078755051/.certora_sources/src/libraries/MathLib.sol to worklist
+Processing dependencies from file /home/amschel/stratosphere/tranching/.certora_internal/25_12_10_02_33_02_7078755051/.certora_sources/src/libraries/MathLib.sol
+available keys: dict_keys(['/home/amschel/stratosphere/tranching/.certora_internal/25_12_10_02_33_02_7078755051/.certora_sources/certora/harness/MathLibHarness.sol', '/home/amschel/stratosphere/tranching/.certora_internal/25_12_10_02_33_02_7078755051/.certora_sources/src/libraries/MathLib.sol'])
+Contracts in MathLibHarness.sol_0 (file .certora_internal/25_12_10_02_33_02_7078755051/.certora_sources/certora/harness/MathLibHarness.sol): ['MathLibHarness']
+Contracts with their chosen addresses: [(274184521717934524641157099916833587202, '/home/amschel/stratosphere/tranching/.certora_internal/25_12_10_02_33_02_7078755051/.certora_sources/certora/harness/MathLibHarness.sol:MathLibHarness'), (274184521717934524641157099916833587203, '/home/amschel/stratosphere/tranching/.certora_internal/25_12_10_02_33_02_7078755051/.certora_sources/src/libraries/MathLib.sol:MathLib')]
+Report source list={0: 'certora/harness/MathLibHarness.sol', 1: 'src/libraries/MathLib.sol'}
+Finding report source file, abs path /home/amschel/stratosphere/tranching/.certora_internal/25_12_10_02_33_02_7078755051/.certora_sources/certora/harness/MathLibHarness.sol relative to .certora_internal/25_12_10_02_33_02_7078755051/.certora_sources
+Working on contract MathLibHarness
+Working on contract MathLibHarness
+Working on contract MathLib
+Working on contract MathLib
+For contracts of primary MathLibHarness
+finding primary contract address of /home/amschel/stratosphere/tranching/.certora_internal/25_12_10_02_33_02_7078755051/.certora_sources/certora/harness/MathLibHarness.sol:MathLibHarness in [(274184521717934524641157099916833587202, '/home/amschel/stratosphere/tranching/.certora_internal/25_12_10_02_33_02_7078755051/.certora_sources/certora/harness/MathLibHarness.sol:MathLibHarness'), (274184521717934524641157099916833587203, '/home/amschel/stratosphere/tranching/.certora_internal/25_12_10_02_33_02_7078755051/.certora_sources/src/libraries/MathLib.sol:MathLib')]
+Contracts in SDC MathLibHarness.sol_0: ['MathLibHarness', 'MathLib']
+Backing up instrumented .certora_sources to .certora_internal/25_12_10_02_33_02_7078755051/.certora_sources/.post_autofinders.0
+Rolling back .certora_sources to .certora_internal/25_12_10_02_33_02_7078755051/.certora_sources/.pre_autofinders.0 version
+Libraries to add = []
+writing file /home/amschel/stratosphere/tranching/.certora_internal/25_12_10_02_33_02_7078755051/.certora_build.json
+writing file /home/amschel/stratosphere/tranching/.certora_internal/25_12_10_02_33_02_7078755051/.certora_build_output_props.json
+Local checks of CVL specification files disabled. It is recommended to enable the checks.
+writing /home/amschel/stratosphere/tranching/.certora_internal/25_12_10_02_33_02_7078755051/.certora_verify.json
+Local checks of CVL specification files disabled. It is recommended to enable the checks.

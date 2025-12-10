@@ -50,6 +50,9 @@ contract ConcreteReserveVault is ReserveVault {
         );
         
         // N1 FIX: Set roles during initialization (consolidated from initializeV2)
+        if (liquidityManager_ == address(0)) revert ZeroAddress();
+        if (priceFeedManager_ == address(0)) revert ZeroAddress();
+        if (contractUpdater_ == address(0)) revert ZeroAddress();
         _liquidityManager = liquidityManager_;
         _priceFeedManager = priceFeedManager_;
         _contractUpdater = contractUpdater_;
@@ -59,12 +62,16 @@ contract ConcreteReserveVault is ReserveVault {
      * @notice Initialize V2 - DEPRECATED (kept for backward compatibility)
      * @dev N1: Redundant - new deployments should use initialize() with all params
      * @dev Only kept for contracts already deployed with V1 initialize()
+     * @dev SECURITY FIX: Added onlyAdmin to prevent front-running attack
      */
     function initializeV2(
         address liquidityManager_,
         address priceFeedManager_,
         address contractUpdater_
-    ) external reinitializer(2) {
+    ) external reinitializer(2) onlyAdmin {
+        if (liquidityManager_ == address(0)) revert ZeroAddress();
+        if (priceFeedManager_ == address(0)) revert ZeroAddress();
+        if (contractUpdater_ == address(0)) revert ZeroAddress();
         _liquidityManager = liquidityManager_;
         _priceFeedManager = priceFeedManager_;
         _contractUpdater = contractUpdater_;
@@ -83,14 +90,17 @@ contract ConcreteReserveVault is ReserveVault {
     }
     
     function setLiquidityManager(address liquidityManager_) external onlyAdmin {
+        if (liquidityManager_ == address(0)) revert ZeroAddress();
         _liquidityManager = liquidityManager_;
     }
     
     function setPriceFeedManager(address priceFeedManager_) external onlyAdmin {
+        if (priceFeedManager_ == address(0)) revert ZeroAddress();
         _priceFeedManager = priceFeedManager_;
     }
     
     function setContractUpdater(address contractUpdater_) external onlyAdmin {
+        if (contractUpdater_ == address(0)) revert ZeroAddress();
         _contractUpdater = contractUpdater_;
     }
 }

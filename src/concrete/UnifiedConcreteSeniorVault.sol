@@ -4,6 +4,7 @@ pragma solidity ^0.8.20;
 import {UnifiedSeniorVault} from "../abstract/UnifiedSeniorVault.sol";
 import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import {IERC20Metadata} from "@openzeppelin/contracts/token/ERC20/extensions/IERC20Metadata.sol";
+import {Math} from "@openzeppelin/contracts/utils/math/Math.sol";
 
 
 /**
@@ -67,6 +68,9 @@ contract UnifiedConcreteSeniorVault is UnifiedSeniorVault {
         );
         
         // N1 FIX: Set roles during initialization (consolidated from initializeV2)
+        if (liquidityManager_ == address(0)) revert ZeroAddress();
+        if (priceFeedManager_ == address(0)) revert ZeroAddress();
+        if (contractUpdater_ == address(0)) revert ZeroAddress();
         _liquidityManager = liquidityManager_;
         _priceFeedManager = priceFeedManager_;
         _contractUpdater = contractUpdater_;
@@ -76,12 +80,16 @@ contract UnifiedConcreteSeniorVault is UnifiedSeniorVault {
      * @notice Initialize V2 - DEPRECATED (kept for backward compatibility)
      * @dev N1: Redundant - new deployments should use initialize() with all params
      * @dev Only kept for contracts already deployed with V1 initialize()
+     * @dev SECURITY FIX: Added onlyAdmin to prevent front-running attack
      */
     function initializeV2(
         address liquidityManager_,
         address priceFeedManager_,
         address contractUpdater_
-    ) external reinitializer(2) {
+    ) external reinitializer(2) onlyAdmin {
+        if (liquidityManager_ == address(0)) revert ZeroAddress();
+        if (priceFeedManager_ == address(0)) revert ZeroAddress();
+        if (contractUpdater_ == address(0)) revert ZeroAddress();
         _liquidityManager = liquidityManager_;
         _priceFeedManager = priceFeedManager_;
         _contractUpdater = contractUpdater_;
@@ -102,14 +110,17 @@ contract UnifiedConcreteSeniorVault is UnifiedSeniorVault {
     
     // Role setters
     function setLiquidityManager(address liquidityManager_) external onlyAdmin {
+        if (liquidityManager_ == address(0)) revert ZeroAddress();
         _liquidityManager = liquidityManager_;
     }
     
     function setPriceFeedManager(address priceFeedManager_) external onlyAdmin {
+        if (priceFeedManager_ == address(0)) revert ZeroAddress();
         _priceFeedManager = priceFeedManager_;
     }
     
     function setContractUpdater(address contractUpdater_) external onlyAdmin {
+        if (contractUpdater_ == address(0)) revert ZeroAddress();
         _contractUpdater = contractUpdater_;
     }
     
@@ -132,10 +143,11 @@ contract UnifiedConcreteSeniorVault is UnifiedSeniorVault {
         address lpToken = address(kodiakHook.island());
         uint8 lpDecimals = IERC20Metadata(lpToken).decimals();
         
+        // SECURITY FIX: Use Math.mulDiv() to avoid divide-before-multiply precision loss
         // Calculate LP amount from USD amount (accounting for LP decimals)
         // lpPrice is in 18 decimals (USD per LP token)
         // We need to convert to LP token's actual decimals
-        uint256 lpAmount = (amountUSD * (10 ** lpDecimals)) / lpPrice;
+        uint256 lpAmount = Math.mulDiv(amountUSD, 10 ** lpDecimals, lpPrice);
         
         // Check Senior Hook's LP token balance
         uint256 lpBalance = kodiakHook.getIslandLPBalance();
@@ -150,8 +162,9 @@ contract UnifiedConcreteSeniorVault is UnifiedSeniorVault {
         // Transfer LP tokens from Senior Hook to Junior Hook
         kodiakHook.transferIslandLP(juniorHook, actualLPAmount);
         
+        // SECURITY FIX: Use Math.mulDiv() for precise USD conversion
         // Update Junior vault value (convert LP amount back to USD, accounting for decimals)
-        uint256 actualUSDAmount = (actualLPAmount * lpPrice) / (10 ** lpDecimals);
+        uint256 actualUSDAmount = Math.mulDiv(actualLPAmount, lpPrice, 10 ** lpDecimals);
         _juniorVault.receiveSpillover(actualUSDAmount);
     }
     
@@ -170,10 +183,11 @@ contract UnifiedConcreteSeniorVault is UnifiedSeniorVault {
         address lpToken = address(kodiakHook.island());
         uint8 lpDecimals = IERC20Metadata(lpToken).decimals();
         
+        // SECURITY FIX: Use Math.mulDiv() to avoid divide-before-multiply precision loss
         // Calculate LP amount from USD amount (accounting for LP decimals)
         // lpPrice is in 18 decimals (USD per LP token)
         // We need to convert to LP token's actual decimals
-        uint256 lpAmount = (amountUSD * (10 ** lpDecimals)) / lpPrice;
+        uint256 lpAmount = Math.mulDiv(amountUSD, 10 ** lpDecimals, lpPrice);
         
         // Check Senior Hook's LP token balance
         uint256 lpBalance = kodiakHook.getIslandLPBalance();
@@ -188,8 +202,9 @@ contract UnifiedConcreteSeniorVault is UnifiedSeniorVault {
         // Transfer LP tokens from Senior Hook to Reserve Hook
         kodiakHook.transferIslandLP(reserveHook, actualLPAmount);
         
+        // SECURITY FIX: Use Math.mulDiv() for precise USD conversion
         // Update Reserve vault value (convert LP amount back to USD, accounting for decimals)
-        uint256 actualUSDAmount = (actualLPAmount * lpPrice) / (10 ** lpDecimals);
+        uint256 actualUSDAmount = Math.mulDiv(actualLPAmount, lpPrice, 10 ** lpDecimals);
         _reserveVault.receiveSpillover(actualUSDAmount);
     }
     
@@ -198,12 +213,21 @@ contract UnifiedConcreteSeniorVault is UnifiedSeniorVault {
      * @dev Reference: Three-Zone System - Primary Backstop (Reserve first)
      * @param amountUSD Amount in USD to receive
      * @param lpPrice Current LP token price in USD (18 decimals)
+     * @return actualReceived Actual USD value received from Reserve
      */
-    function _pullFromReserve(uint256 amountUSD, uint256 lpPrice) internal override {
-        if (amountUSD == 0) return;
+    function _pullFromReserve(uint256 amountUSD, uint256 lpPrice) internal override returns (uint256 actualReceived) {
+        if (amountUSD == 0) return 0;
         
+        // SECURITY FIX: Check actual amount received from backstop
         // Request backstop from Reserve (transfers LP tokens based on USD amount and LP price)
-        _reserveVault.provideBackstop(amountUSD, lpPrice);
+        actualReceived = _reserveVault.provideBackstop(amountUSD, lpPrice);
+        
+        // Log if we received less than requested (Reserve partially depleted)
+        if (actualReceived < amountUSD) {
+            emit BackstopShortfall(address(_reserveVault), amountUSD, actualReceived);
+        }
+        
+        return actualReceived;
     }
     
     /**
@@ -211,12 +235,24 @@ contract UnifiedConcreteSeniorVault is UnifiedSeniorVault {
      * @dev Reference: Three-Zone System - Secondary Backstop (Junior if Reserve depleted)
      * @param amountUSD Amount in USD to receive
      * @param lpPrice Current LP token price in USD (18 decimals)
+     * @return actualReceived Actual USD value received from Junior
      */
-    function _pullFromJunior(uint256 amountUSD, uint256 lpPrice) internal override {
-        if (amountUSD == 0) return;
+    function _pullFromJunior(uint256 amountUSD, uint256 lpPrice) internal override returns (uint256 actualReceived) {
+        if (amountUSD == 0) return 0;
         
+        // SECURITY FIX: Check actual amount received from backstop
         // Request backstop from Junior (transfers LP tokens based on USD amount and LP price)
-        _juniorVault.provideBackstop(amountUSD, lpPrice);
+        actualReceived = _juniorVault.provideBackstop(amountUSD, lpPrice);
+        
+        // Log if we received less than requested (Junior partially depleted)
+        if (actualReceived < amountUSD) {
+            emit BackstopShortfall(address(_juniorVault), amountUSD, actualReceived);
+        }
+        
+        return actualReceived;
     }
+    
+    /// @dev Event for tracking backstop shortfalls
+    event BackstopShortfall(address indexed vault, uint256 requested, uint256 received);
 }
 

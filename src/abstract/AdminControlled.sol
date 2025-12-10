@@ -7,12 +7,11 @@ import {Initializable} from "@openzeppelin/contracts-upgradeable/proxy/utils/Ini
  * @title AdminControlled
  * @notice Base contract for admin and deployer role management
  * @dev Provides two-tier access control:
- *      - Deployer: Can set admin once
- *      - Admin: Can call privileged functions (rebases, updates, emergencies)
+ *      
  * @dev Upgradeable version using Initializable
  */
 abstract contract AdminControlled is Initializable {
-    /// @dev Roles (ORIGINAL - DO NOT MODIFY ORDER)
+    /// @dev 
     /// NEVER add new storage variables here - it will break all inheriting contracts!
     /// Add new storage only in concrete contracts at the END
     address private _deployer;

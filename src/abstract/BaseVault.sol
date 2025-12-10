@@ -23,11 +23,23 @@ import {IKodiakIsland} from "../integrations/IKodiakIsland.sol";
  *
  * References from Mathematical Specification:
  * - Section: Notation & Definitions (State Variables)
- * - Instructions: Vault Architecture (Stablecoin Holdings)
+ 
  */
 abstract contract BaseVault is ERC4626Upgradeable, IVault, AdminControlled, UUPSUpgradeable {
     using MathLib for uint256;
     using SafeERC20 for IERC20;
+    
+    /// @dev Reentrancy guard
+    uint256 private constant _NOT_ENTERED = 1;
+    uint256 private constant _ENTERED = 2;
+    uint256 private _status;
+    
+    modifier nonReentrant() {
+        require(_status != _ENTERED, "ReentrancyGuard: reentrant call");
+        _status = _ENTERED;
+        _;
+        _status = _NOT_ENTERED;
+    }
     
     /// @dev Struct for LP holdings data
     struct LPHolding {
@@ -43,7 +55,7 @@ abstract contract BaseVault is ERC4626Upgradeable, IVault, AdminControlled, UUPS
     /// @dev Stablecoin held by vault (the "asset" in ERC4626 terms)
     IERC20 internal _stablecoin;
     
-    /// @dev Whitelisted LPs (Liquidity Pools/Protocols/Kodiak Islands)
+    /// @dev Whitelisted  (Liquidity Pools/Protocols/Kodiak Islands)
     address[] internal _whitelistedLPs;
     mapping(address => bool) internal _isWhitelistedLP;
     
@@ -68,7 +80,7 @@ abstract contract BaseVault is ERC4626Upgradeable, IVault, AdminControlled, UUPS
     int256 internal constant MIN_PROFIT_BPS = -5000;  // -50% minimum
     int256 internal constant MAX_PROFIT_BPS = 10000;  // +100% maximum
     
-    /// @dev VN003 FIX: Slippage protection (hardcoded to avoid storage changes)
+    /// @dev Slippage protection (hardcoded to avoid storage changes)
     uint256 internal constant LP_LIQUIDATION_SLIPPAGE_BPS = 200;  // 2% slippage tolerance
     
     /// @dev Events
@@ -150,6 +162,8 @@ abstract contract BaseVault is ERC4626Upgradeable, IVault, AdminControlled, UUPS
     error KodiakRouterNotSet();
     error InvalidTokenPrice();
     error IdleBalanceDeviation();
+    error InvalidLPToken();
+    error InvalidStablecoinDecimals();
     
     /// @dev Modifiers
     modifier onlySeniorVault() {
@@ -174,9 +188,13 @@ abstract contract BaseVault is ERC4626Upgradeable, IVault, AdminControlled, UUPS
     ) internal onlyInitializing {
         if (stablecoin_ == address(0)) revert AdminControlled.ZeroAddress();
         
+
+        if (IERC20Metadata(stablecoin_).decimals() != 18) revert InvalidStablecoinDecimals();
+        
         __ERC20_init(vaultName_, vaultSymbol_);
         __ERC4626_init(IERC20(stablecoin_));
         __AdminControlled_init();
+        _status = _NOT_ENTERED;
         
         _stablecoin = IERC20(stablecoin_);
         _seniorVault = seniorVault_; // Can be placeholder initially
@@ -371,7 +389,7 @@ abstract contract BaseVault is ERC4626Upgradeable, IVault, AdminControlled, UUPS
     }
 
     /**
-     * @notice Withdraw LP tokens and send to whitelisted LP address for liquidation
+     * @notice Withdraw LP tokens and send to whitelisted LP address for liquidation. Can possibly be used for offchain automation.
      * @dev Only admin can withdraw, LP must be whitelisted
      * @param lpToken Address of the LP token to withdraw
      * @param lp Address of the whitelisted LP protocol to send tokens to
@@ -782,11 +800,9 @@ abstract contract BaseVault is ERC4626Upgradeable, IVault, AdminControlled, UUPS
         // Apply profit/loss: V_new = V_old × (1 + profitBps / 10000)
         _vaultValue = MathLib.applyPercentage(oldValue, profitBps);
         _lastUpdateTime = block.timestamp;
-        
-        emit VaultValueUpdated(oldValue, _vaultValue, profitBps);
-        
         // Hook for derived contracts to execute post-update logic
         _afterValueUpdate(oldValue, _vaultValue);
+         emit VaultValueUpdated(oldValue, _vaultValue, profitBps);
     }
 
     /**
@@ -803,13 +819,14 @@ abstract contract BaseVault is ERC4626Upgradeable, IVault, AdminControlled, UUPS
         // Calculate BPS for event logging
         int256 bps = 0;
         if (oldValue > 0) {
-            bps = int256((newValue * 10000 / oldValue)) - 10000;
+            // PRECISION FIX: Avoid potential overflow/underflow by careful ordering
+            bps = int256((newValue * 10000) / oldValue) - 10000;
         }
-        
-        emit VaultValueUpdated(oldValue, _vaultValue, bps);
         
         // Hook for derived contracts to execute post-update logic
         _afterValueUpdate(oldValue, _vaultValue);
+
+          emit VaultValueUpdated(oldValue, _vaultValue, bps);
     }
     
     /**
@@ -827,6 +844,7 @@ abstract contract BaseVault is ERC4626Upgradeable, IVault, AdminControlled, UUPS
      * 5. Update vault value to include new LP value
      * 6. Emit VaultSeeded event
      */
+
     function seedVault(
         address lpToken,
         uint256 amount,
@@ -837,6 +855,7 @@ abstract contract BaseVault is ERC4626Upgradeable, IVault, AdminControlled, UUPS
         if (amount == 0) revert InvalidAmount();
         if (lpPrice == 0) revert InvalidLPPrice();
         if (address(kodiakHook) == address(0)) revert KodiakHookNotSet();
+          if (lpToken != address(kodiakHook.island())) revert InvalidLPToken();
         
         // Step 1: Transfer LP tokens from caller (seeder) to vault
         IERC20(lpToken).safeTransferFrom(msg.sender, address(this), amount);
@@ -909,20 +928,20 @@ abstract contract BaseVault is ERC4626Upgradeable, IVault, AdminControlled, UUPS
      * @param needed Amount of stablecoin needed
      * @return minExpected Minimum acceptable amount after applying slippage tolerance
      */
-    function _calculateMinExpectedFromLP(uint256 needed) internal view returns (uint256 minExpected) {
+    function _calculateMinExpectedFromLP(uint256 needed) internal view virtual returns (uint256 minExpected) {
         if (address(kodiakHook) == address(0)) return 0;
         
         try kodiakHook.island() returns (IKodiakIsland island) {
             if (address(island) == address(0)) return 0;
             
             // Query pool reserves
-            (, uint256 honeyInPool) = island.getUnderlyingBalances();
+            (, uint256 stablecoinInPool) = island.getUnderlyingBalances();
             uint256 totalLP = island.totalSupply();
             
-            if (totalLP == 0 || honeyInPool == 0) return 0;
+            if (totalLP == 0 || stablecoinInPool == 0) return 0;
             
             // Calculate expected return (conservative: assume 1:1 on needed amount)
-            // Note: We could calculate exact amount using honeyPerLP, but conservative is safer
+            // Note: We could calculate exact amount using stablecoinPerLP, but conservative is safer
             uint256 expectedReturn = needed;
             
             // Apply hardcoded 2% slippage tolerance (9800/10000)
@@ -940,6 +959,7 @@ abstract contract BaseVault is ERC4626Upgradeable, IVault, AdminControlled, UUPS
      * @notice Override ERC4626 internal withdraw to ensure liquidity and charge 1% withdrawal fee
      * @dev Automatically frees up liquidity from Kodiak LP if needed using iterative approach
      * @dev VN003 FIX: Added slippage protection when liquidating LP tokens
+     * @dev REENTRANCY FIX: Protected with nonReentrant modifier
      * @param caller Address calling the withdrawal
      * @param receiver Address receiving the assets
      * @param owner Owner of the shares
@@ -952,7 +972,7 @@ abstract contract BaseVault is ERC4626Upgradeable, IVault, AdminControlled, UUPS
         address owner,
         uint256 assets,
         uint256 shares
-    ) internal virtual override {
+    ) internal virtual override nonReentrant {
        
         if (caller != owner) {
             _spendAllowance(owner, caller, shares);
@@ -974,7 +994,7 @@ abstract contract BaseVault is ERC4626Upgradeable, IVault, AdminControlled, UUPS
             }
             
             if (address(kodiakHook) == address(0)) {
-                revert InsufficientLiquidity();
+                revert KodiakHookNotSet();
             }
             
             // Calculate how much more we need
@@ -1018,10 +1038,12 @@ abstract contract BaseVault is ERC4626Upgradeable, IVault, AdminControlled, UUPS
             emit LiquidityFreedForWithdrawal(assets, totalFreed);
         }
         
-        // Burn shares from owner
+        // REENTRANCY FIX: Effects before Interactions
+        // Burn shares and update state BEFORE external transfers
         _burn(owner, shares);
-          _vaultValue -= assets;
-        // Transfer net assets to receiver (after 1% fee)
+        _vaultValue -= assets;
+        
+        // Interactions: Transfer assets (after state changes)
         _stablecoin.safeTransfer(receiver, netAssets);
         
         // Transfer fee to treasury (if treasury is set)
@@ -1029,9 +1051,6 @@ abstract contract BaseVault is ERC4626Upgradeable, IVault, AdminControlled, UUPS
             _stablecoin.safeTransfer(_treasury, withdrawalFee);
             emit WithdrawalFeeCharged(owner, withdrawalFee, netAssets);
         }
-        
-        // Track capital outflow: decrease vault value by actual assets withdrawn (full amount including fee)
-      
         
         emit Withdraw(caller, receiver, owner, assets, shares);
     }
