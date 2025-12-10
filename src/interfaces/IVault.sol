@@ -23,7 +23,6 @@ interface IVault {
     /// @dev Errors
     error InvalidAmount();
     error InsufficientBalance();
-    error InsufficientShares();  // N8 FIX: Slippage protection for LP deposits
     error DepositCapExceeded();
     error Unauthorized();
     

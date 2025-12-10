@@ -506,3 +506,4 @@ rule restorationBufferEnablesRebase(uint256 newSupply) {
         "Restoration buffer doesn't enable next rebase";
 }
 
+

@@ -119,7 +119,7 @@ library SpilloverLib {
      * - X_r = min(V_r, D) [Reserve first, no cap!]
      * - X_j = min(V_j, D - X_r) [Junior second, no cap!]
      * 
-     * @param netVaultValue Senior vault value after fees (V_s^net)
+     * @param netVaultValue Senior vault value 
      * @param newSupply Total supply after rebase (S_new)
      * @param reserveValue Available reserve vault value (V_r)
      * @param juniorValue Available junior vault value (V_j)
