@@ -2,6 +2,8 @@
 pragma solidity ^0.8.20;
 
 import {ReserveVault} from "../abstract/ReserveVault.sol";
+import {MathLib} from "../libraries/MathLib.sol";
+import {FeeLib} from "../libraries/FeeLib.sol";
 
 /**
  * @title ConcreteReserveVault
@@ -14,6 +16,9 @@ contract ConcreteReserveVault is ReserveVault {
     address private _liquidityManager;
     address private _priceFeedManager;
     address private _contractUpdater;
+    
+    /// @dev Cooldown mechanism (V3 upgrade - moved from ReserveVault for storage safety)
+    mapping(address => uint256) private _cooldownStart;
     
     /// @custom:oz-upgrades-unsafe-allow constructor
     constructor() {
@@ -102,6 +107,186 @@ contract ConcreteReserveVault is ReserveVault {
     function setContractUpdater(address contractUpdater_) external onlyAdmin {
         if (contractUpdater_ == address(0)) revert ZeroAddress();
         _contractUpdater = contractUpdater_;
+    }
+    
+    // ============================================
+    // Cooldown Mechanism (V3 - moved from abstract for storage safety)
+    // ============================================
+    
+    /**
+     * @notice Initiate withdrawal cooldown
+     * @dev After 7 days, user can withdraw without 20% penalty
+     */
+    function initiateCooldown() external {
+        _cooldownStart[msg.sender] = block.timestamp;
+        emit CooldownInitiated(msg.sender, block.timestamp);
+    }
+    
+    /**
+     * @notice Get user's cooldown start timestamp
+     * @param user User address
+     * @return Cooldown start timestamp (0 if not initiated)
+     */
+    function cooldownStart(address user) external view returns (uint256) {
+        return _cooldownStart[user];
+    }
+    
+    /**
+     * @notice Check if user can withdraw without penalty
+     * @param user User address
+     * @return True if cooldown period has passed
+     */
+    function canWithdrawWithoutPenalty(address user) external view returns (bool) {
+        uint256 cooldownTime = _cooldownStart[user];
+        if (cooldownTime == 0) return false;
+        return (block.timestamp - cooldownTime) >= MathLib.COOLDOWN_PERIOD;
+    }
+    
+    /**
+     * @notice Calculate withdrawal penalty for user
+     * @param user User address
+     * @param amount Withdrawal amount
+     * @return penalty Penalty amount
+     * @return netAmount Amount after penalty
+     */
+    function calculateWithdrawalPenalty(
+        address user,
+        uint256 amount
+    ) external view returns (uint256 penalty, uint256 netAmount) {
+        uint256 cooldownTime = _cooldownStart[user];
+        if (cooldownTime == 0) {
+            return FeeLib.calculateWithdrawalPenalty(amount, 0, block.timestamp);
+        }
+        return FeeLib.calculateWithdrawalPenalty(amount, cooldownTime, block.timestamp);
+    }
+    
+    /**
+     * @notice Override withdraw to add cooldown penalty
+     * @dev Applies 20% penalty if cooldown not met, then 1% withdrawal fee
+     */
+    function _withdraw(
+        address caller,
+        address receiver,
+        address owner,
+        uint256 assets,
+        uint256 shares
+    ) internal override {
+        // Check allowance if caller is not the owner
+        if (caller != owner) {
+            _spendAllowance(owner, caller, shares);
+        }
+        
+        // Calculate early withdrawal penalty (20% if cooldown not met)
+        uint256 cooldownTime = _cooldownStart[owner];
+        uint256 earlyPenalty;
+        uint256 amountAfterEarlyPenalty;
+        
+        if (cooldownTime == 0) {
+            (earlyPenalty, amountAfterEarlyPenalty) = FeeLib.calculateWithdrawalPenalty(assets, 0, block.timestamp);
+        } else {
+            (earlyPenalty, amountAfterEarlyPenalty) = FeeLib.calculateWithdrawalPenalty(assets, cooldownTime, block.timestamp);
+        }
+        
+        // Calculate 1% withdrawal fee (applied to amount after early penalty)
+        uint256 withdrawalFee = (amountAfterEarlyPenalty * MathLib.WITHDRAWAL_FEE) / MathLib.PRECISION;
+        uint256 netAssets = amountAfterEarlyPenalty - withdrawalFee;
+        
+        // SECURITY FIX (CEI Pattern): Reset cooldown BEFORE external calls
+        if (_cooldownStart[owner] != 0) {
+            _cooldownStart[owner] = 0;
+        }
+        
+        // Free up liquidity if needed (iterative approach)
+        uint256 maxAttempts = 3;
+        uint256 totalFreed = 0;
+        
+        for (uint256 i = 0; i < maxAttempts; i++) {
+            uint256 vaultBalance = stablecoin().balanceOf(address(this));
+            
+            if (vaultBalance >= assets) {
+                break; // We have enough
+            }
+            
+            if (address(kodiakHook) == address(0)) {
+                revert InsufficientLiquidity();
+            }
+            
+            // Calculate how much more we need
+            uint256 needed = assets - vaultBalance;
+            uint256 balanceBefore = vaultBalance;
+            
+            // Calculate minimum expected amount with slippage tolerance
+            uint256 minExpected = _calculateMinExpectedFromLP(needed);
+            
+            // Call hook to liquidate LP with smart estimation
+            try kodiakHook.liquidateLPForAmount(needed) {
+                uint256 balanceAfter = stablecoin().balanceOf(address(this));
+                uint256 freedThisRound = balanceAfter > balanceBefore ? balanceAfter - balanceBefore : 0;
+                totalFreed += freedThisRound;
+                
+                // Check slippage protection (only if minExpected > 0)
+                if (minExpected > 0 && freedThisRound < minExpected) {
+                    revert SlippageTooHigh();
+                }
+                
+                emit LPLiquidationExecuted(needed, freedThisRound, minExpected);
+                
+                // If we didn't get any more funds, stop trying
+                if (freedThisRound == 0) {
+                    break;
+                }
+            } catch {
+                // If hook call fails, stop trying
+                break;
+            }
+        }
+        
+        // Final check: do we have enough now?
+        uint256 finalBalance = stablecoin().balanceOf(address(this));
+        if (finalBalance < assets) {
+            revert InsufficientLiquidity();
+        }
+        
+        // Emit event if we had to free up liquidity
+        if (totalFreed > 0) {
+            emit LiquidityFreedForWithdrawal(assets, totalFreed);
+        }
+        
+        // REENTRANCY FIX: Effects before Interactions
+        _burn(owner, shares);
+        // Note: _vaultValue is updated by parent, no need to duplicate
+        
+        // Reset cooldown after burning shares
+        _cooldownStart[receiver] = 0;
+        
+        // Interactions: Transfer assets (after state changes)
+        stablecoin().transfer(receiver, netAssets);
+        
+        // Transfer fees to treasury (if treasury is set)
+        address treasuryAddr = treasury();
+        if (treasuryAddr != address(0)) {
+            uint256 totalFees = earlyPenalty + withdrawalFee;
+            if (totalFees > 0) {
+                stablecoin().transfer(treasuryAddr, totalFees);
+                emit WithdrawalFeeCharged(owner, totalFees, netAssets);
+            }
+        }
+        
+        emit Withdraw(caller, receiver, owner, assets, shares);
+    }
+    
+    /**
+     * @notice Override ERC20 _update to reset cooldown on token transfers
+     * @dev SECURITY FIX: Prevents cooldown bypass by transferring tokens between addresses
+     */
+    function _update(address from, address to, uint256 value) internal override {
+        // Call parent implementation first
+        super._update(from, to, value);
+        
+        // SECURITY FIX: Reset cooldown when receiving tokens (transfer or mint)
+        if (to != address(0) && _cooldownStart[to] != 0) {
+            _cooldownStart[to] = 0;
+        }
     }
 }
 

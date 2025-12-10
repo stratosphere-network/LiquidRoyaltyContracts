@@ -769,7 +769,7 @@ abstract contract UnifiedSeniorVault is ISeniorVault, IERC20, AdminControlled, P
      * @param depositId ID of pending deposit
      * @param reason Reason for rejection
      */
-    function rejectLPDeposit(uint256 depositId, string calldata reason) external onlyLiquidityManager {
+    function rejectLPDeposit(uint256 depositId, string calldata reason) external onlyLiquidityManager nonReentrant {
         PendingLPDeposit storage pendingDeposit = _pendingDeposits[depositId];
         
         if (pendingDeposit.depositor == address(0)) revert DepositNotFound();
@@ -789,7 +789,7 @@ abstract contract UnifiedSeniorVault is ISeniorVault, IERC20, AdminControlled, P
      * @dev Depositor can cancel anytime before approval
      * @param depositId ID of pending deposit
      */
-    function cancelPendingDeposit(uint256 depositId) external {
+    function cancelPendingDeposit(uint256 depositId) external nonReentrant {
         PendingLPDeposit storage pendingDeposit = _pendingDeposits[depositId];
         
         if (pendingDeposit.depositor == address(0)) revert DepositNotFound();
@@ -810,7 +810,7 @@ abstract contract UnifiedSeniorVault is ISeniorVault, IERC20, AdminControlled, P
      * @dev Returns LP to original depositor after expiry
      * @param depositId ID of pending deposit
      */
-    function claimExpiredDeposit(uint256 depositId) external {
+    function claimExpiredDeposit(uint256 depositId) external nonReentrant {
         PendingLPDeposit storage pendingDeposit = _pendingDeposits[depositId];
         
         if (pendingDeposit.depositor == address(0)) revert DepositNotFound();
