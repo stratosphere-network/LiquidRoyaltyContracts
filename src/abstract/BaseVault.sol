@@ -34,11 +34,15 @@ abstract contract BaseVault is ERC4626Upgradeable, IVault, AdminControlled, UUPS
     uint256 private constant _ENTERED = 2;
     
     modifier nonReentrant() {
-        require(_status != _ENTERED, "ReentrancyGuard: reentrant call");
-        _status = _ENTERED;
+        require(_getReentrancyStatus() != _ENTERED, "ReentrancyGuard: reentrant call");
+        _setReentrancyStatus(_ENTERED);
         _;
-        _status = _NOT_ENTERED;
+        _setReentrancyStatus(_NOT_ENTERED);
     }
+    
+    /// @dev Virtual functions for reentrancy guard (implemented in concrete contracts)
+    function _getReentrancyStatus() internal view virtual returns (uint256);
+    function _setReentrancyStatus(uint256 status) internal virtual;
     
     /// @dev Struct for LP holdings data
     struct LPHolding {
@@ -74,9 +78,6 @@ abstract contract BaseVault is ERC4626Upgradeable, IVault, AdminControlled, UUPS
     /// @dev Management fee minting for Junior/Reserve vaults
     uint256 internal _lastMintTime;        // Last time management fee was minted
     uint256 internal _mgmtFeeSchedule;     // Time interval between mints (e.g., 7 days, 30 days)
-    
-    /// @dev Reentrancy guard state (ADDED AT END FOR UPGRADE SAFETY)
-    uint256 private _status;
     
     /// @dev Constants
     int256 internal constant MIN_PROFIT_BPS = -5000;  // -50% minimum
@@ -196,7 +197,6 @@ abstract contract BaseVault is ERC4626Upgradeable, IVault, AdminControlled, UUPS
         __ERC20_init(vaultName_, vaultSymbol_);
         __ERC4626_init(IERC20(stablecoin_));
         __AdminControlled_init();
-        _status = _NOT_ENTERED;
         
         _stablecoin = IERC20(stablecoin_);
         _seniorVault = seniorVault_; // Can be placeholder initially
@@ -955,6 +955,72 @@ abstract contract BaseVault is ERC4626Upgradeable, IVault, AdminControlled, UUPS
     }
     
     /**
+     * @notice Ensures sufficient liquidity by freeing LP tokens if needed
+     * @dev DRY Refactor: Extracted from multiple withdraw functions to eliminate code duplication
+     * @dev Iteratively liquidates LP tokens up to 3 times with slippage protection
+     * @param amountNeeded Amount of stablecoin needed
+     * @return totalFreed Total amount of stablecoin freed from LP liquidation
+     */
+    function _ensureLiquidityAvailable(uint256 amountNeeded) internal returns (uint256 totalFreed) {
+        uint256 maxAttempts = 3;
+        totalFreed = 0;
+        
+        for (uint256 i = 0; i < maxAttempts; i++) {
+            uint256 vaultBalance = _stablecoin.balanceOf(address(this));
+            
+            // Check if we have enough liquidity
+            if (vaultBalance >= amountNeeded) {
+                break;
+            }
+            
+            // Ensure hook is set
+            if (address(kodiakHook) == address(0)) {
+                revert KodiakHookNotSet();
+            }
+            
+            // Calculate deficit
+            uint256 needed = amountNeeded - vaultBalance;
+            uint256 balanceBefore = vaultBalance;
+            
+            // VN003 FIX: Calculate minimum expected amount with slippage tolerance
+            uint256 minExpected = _calculateMinExpectedFromLP(needed);
+            
+            // Attempt to liquidate LP tokens
+            try kodiakHook.liquidateLPForAmount(needed) {
+                uint256 balanceAfter = _stablecoin.balanceOf(address(this));
+                uint256 freedThisRound = balanceAfter > balanceBefore ? balanceAfter - balanceBefore : 0;
+                totalFreed += freedThisRound;
+                
+                // VN003 FIX: Slippage protection
+                if (minExpected > 0 && freedThisRound < minExpected) {
+                    revert SlippageTooHigh();
+                }
+                
+                emit LPLiquidationExecuted(needed, freedThisRound, minExpected);
+                
+                // Stop if no progress
+                if (freedThisRound == 0) {
+                    break;
+                }
+            } catch {
+                // Stop on liquidation failure
+                break;
+            }
+        }
+        
+        // Final liquidity check
+        uint256 finalBalance = _stablecoin.balanceOf(address(this));
+        if (finalBalance < amountNeeded) {
+            revert InsufficientLiquidity();
+        }
+        
+        // Emit summary event if liquidity was freed
+        if (totalFreed > 0) {
+            emit LiquidityFreedForWithdrawal(amountNeeded, totalFreed);
+        }
+    }
+    
+    /**
      * @notice Override ERC4626 internal withdraw to ensure liquidity and charge 1% withdrawal fee
      * @dev Automatically frees up liquidity from Kodiak LP if needed using iterative approach
      * @dev VN003 FIX: Added slippage protection when liquidating LP tokens
@@ -981,61 +1047,8 @@ abstract contract BaseVault is ERC4626Upgradeable, IVault, AdminControlled, UUPS
         uint256 withdrawalFee = (assets * MathLib.WITHDRAWAL_FEE) / MathLib.PRECISION;
         uint256 netAssets = assets - withdrawalFee;
         
-        // Iterative approach: Try up to 3 times to free up liquidity
-        uint256 maxAttempts = 3;
-        uint256 totalFreed = 0;
-        
-        for (uint256 i = 0; i < maxAttempts; i++) {
-            uint256 vaultBalance = _stablecoin.balanceOf(address(this));
-            
-            if (vaultBalance >= assets) {
-                break; // We have enough!
-            }
-            
-            if (address(kodiakHook) == address(0)) {
-                revert KodiakHookNotSet();
-            }
-            
-            // Calculate how much more we need
-            uint256 needed = assets - vaultBalance;
-            uint256 balanceBefore = vaultBalance;
-            
-            // VN003 FIX: Calculate minimum expected amount with slippage tolerance
-            uint256 minExpected = _calculateMinExpectedFromLP(needed);
-            
-            // Call hook to liquidate LP with smart estimation
-            try kodiakHook.liquidateLPForAmount(needed) {
-                uint256 balanceAfter = _stablecoin.balanceOf(address(this));
-                uint256 freedThisRound = balanceAfter > balanceBefore ? balanceAfter - balanceBefore : 0;
-                totalFreed += freedThisRound;
-                
-                // VN003 FIX: Check slippage protection (only if minExpected > 0)
-                if (minExpected > 0 && freedThisRound < minExpected) {
-                    revert SlippageTooHigh();
-                }
-                
-                emit LPLiquidationExecuted(needed, freedThisRound, minExpected);
-                
-                // If we didn't get any more funds, stop trying
-                if (freedThisRound == 0) {
-                    break;
-                }
-            } catch {
-                // If hook call fails, stop trying
-                break;
-            }
-        }
-        
-        // Final check: do we have enough now?
-        uint256 finalBalance = _stablecoin.balanceOf(address(this));
-        if (finalBalance < assets) {
-            revert InsufficientLiquidity();
-        }
-        
-        // Emit event if we had to free up liquidity
-        if (totalFreed > 0) {
-            emit LiquidityFreedForWithdrawal(assets, totalFreed);
-        }
+        // Ensure sufficient liquidity (DRY: using extracted helper)
+        _ensureLiquidityAvailable(assets);
         
         // REENTRANCY FIX: Effects before Interactions
         // Burn shares and update state BEFORE external transfers

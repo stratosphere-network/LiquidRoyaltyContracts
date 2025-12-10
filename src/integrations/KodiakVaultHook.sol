@@ -75,22 +75,22 @@ contract KodiakVaultHook is AccessControl, IKodiakVaultHook {
         _;
     }
 
-    function setRouter(address _router) external onlyRole(ADMIN_ROLE) {
-        require(_router != address(0), "router=0");
-        router = IKodiakIslandRouter(_router);
-        emit RouterUpdated(_router);
+    function setRouter(address routerAddress) external onlyRole(ADMIN_ROLE) {
+        require(routerAddress != address(0), "router=0");
+        router = IKodiakIslandRouter(routerAddress);
+        emit RouterUpdated(routerAddress);
     }
 
-    function setIsland(address _island) external onlyRole(ADMIN_ROLE) {
-        require(_island != address(0), "island=0");
-        island = IKodiakIsland(_island);
-        emit IslandUpdated(_island);
+    function setIsland(address islandAddress) external onlyRole(ADMIN_ROLE) {
+        require(islandAddress != address(0), "island=0");
+        island = IKodiakIsland(islandAddress);
+        emit IslandUpdated(islandAddress);
     }
 
-    function setWBERA(address _wbera) external onlyRole(ADMIN_ROLE) {
-        require(_wbera != address(0), "wbera=0");
-        wbera = _wbera;
-        emit WBERAUpdated(_wbera);
+    function setWBERA(address wberaAddress) external onlyRole(ADMIN_ROLE) {
+        require(wberaAddress != address(0), "wbera=0");
+        wbera = wberaAddress;
+        emit WBERAUpdated(wberaAddress);
     }
 
     function setAggregatorWhitelisted(address target, bool isWhitelisted) external onlyRole(ADMIN_ROLE) {
@@ -99,60 +99,27 @@ contract KodiakVaultHook is AccessControl, IKodiakVaultHook {
         emit AggregatorWhitelisted(target, isWhitelisted);
     }
 
-    function setSlippage(uint256 _minSharesPerAssetBps, uint256 _minAssetOutBps) external onlyRole(ADMIN_ROLE) {
-        require(_minSharesPerAssetBps <= 10_000 && _minAssetOutBps <= 10_000, "bps>100%");
-        minSharesPerAssetBps = _minSharesPerAssetBps;
-        minAssetOutBps = _minAssetOutBps;
-        emit SlippageUpdated(_minSharesPerAssetBps, _minAssetOutBps);
+    function setSlippage(uint256 minSharesPerAssetBps_, uint256 minAssetOutBps_) external onlyRole(ADMIN_ROLE) {
+        require(minSharesPerAssetBps_ <= 10_000 && minAssetOutBps_ <= 10_000, "bps>100%");
+        minSharesPerAssetBps = minSharesPerAssetBps_;
+        minAssetOutBps = minAssetOutBps_;
+        emit SlippageUpdated(minSharesPerAssetBps_, minAssetOutBps_);
     }
 
     /**
      * @notice Update LP liquidation safety multiplier
      * @dev SECURITY UPDATE: Now uses reasonable basis points (100 = 1.0x, 115 = 1.15x)
-     * @param _safetyMultiplier Safety buffer in basis points (100-120 = 0-20% buffer)
+     * @param safetyMultiplier_ Safety buffer in basis points (100-120 = 0-20% buffer)
      *        100 = no buffer, 110 = 10% buffer, 115 = 15% buffer, 120 = 20% buffer (max)
      */
-    function setSafetyMultiplier(uint256 _safetyMultiplier) external onlyRole(ADMIN_ROLE) {
-        require(_safetyMultiplier >= 100 && _safetyMultiplier <= 120, "multiplier must be 1.0x-1.2x (100-120)");
-        safetyMultiplier = _safetyMultiplier;
-        emit LPParametersUpdated(_safetyMultiplier);
+    function setSafetyMultiplier(uint256 safetyMultiplier_) external onlyRole(ADMIN_ROLE) {
+        require(safetyMultiplier_ >= 100 && safetyMultiplier_ <= 120, "multiplier must be 1.0x-1.2x (100-120)");
+        safetyMultiplier = safetyMultiplier_;
+        emit LPParametersUpdated(safetyMultiplier_);
     }
 
-    function _estimateBurnForAsset(uint256 amount) internal view returns (uint256 requiredBurn, bool ok) {
-        IERC20 token0 = island.token0();
-        IERC20 token1 = island.token1();
-        bool assetIsToken0 = address(token0) == address(assetToken);
-        bool assetIsToken1 = address(token1) == address(assetToken);
-        if (!assetIsToken0 && !assetIsToken1) {
-            return (0, false);
-        }
-        (uint256 amt0Cur, uint256 amt1Cur) = island.getUnderlyingBalances();
-        uint256 totalLp = island.totalSupply();
-        if (totalLp == 0) return (0, false);
-        uint256 assetUnderlying = assetIsToken0 ? amt0Cur : amt1Cur;
-        if (assetUnderlying == 0) return (0, false);
-        // requiredBurn ≈ ceil(amount * totalLp / assetUnderlying)
-        requiredBurn = (amount * totalLp + assetUnderlying - 1) / assetUnderlying;
-        return (requiredBurn, true);
-    }
-
-    function _minAmountsForRemove(uint256 amount) internal view returns (uint256 amount0Min, uint256 amount1Min, bool ok) {
-        IERC20 token0 = island.token0();
-        IERC20 token1 = island.token1();
-        bool assetIsToken0 = address(token0) == address(assetToken);
-        bool assetIsToken1 = address(token1) == address(assetToken);
-        if (!assetIsToken0 && !assetIsToken1) {
-            return (0, 0, false);
-        }
-        uint256 minAssetOut = amount;
-        if (minAssetOutBps > 0 && minAssetOutBps <= 10_000) {
-            uint256 bps = 10_000 - minAssetOutBps;
-            minAssetOut = (amount * bps) / 10_000;
-        }
-        amount0Min = assetIsToken0 ? minAssetOut : 0;
-        amount1Min = assetIsToken1 ? minAssetOut : 0;
-        return (amount0Min, amount1Min, true);
-    }
+    // DEAD CODE REMOVED: _estimateBurnForAsset() - never used (Slither finding)
+    // DEAD CODE REMOVED: _minAmountsForRemove() - never used (Slither finding)
 
     function onAfterDeposit(uint256 assets) external override onlyVault {
         if (address(island) == address(0) || assets == 0) return;
@@ -345,20 +312,20 @@ contract KodiakVaultHook is AccessControl, IKodiakVaultHook {
      * @notice Smart LP liquidation using Island pool data with built-in slippage protection
      * @dev Called by vault during withdrawal. Queries Island directly for HONEY/LP ratio.
      * @dev SECURITY: Implements multi-layer slippage protection to prevent manipulation attacks
-     * @param unstake_usd USD value user wants to withdraw (in stablecoin wei)
+     * @param unstakeUsd USD value user wants to withdraw (in stablecoin wei)
      *
      * Algorithm:
      * 1. Query Island for actual HONEY balance in pool
      * 2. Calculate HONEY per LP = honeyInPool / totalLPSupply
-     * 3. Calculate LP needed = unstake_usd / honeyPerLP
+     * 3. Calculate LP needed = unstakeUsd / honeyPerLP
      * 4. Apply reasonable buffer (15% max, not the old 2.5x)
      * 5. VALIDATE: LP amount is sane (not excessive)
      * 6. Burn LP, capture actual amounts
      * 7. VALIDATE: Output meets minimum expectations (95% of requested)
      * 8. Send ONLY stablecoin to vault, keep WBTC in hook
      */
-    function liquidateLPForAmount(uint256 unstake_usd) public onlyVault {
-        if (unstake_usd == 0) return;
+    function liquidateLPForAmount(uint256 unstakeUsd) public onlyVault {
+        if (unstakeUsd == 0) return;
         if (address(island) == address(0)) return;
         
         // Get LP balance in hook
@@ -377,7 +344,7 @@ contract KodiakVaultHook is AccessControl, IKodiakVaultHook {
         
         // ===== SLIPPAGE PROTECTION LAYER 1: Reasonable LP Burn Calculation =====
         // Calculate base LP needed (without excessive multiplier)
-        uint256 lpNeeded = Math.mulDiv(unstake_usd, 1e18, honeyPerLP);
+        uint256 lpNeeded = Math.mulDiv(unstakeUsd, 1e18, honeyPerLP);
         
         // Apply REASONABLE buffer for slippage/fees (15% max, configurable via safetyMultiplier)
         // safetyMultiplier is now in basis points: 100 = 1.0x, 115 = 1.15x
@@ -386,38 +353,38 @@ contract KodiakVaultHook is AccessControl, IKodiakVaultHook {
         if (effectiveMultiplier > 120) effectiveMultiplier = 120; // Max 20% buffer
         if (effectiveMultiplier < 100) effectiveMultiplier = 100; // Min 0% buffer
         
-        uint256 unstake_send_to_hook = Math.mulDiv(lpNeeded, effectiveMultiplier, 100);
+        uint256 unstakeSendToHook = Math.mulDiv(lpNeeded, effectiveMultiplier, 100);
         
         // ===== SLIPPAGE PROTECTION LAYER 2: Sanity Check on LP Amount =====
         // If calculated LP amount seems excessive (>3x expected), something is wrong
         // This catches extreme pool manipulation scenarios
         uint256 maxReasonableLP = lpNeeded * 3;
-        if (unstake_send_to_hook > maxReasonableLP) {
+        if (unstakeSendToHook > maxReasonableLP) {
             // Pool state looks manipulated, use conservative fallback
-            unstake_send_to_hook = lpNeeded + (lpNeeded * 15 / 100); // Just add 15%
+            unstakeSendToHook = lpNeeded + (lpNeeded * 15 / 100); // Just add 15%
         }
         
         // Cap at available LP balance
-        if (unstake_send_to_hook > lpBalance) {
-            unstake_send_to_hook = lpBalance;
+        if (unstakeSendToHook > lpBalance) {
+            unstakeSendToHook = lpBalance;
         }
         
-        if (unstake_send_to_hook == 0) return;
+        if (unstakeSendToHook == 0) return;
         
         // ===== SLIPPAGE PROTECTION LAYER 3: Minimum Output Validation =====
         // Calculate minimum acceptable HONEY output (95% of requested)
-        uint256 minHoneyExpected = Math.mulDiv(unstake_usd, 9500, 10000);
+        uint256 minHoneyExpected = Math.mulDiv(unstakeUsd, 9500, 10000);
         
         // Burn LP tokens and capture amounts received
         uint256 wbtcReceived = 0;
         uint256 honeyReceived = 0;
         
-        try island.burn(unstake_send_to_hook, address(this)) returns (uint256 amount0, uint256 amount1) {
+        try island.burn(unstakeSendToHook, address(this)) returns (uint256 amount0, uint256 amount1) {
             wbtcReceived = amount0;
             honeyReceived = amount1;
         } catch {
             // If burn fails, try via router
-            try router.removeLiquidity(island, unstake_send_to_hook, 0, 0, address(this)) 
+            try router.removeLiquidity(island, unstakeSendToHook, 0, 0, address(this)) 
                 returns (uint256 amount0, uint256 amount1, uint128) {
                 wbtcReceived = amount0;
                 honeyReceived = amount1;
@@ -441,7 +408,7 @@ contract KodiakVaultHook is AccessControl, IKodiakVaultHook {
         
         // WBTC stays in hook for admin to batch swap later
         // Emit event for monitoring
-        emit LPLiquidated(unstake_usd, unstake_send_to_hook, honeyReceived, wbtcReceived);
+        emit LPLiquidated(unstakeUsd, unstakeSendToHook, honeyReceived, wbtcReceived);
     }
 
     function ensureFundsAvailable(uint256 amount) external override onlyVault {
@@ -450,34 +417,7 @@ contract KodiakVaultHook is AccessControl, IKodiakVaultHook {
         liquidateLPForAmount(amount);
     }
 
-    /**
-     * @dev Auto-rescue ONLY stablecoin to vault (keep WBTC in hook)
-     * @dev After burning LP, send ONLY HONEY to vault
-     * @dev WBTC accumulates in hook for admin to batch swap later
-     */
-    function _autoRescueNonStablecoinToVault() internal {
-        if (address(island) == address(0)) return;
-        
-        IERC20 token0 = island.token0();
-        IERC20 token1 = island.token1();
-        
-        // Only send stablecoin (HONEY/token1) to vault
-        // WBTC (token0) stays in hook
-        if (address(token1) == address(assetToken)) {
-            uint256 bal1 = token1.balanceOf(address(this));
-            if (bal1 > 0) {
-                token1.safeTransfer(vault, bal1);
-            }
-        } else if (address(token0) == address(assetToken)) {
-            uint256 bal0 = token0.balanceOf(address(this));
-            if (bal0 > 0) {
-                token0.safeTransfer(vault, bal0);
-            }
-        }
-        
-        // Note: Non-stablecoin tokens (WBTC) remain in hook
-        // Admin can batch swap them later via adminSwapAndReturnToVault()
-    }
+    // DEAD CODE REMOVED: _autoRescueNonStablecoinToVault() - never used (Slither finding)
 
     /**
      * @notice Admin function to swap stuck non-stablecoin tokens and send to vault
