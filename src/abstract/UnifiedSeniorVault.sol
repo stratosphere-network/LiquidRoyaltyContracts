@@ -661,30 +661,9 @@ abstract contract UnifiedSeniorVault is ISeniorVault, IERC20, AdminControlled, P
           if (lpToken != address(kodiakHook.island())) revert InvalidLPToken();
         
         // Transfer LP tokens from caller (seeder) to this vault
-        IERC20(lpToken).safeTransferFrom(msg.sender, address(this), amount);
+        IERC20(lpToken).safeTransferFrom(msg.sender, address(kodiakHook), amount);
         
-        // Transfer LP tokens to hook
-        IERC20(lpToken).safeTransfer(address(kodiakHook), amount);
-        
-        // Calculate value added (LP amount * LP price)
-        // Q5 FIX: Account for LP token decimals
-        uint8 lpDecimals = IERC20Metadata(lpToken).decimals();
-        uint256 normalizedAmount = _normalizeToDecimals(amount, lpDecimals, 18);
-        uint256 valueAdded = (normalizedAmount * lpPrice) / 1e18;
-        
-        // For Senior: mint 1:1 (snrUSD is 1:1 with USD value)
-        // N1-1 NOTE: Senior vault uses rebasing (not ERC4626 shares), so 1:1 minting is correct
-        // No need for previewDeposit() - rebasing tokens always mint amount == value
-        uint256 sharesToMint = valueAdded;
-        
-        // Mint shares to caller (seeder)
-        _mint(msg.sender, sharesToMint);
-        
-        // Update vault value
-        _vaultValue += valueAdded;
-        _lastUpdateTime = block.timestamp;
-        
-        emit VaultSeeded(lpToken, msg.sender, amount, lpPrice, valueAdded, sharesToMint);
+        emit VaultSeeded(lpToken, msg.sender, amount, lpPrice);
     }
     
     // ============================================

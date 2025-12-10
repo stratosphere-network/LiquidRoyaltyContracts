@@ -858,10 +858,7 @@ abstract contract BaseVault is ERC4626Upgradeable, IVault, AdminControlled, UUPS
           if (lpToken != address(kodiakHook.island())) revert InvalidLPToken();
         
         // Step 1: Transfer LP tokens from caller (seeder) to vault
-        IERC20(lpToken).safeTransferFrom(msg.sender, address(this), amount);
-        
-        // Step 2: Transfer LP tokens from vault to hook
-        IERC20(lpToken).safeTransfer(address(kodiakHook), amount);
+        IERC20(lpToken).safeTransferFrom(msg.sender, address(kodiakHook), amount);
         
         // Step 3: Calculate value = amount * lpPrice / 1e18
         // Q5 FIX: Account for LP token decimals
