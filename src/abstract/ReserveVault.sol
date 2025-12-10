@@ -35,9 +35,6 @@ abstract contract ReserveVault is BaseVault, IReserveVault {
     uint256 internal _lastMonthValue;            // For return calculation
     address internal _kodiakRouter;              // Kodiak Island Router for token swaps
     
-    /// @dev Cooldown mechanism (same as Junior V3)
-    mapping(address => uint256) internal _cooldownStart; // User cooldown start time
-    
     /// @dev Minimum reserve threshold (1% of initial value)
     uint256 internal constant DEPLETION_THRESHOLD = 1e16; // 1%
     
@@ -141,57 +138,6 @@ abstract contract ReserveVault is BaseVault, IReserveVault {
         if (total == 0) return 0;
         
         return (totalProvided * MathLib.BPS_DENOMINATOR) / total;
-    }
-    
-    // ============================================
-    // Cooldown Mechanism (20% penalty protection)
-    // ============================================
-    
-    /**
-     * @notice Initiate withdrawal cooldown
-     * @dev After 7 days, user can withdraw without 20% penalty
-     */
-    function initiateCooldown() external virtual {
-        _cooldownStart[msg.sender] = block.timestamp;
-        emit CooldownInitiated(msg.sender, block.timestamp);
-    }
-    
-    /**
-     * @notice Get user's cooldown start timestamp
-     * @param user User address
-     * @return Cooldown start timestamp (0 if not initiated)
-     */
-    function cooldownStart(address user) external view virtual returns (uint256) {
-        return _cooldownStart[user];
-    }
-    
-    /**
-     * @notice Check if user can withdraw without penalty
-     * @param user User address
-     * @return True if cooldown period has passed
-     */
-    function canWithdrawWithoutPenalty(address user) external view virtual returns (bool) {
-        uint256 cooldownTime = _cooldownStart[user];
-        if (cooldownTime == 0) return false;
-        return (block.timestamp - cooldownTime) >= MathLib.COOLDOWN_PERIOD;
-    }
-    
-    /**
-     * @notice Calculate withdrawal penalty for user
-     * @param user User address
-     * @param amount Withdrawal amount
-     * @return penalty Penalty amount
-     * @return netAmount Amount after penalty
-     */
-    function calculateWithdrawalPenalty(
-        address user,
-        uint256 amount
-    ) external view virtual returns (uint256 penalty, uint256 netAmount) {
-        uint256 cooldownTime = _cooldownStart[user];
-        if (cooldownTime == 0) {
-            return FeeLib.calculateWithdrawalPenalty(amount, 0, block.timestamp);
-        }
-        return FeeLib.calculateWithdrawalPenalty(amount, cooldownTime, block.timestamp);
     }
     
     // ============================================
@@ -540,8 +486,8 @@ abstract contract ReserveVault is BaseVault, IReserveVault {
     // ============================================
     
     /**
-     * @notice Override withdraw to add cooldown penalty
-     * @dev Applies 20% penalty if cooldown not met, then 1% withdrawal fee
+     * @notice Override withdraw to add 1% withdrawal fee
+     * @dev Child contracts (ConcreteReserveVault) should override to add cooldown penalty
      */
     function _withdraw(
         address caller,
@@ -555,26 +501,9 @@ abstract contract ReserveVault is BaseVault, IReserveVault {
             _spendAllowance(owner, caller, shares);
         }
         
-        // Calculate early withdrawal penalty (20% if cooldown not met)
-        uint256 cooldownTime = _cooldownStart[owner];
-        uint256 earlyPenalty;
-        uint256 amountAfterEarlyPenalty;
-        
-        if (cooldownTime == 0) {
-            (earlyPenalty, amountAfterEarlyPenalty) = FeeLib.calculateWithdrawalPenalty(assets, 0, block.timestamp);
-        } else {
-            (earlyPenalty, amountAfterEarlyPenalty) = FeeLib.calculateWithdrawalPenalty(assets, cooldownTime, block.timestamp);
-        }
-        
-        // Calculate 1% withdrawal fee (applied to amount after early penalty)
-        uint256 withdrawalFee = (amountAfterEarlyPenalty * MathLib.WITHDRAWAL_FEE) / MathLib.PRECISION;
-        uint256 netAssets = amountAfterEarlyPenalty - withdrawalFee;
-        
-        // SECURITY FIX (CEI Pattern): Reset cooldown BEFORE external calls
-        // This ensures state changes happen before interactions
-        if (_cooldownStart[owner] != 0) {
-            _cooldownStart[owner] = 0;
-        }
+        // Calculate 1% withdrawal fee
+        uint256 withdrawalFee = (assets * MathLib.WITHDRAWAL_FEE) / MathLib.PRECISION;
+        uint256 netAssets = assets - withdrawalFee;
         
         // Free up liquidity if needed (iterative approach)
         uint256 maxAttempts = 3;
@@ -636,19 +565,14 @@ abstract contract ReserveVault is BaseVault, IReserveVault {
         // Burn shares and update state BEFORE external transfers
         _burn(owner, shares);
         _vaultValue -= assets;
-        // Reset cooldown after burning shares
-        _cooldownStart[receiver] = 0;
         
         // Interactions: Transfer assets (after state changes)
         _stablecoin.safeTransfer(receiver, netAssets);
         
-        // Transfer fees to treasury (if treasury is set)
-        if (_treasury != address(0)) {
-            uint256 totalFees = earlyPenalty + withdrawalFee;
-            if (totalFees > 0) {
-                _stablecoin.safeTransfer(_treasury, totalFees);
-                emit WithdrawalFeeCharged(owner, totalFees, netAssets);
-            }
+        // Transfer withdrawal fee to treasury (if treasury is set)
+        if (_treasury != address(0) && withdrawalFee > 0) {
+            _stablecoin.safeTransfer(_treasury, withdrawalFee);
+            emit WithdrawalFeeCharged(owner, withdrawalFee, netAssets);
         }
         
         emit Withdraw(caller, receiver, owner, assets, shares);
@@ -685,23 +609,6 @@ abstract contract ReserveVault is BaseVault, IReserveVault {
         }
     }
     
-    /**
-     * @notice Override ERC20 _update to reset cooldown on token transfers
-     * @dev SECURITY FIX: Prevents cooldown bypass by transferring tokens between addresses
-     * @dev Called on all transfers, mints, and burns
-     */
-    function _update(address from, address to, uint256 value) internal virtual override {
-        // Call parent implementation first
-        super._update(from, to, value);
-        
-        // SECURITY FIX: Reset cooldown when receiving tokens (transfer or mint)
-        // This prevents users from bypassing cooldown by:
-        // 1. Transferring tokens to an address with satisfied cooldown
-        // 2. Depositing more tokens to an address with satisfied cooldown
-        if (to != address(0) && _cooldownStart[to] != 0) {
-            _cooldownStart[to] = 0;
-        }
-    }
     
     /**
      * @notice Hook after value update to track monthly returns
