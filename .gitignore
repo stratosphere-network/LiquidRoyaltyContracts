@@ -2,7 +2,13 @@
 cache/
 out/
 
-# Ignores development broadcast logs
+# Generated ABIs (can be regenerated with extract_abis.sh)
+abi/
+
+# Build artifacts
+artifacts/
+
+# Ignores development broadcast logs (keeps production deployment history)
 !/broadcast
 /broadcast/*/31337/
 /broadcast/**/dry-run/
@@ -12,7 +18,7 @@ out/
 .env.test
 .env.local
 .env.production
-broadcast/
+
 # Docs
 docs/
 
@@ -27,6 +33,12 @@ gas-report.txt
 lcov.info
 coverage/
 coverage.json
+
+# Certora verification output
+.certora_internal/
+.certora_config/
+.certora_build/
+certora_*.log
 
 # Typechain (if used)
 typechain/
@@ -56,7 +68,6 @@ node_modules/
 npm-debug.log*
 yarn-debug.log*
 yarn-error.log*
-package-lock.json
 
 # Python (if any scripts)
 __pycache__/

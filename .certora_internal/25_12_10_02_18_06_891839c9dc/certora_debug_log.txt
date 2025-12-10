@@ -1,9 +1,0 @@
-Saving last configuration file to .certora_internal/25_12_10_02_18_06_891839c9dc/run.conf
-There is no TAC file. Going to script CertoraProver/certoraBuild.py to main_with_args()
-main build cache key computed based on {'files': ['certora/harness/MathLibHarness.sol'], 'package_version_for_build_cache': 'certora-cli 8.6.1', 'packages': ['@openzeppelin/contracts-upgradeable/=lib/openzeppelin-contracts-upgradeable/contracts', '@openzeppelin/contracts-upgradeable/contracts/=lib/openzeppelin-contracts-upgradeable/contracts', '@openzeppelin/contracts/=lib/openzeppelin-contracts/contracts', 'ds-test/=lib/openzeppelin-contracts/lib/forge-std/lib/ds-test/src', 'ds-test/src/=lib/openzeppelin-contracts/lib/forge-std/lib/ds-test/src', 'erc4626-tests/=lib/openzeppelin-contracts/lib/erc4626-tests', 'forge-std/=lib/forge-std/src', 'forge-std/src/=lib/forge-std/src', 'halmos-cheatcodes/=lib/openzeppelin-contracts/lib/halmos-cheatcodes/src', 'halmos-cheatcodes/src/=lib/openzeppelin-contracts/lib/halmos-cheatcodes/src', 'openzeppelin-contracts-upgradeable/=lib/openzeppelin-contracts-upgradeable', 'openzeppelin-contracts/=lib/openzeppelin-contracts', 'puppeteer=node_modules/puppeteer'], 'packages_path': 'node_modules', 'solc': 'solc', 'solc_allow_path': '.', 'test_condition': 'True'}
-Creating dir /home/amschel/stratosphere/tranching/.certora_internal/25_12_10_02_18_06_891839c9dc/.certora_config
-In /home/amschel/stratosphere/tranching/certora/specs/MathLib.spec, found the imports: []
-copying spec file /home/amschel/stratosphere/tranching/certora/specs/MathLib.spec to /home/amschel/stratosphere/tranching/.certora_internal/25_12_10_02_18_06_891839c9dc/.certora_sources/.0_MathLib.spec.spec
-writing /home/amschel/stratosphere/tranching/.certora_internal/25_12_10_02_18_06_891839c9dc/.certora_verify.json
-Installed Java version is too old to check CVL specification files locally.  Java version should be at least 19 to allow local java-based type checking
-build failed

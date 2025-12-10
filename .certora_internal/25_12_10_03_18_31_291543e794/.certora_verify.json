@@ -1,8 +1,0 @@
-{
-    "importFilesToOrigRelpaths": {},
-    "primary_contract": "SpilloverLibHarness",
-    "specfile": "certora/specs/SpilloverLib.spec",
-    "specfileOrigRelpath": "certora/specs/SpilloverLib.spec",
-    "specfilesToImportDecls": {},
-    "type": "spec"
-}

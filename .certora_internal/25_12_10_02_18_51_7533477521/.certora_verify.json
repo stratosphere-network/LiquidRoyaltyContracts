@@ -1,8 +1,0 @@
-{
-    "importFilesToOrigRelpaths": {},
-    "primary_contract": "MathLibHarness",
-    "specfile": "/home/amschel/stratosphere/tranching/certora/specs/MathLib.spec",
-    "specfileOrigRelpath": "certora/specs/MathLib.spec",
-    "specfilesToImportDecls": {},
-    "type": "spec"
-}
