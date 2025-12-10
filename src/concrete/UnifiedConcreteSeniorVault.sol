@@ -172,9 +172,11 @@ contract UnifiedConcreteSeniorVault is UnifiedSeniorVault {
      * @param lpPrice Current LP token price in USD (18 decimals)
      */
     function _transferToJunior(uint256 amountUSD, uint256 lpPrice) internal override {
+        // Allow graceful exit for zero transfers
         if (amountUSD == 0) return;
-        if (lpPrice == 0) return;
-        if (address(kodiakHook) == address(0)) return;
+        // Critical: LP price must be valid
+        require(lpPrice > 0, "Invalid LP price");
+        require(address(kodiakHook) != address(0), "Hook not configured");
         
         // LP DECIMALS FIX: Get LP token and its decimals
         address lpToken = address(kodiakHook.island());
@@ -212,9 +214,11 @@ contract UnifiedConcreteSeniorVault is UnifiedSeniorVault {
      * @param lpPrice Current LP token price in USD (18 decimals)
      */
     function _transferToReserve(uint256 amountUSD, uint256 lpPrice) internal override {
+        // Allow graceful exit for zero transfers
         if (amountUSD == 0) return;
-        if (lpPrice == 0) return;
-        if (address(kodiakHook) == address(0)) return;
+        // Critical: LP price must be valid
+        require(lpPrice > 0, "Invalid LP price");
+        require(address(kodiakHook) != address(0), "Hook not configured");
         
         // LP DECIMALS FIX: Get LP token and its decimals
         address lpToken = address(kodiakHook.island());
