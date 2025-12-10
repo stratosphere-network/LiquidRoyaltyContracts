@@ -27,6 +27,9 @@ contract UnifiedConcreteSeniorVault is UnifiedSeniorVault {
     address private _priceFeedManager;
     address private _contractUpdater;
     
+    /// @dev Reentrancy guard state (V3 upgrade - MUST be in concrete contract)
+    uint256 private _status;
+    
     /// @custom:oz-upgrades-unsafe-allow constructor
     constructor() {
         _disableInitializers();
@@ -122,6 +125,40 @@ contract UnifiedConcreteSeniorVault is UnifiedSeniorVault {
     function setContractUpdater(address contractUpdater_) external onlyAdmin {
         if (contractUpdater_ == address(0)) revert ZeroAddress();
         _contractUpdater = contractUpdater_;
+    }
+    
+    // ============================================
+    // V3 Initialization
+    // ============================================
+    
+    /**
+     * @notice Initialize V3 - Initialize reentrancy guard
+     * @dev Sets reentrancy guard status to _NOT_ENTERED
+     * @dev SECURITY: Protected by onlyAdmin to prevent unauthorized reinitialization
+     */
+    function initializeV3() external reinitializer(3) onlyAdmin {
+        // Initialize reentrancy guard
+        _status = 1; // _NOT_ENTERED
+    }
+    
+    // ============================================
+    // Reentrancy Guard Implementation (Required by UnifiedSeniorVault)
+    // ============================================
+    
+    /**
+     * @notice Get reentrancy guard status
+     * @dev Implements virtual function from UnifiedSeniorVault
+     */
+    function _getReentrancyStatus() internal view override returns (uint256) {
+        return _status;
+    }
+    
+    /**
+     * @notice Set reentrancy guard status
+     * @dev Implements virtual function from UnifiedSeniorVault
+     */
+    function _setReentrancyStatus(uint256 status) internal override {
+        _status = status;
     }
     
     // ============================================
@@ -222,8 +259,11 @@ contract UnifiedConcreteSeniorVault is UnifiedSeniorVault {
         // Request backstop from Reserve (transfers LP tokens based on USD amount and LP price)
         actualReceived = _reserveVault.provideBackstop(amountUSD, lpPrice);
         
-        // Log if we received less than requested (Reserve partially depleted)
-        if (actualReceived < amountUSD) {
+        // PRECISION FIX: Only emit BackstopShortfall if significantly less than requested
+        // Small differences (< 0.01%) can occur due to LP price conversion rounding
+        // Don't treat rounding errors as Reserve depletion
+        uint256 minAcceptable = (amountUSD * 9999) / 10000; // 99.99% of requested
+        if (actualReceived < minAcceptable) {
             emit BackstopShortfall(address(_reserveVault), amountUSD, actualReceived);
         }
         
@@ -244,8 +284,11 @@ contract UnifiedConcreteSeniorVault is UnifiedSeniorVault {
         // Request backstop from Junior (transfers LP tokens based on USD amount and LP price)
         actualReceived = _juniorVault.provideBackstop(amountUSD, lpPrice);
         
-        // Log if we received less than requested (Junior partially depleted)
-        if (actualReceived < amountUSD) {
+        // PRECISION FIX: Only emit BackstopShortfall if significantly less than requested
+        // Small differences (< 0.01%) can occur due to LP price conversion rounding
+        // Don't treat rounding errors as Junior depletion
+        uint256 minAcceptable = (amountUSD * 9999) / 10000; // 99.99% of requested
+        if (actualReceived < minAcceptable) {
             emit BackstopShortfall(address(_juniorVault), amountUSD, actualReceived);
         }
         

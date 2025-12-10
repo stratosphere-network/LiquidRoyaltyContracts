@@ -47,11 +47,15 @@ abstract contract UnifiedSeniorVault is ISeniorVault, IERC20, AdminControlled, P
     uint256 private constant _ENTERED = 2;
     
     modifier nonReentrant() {
-        require(_status != _ENTERED, "ReentrancyGuard: reentrant call");
-        _status = _ENTERED;
+        require(_getReentrancyStatus() != _ENTERED, "ReentrancyGuard: reentrant call");
+        _setReentrancyStatus(_ENTERED);
         _;
-        _status = _NOT_ENTERED;
+        _setReentrancyStatus(_NOT_ENTERED);
     }
+    
+    /// @dev Virtual functions for reentrancy guard (implemented in concrete contracts)
+    function _getReentrancyStatus() internal view virtual returns (uint256);
+    function _setReentrancyStatus(uint256 status) internal virtual;
     
     /// @dev Struct for LP holdings data
     struct LPHolding {
@@ -127,9 +131,6 @@ abstract contract UnifiedSeniorVault is ISeniorVault, IERC20, AdminControlled, P
     uint256 internal _nextDepositId;
     mapping(uint256 => PendingLPDeposit) internal _pendingDeposits;
     mapping(address => uint256[]) internal _userDepositIds;
-    
-    /// @dev Reentrancy guard state (ADDED AT END FOR UPGRADE SAFETY)
-    uint256 private _status;
     
     uint256 internal constant DEPOSIT_EXPIRY_TIME = 48 hours;
     
@@ -234,7 +235,6 @@ abstract contract UnifiedSeniorVault is ISeniorVault, IERC20, AdminControlled, P
         
         __AdminControlled_init();
         __Pausable_init();
-        _status = _NOT_ENTERED;
         
         _name = tokenName_;
         _symbol = tokenSymbol_;
@@ -668,9 +668,7 @@ abstract contract UnifiedSeniorVault is ISeniorVault, IERC20, AdminControlled, P
         // Calculate value = amount * lpPrice / 1e18
         // Account for LP token decimals
         uint8 lpDecimals = IERC20Metadata(lpToken).decimals();
-        uint256 normalizedAmount = (lpDecimals == 18) ? amount : 
-            (lpDecimals < 18) ? amount * (10 ** (18 - lpDecimals)) : 
-            amount / (10 ** (lpDecimals - 18));
+        uint256 normalizedAmount = _normalizeToDecimals(amount, lpDecimals, 18);
         uint256 valueAdded = (normalizedAmount * lpPrice) / 1e18;
         
         // Mint tokens to caller (seeder) - use _mint which handles shares internally
@@ -747,16 +745,15 @@ abstract contract UnifiedSeniorVault is ISeniorVault, IERC20, AdminControlled, P
         // For Senior: mint 1:1 (snrUSD is rebasing token, not ERC4626)
         // NOTE: UnifiedSeniorVault uses rebasing (balance = shares × index)
         // _mint() will convert the balance amount to internal shares automatically
-        uint256 sharesToMint = valueAdded;  // 1:1 minting for rebasing token
-        if (sharesToMint == 0) revert InvalidAmount(); // Safety: prevent 0-share minting
+        if (valueAdded == 0) revert InvalidAmount(); // Safety: prevent 0-value minting
         
         // Update status (Effects - state updates BEFORE external call)
         pendingDeposit.status = DepositStatus.APPROVED;
         
-        emit PendingLPDepositApproved(depositId, pendingDeposit.depositor, lpPrice, sharesToMint);
+        emit PendingLPDepositApproved(depositId, pendingDeposit.depositor, lpPrice, valueAdded);
         
         // N1-2 FIX: Mint shares BEFORE updating vault value (matches standard deposit flow)
-        _mint(pendingDeposit.depositor, sharesToMint);
+        _mint(pendingDeposit.depositor, valueAdded);
         
         // Update vault value AFTER minting (consistent with deposit() pattern)
         _vaultValue += valueAdded;
@@ -1184,6 +1181,72 @@ abstract contract UnifiedSeniorVault is ISeniorVault, IERC20, AdminControlled, P
     }
     
     /**
+     * @notice Ensures sufficient liquidity by freeing LP tokens if needed
+     * @dev DRY Refactor: Extracted from multiple withdraw functions to eliminate code duplication
+     * @dev Iteratively liquidates LP tokens up to 3 times with slippage protection
+     * @param amountNeeded Amount of stablecoin needed
+     * @return totalFreed Total amount of stablecoin freed from LP liquidation
+     */
+    function _ensureLiquidityAvailable(uint256 amountNeeded) internal returns (uint256 totalFreed) {
+        uint256 maxAttempts = 3;
+        totalFreed = 0;
+        
+        for (uint256 i = 0; i < maxAttempts; i++) {
+            uint256 vaultBalance = _stablecoin.balanceOf(address(this));
+            
+            // Check if we have enough liquidity
+            if (vaultBalance >= amountNeeded) {
+                break;
+            }
+            
+            // Ensure hook is set
+            if (address(kodiakHook) == address(0)) {
+                revert InsufficientLiquidity();
+            }
+            
+            // Calculate deficit
+            uint256 needed = amountNeeded - vaultBalance;
+            uint256 balanceBefore = vaultBalance;
+            
+            // VN003 FIX: Calculate minimum expected amount with slippage tolerance
+            uint256 minExpected = _calculateMinExpectedFromLP(needed);
+            
+            // Attempt to liquidate LP tokens
+            try kodiakHook.liquidateLPForAmount(needed) {
+                uint256 balanceAfter = _stablecoin.balanceOf(address(this));
+                uint256 freedThisRound = balanceAfter > balanceBefore ? balanceAfter - balanceBefore : 0;
+                totalFreed += freedThisRound;
+                
+                // VN003 FIX: Slippage protection
+                if (minExpected > 0 && freedThisRound < minExpected) {
+                    revert SlippageTooHigh();
+                }
+                
+                emit LPLiquidationExecuted(needed, freedThisRound, minExpected);
+                
+                // Stop if no progress
+                if (freedThisRound == 0) {
+                    break;
+                }
+            } catch {
+                // Stop on liquidation failure
+                break;
+            }
+        }
+        
+        // Final liquidity check
+        uint256 finalBalance = _stablecoin.balanceOf(address(this));
+        if (finalBalance < amountNeeded) {
+            revert InsufficientLiquidity();
+        }
+        
+        // Emit summary event if liquidity was freed
+        if (totalFreed > 0) {
+            emit LiquidityFreedForWithdrawal(amountNeeded, totalFreed);
+        }
+    }
+    
+    /**
      * @notice Withdraw stablecoin by burning snrUSD
      * @dev VN003 FIX: Added slippage protection when liquidating LP tokens
      * @param amount Amount of snrUSD to burn
@@ -1214,64 +1277,17 @@ abstract contract UnifiedSeniorVault is ISeniorVault, IERC20, AdminControlled, P
         // Total needed = netAssets + withdrawalFee (we need enough for both receiver and treasury)
         uint256 totalNeeded = amountAfterEarlyPenalty;
         
-        // Iterative approach: Try up to 3 times to free up liquidity
-        uint256 maxAttempts = 3;
-        uint256 totalFreed = 0;
-        
-        for (uint256 i = 0; i < maxAttempts; i++) {
-            uint256 vaultBalance = _stablecoin.balanceOf(address(this));
-            
-            if (vaultBalance >= totalNeeded) {
-                break; // We have enough!
-            }
-            
-            if (address(kodiakHook) == address(0)) {
-                revert InsufficientLiquidity();
-            }
-            
-            // Calculate how much more we need
-            uint256 needed = totalNeeded - vaultBalance;
-            uint256 balanceBefore = vaultBalance;
-            
-            // VN003 FIX: Calculate minimum expected amount with slippage tolerance
-            uint256 minExpected = _calculateMinExpectedFromLP(needed);
-            
-            // Call hook to liquidate LP with smart estimation
-            try kodiakHook.liquidateLPForAmount(needed) {
-                uint256 balanceAfter = _stablecoin.balanceOf(address(this));
-                uint256 freedThisRound = balanceAfter > balanceBefore ? balanceAfter - balanceBefore : 0;
-                totalFreed += freedThisRound;
-                
-                // VN003 FIX: Check slippage protection (only if minExpected > 0)
-                if (minExpected > 0 && freedThisRound < minExpected) {
-                    revert SlippageTooHigh();
-                }
-                
-                emit LPLiquidationExecuted(needed, freedThisRound, minExpected);
-                
-                // If we didn't get any more funds, stop trying
-                if (freedThisRound == 0) {
-                    break;
-                }
-            } catch {
-                // If hook call fails, stop trying
-                break;
-            }
-        }
-        
-        // Final check: do we have enough now?
-        uint256 finalBalance = _stablecoin.balanceOf(address(this));
-        if (finalBalance < totalNeeded) {
-            revert InsufficientLiquidity();
-        }
-        
-        // Emit event if we had to free up liquidity
-        if (totalFreed > 0) {
-            emit LiquidityFreedForWithdrawal(totalNeeded, totalFreed);
-        }
+        // Ensure sufficient liquidity (DRY: using extracted helper from BaseVault)
+        _ensureLiquidityAvailable(totalNeeded);
         
         // Burn snrUSD
         _burn(owner, amount);
+        
+        // SECURITY FIX (CEI Pattern): Reset cooldown BEFORE external calls
+        // User has now withdrawn, must re-initiate cooldown for future withdrawals
+        if (_cooldownStart[owner] != 0) {
+            _cooldownStart[owner] = 0;
+        }
         
         // Track capital outflow: decrease vault value by amount after early penalty (BEFORE external calls - CEI pattern)
         _vaultValue -= amountAfterEarlyPenalty;

@@ -20,6 +20,9 @@ contract ConcreteReserveVault is ReserveVault {
     /// @dev Cooldown mechanism (V3 upgrade - moved from ReserveVault for storage safety)
     mapping(address => uint256) private _cooldownStart;
     
+    /// @dev Reentrancy guard state (V3 upgrade - MUST be in concrete contract)
+    uint256 private _status;
+    
     /// @custom:oz-upgrades-unsafe-allow constructor
     constructor() {
         _disableInitializers();
@@ -110,6 +113,20 @@ contract ConcreteReserveVault is ReserveVault {
     }
     
     // ============================================
+    // V3 Initialization
+    // ============================================
+    
+    /**
+     * @notice Initialize V3 - Initialize reentrancy guard
+     * @dev Cooldown mapping defaults to 0 for all users
+     * @dev SECURITY: Protected by onlyAdmin to prevent unauthorized reinitialization
+     */
+    function initializeV3() external reinitializer(3) onlyAdmin {
+        // Initialize reentrancy guard
+        _status = 1; // _NOT_ENTERED
+    }
+    
+    // ============================================
     // Cooldown Mechanism (V3 - moved from abstract for storage safety)
     // ============================================
     
@@ -154,9 +171,6 @@ contract ConcreteReserveVault is ReserveVault {
         uint256 amount
     ) external view returns (uint256 penalty, uint256 netAmount) {
         uint256 cooldownTime = _cooldownStart[user];
-        if (cooldownTime == 0) {
-            return FeeLib.calculateWithdrawalPenalty(amount, 0, block.timestamp);
-        }
         return FeeLib.calculateWithdrawalPenalty(amount, cooldownTime, block.timestamp);
     }
     
@@ -178,14 +192,8 @@ contract ConcreteReserveVault is ReserveVault {
         
         // Calculate early withdrawal penalty (20% if cooldown not met)
         uint256 cooldownTime = _cooldownStart[owner];
-        uint256 earlyPenalty;
-        uint256 amountAfterEarlyPenalty;
-        
-        if (cooldownTime == 0) {
-            (earlyPenalty, amountAfterEarlyPenalty) = FeeLib.calculateWithdrawalPenalty(assets, 0, block.timestamp);
-        } else {
-            (earlyPenalty, amountAfterEarlyPenalty) = FeeLib.calculateWithdrawalPenalty(assets, cooldownTime, block.timestamp);
-        }
+        (uint256 earlyPenalty, uint256 amountAfterEarlyPenalty) = 
+            FeeLib.calculateWithdrawalPenalty(assets, cooldownTime, block.timestamp);
         
         // Calculate 1% withdrawal fee (applied to amount after early penalty)
         uint256 withdrawalFee = (amountAfterEarlyPenalty * MathLib.WITHDRAWAL_FEE) / MathLib.PRECISION;
@@ -254,25 +262,31 @@ contract ConcreteReserveVault is ReserveVault {
         
         // REENTRANCY FIX: Effects before Interactions
         _burn(owner, shares);
-        // Note: _vaultValue is updated by parent, no need to duplicate
         
-        // Reset cooldown after burning shares
-        _cooldownStart[receiver] = 0;
+        // Track capital outflow (must update since we override parent's _withdraw)
+        _vaultValue -= amountAfterEarlyPenalty;
+        
+        // Reset cooldown for owner (not receiver!)
+        if (_cooldownStart[owner] != 0) {
+            _cooldownStart[owner] = 0;
+        }
         
         // Interactions: Transfer assets (after state changes)
         stablecoin().transfer(receiver, netAssets);
         
-        // Transfer fees to treasury (if treasury is set)
+        // Transfer withdrawal fee to treasury
         address treasuryAddr = treasury();
-        if (treasuryAddr != address(0)) {
-            uint256 totalFees = earlyPenalty + withdrawalFee;
-            if (totalFees > 0) {
-                stablecoin().transfer(treasuryAddr, totalFees);
-                emit WithdrawalFeeCharged(owner, totalFees, netAssets);
-            }
+        if (treasuryAddr != address(0) && withdrawalFee > 0) {
+            stablecoin().transfer(treasuryAddr, withdrawalFee);
+            emit WithdrawalFeeCharged(owner, withdrawalFee, netAssets);
         }
         
-        emit Withdraw(caller, receiver, owner, assets, shares);
+        // Emit early penalty event if applicable
+        if (earlyPenalty > 0) {
+            emit WithdrawalPenaltyCharged(owner, earlyPenalty);
+        }
+        
+        emit Withdraw(caller, receiver, owner, amountAfterEarlyPenalty, shares);
     }
     
     /**
@@ -288,5 +302,31 @@ contract ConcreteReserveVault is ReserveVault {
             _cooldownStart[to] = 0;
         }
     }
+    
+    // ============================================
+    // Reentrancy Guard Implementation (Required by BaseVault)
+    // ============================================
+    
+    /**
+     * @notice Get reentrancy guard status
+     * @dev Implements virtual function from BaseVault
+     */
+    function _getReentrancyStatus() internal view override returns (uint256) {
+        return _status;
+    }
+    
+    /**
+     * @notice Set reentrancy guard status
+     * @dev Implements virtual function from BaseVault
+     */
+    function _setReentrancyStatus(uint256 status) internal override {
+        _status = status;
+    }
+    
+    // ============================================
+    // Events (additional to parent interface)
+    // ============================================
+    
+    event WithdrawalPenaltyCharged(address indexed user, uint256 penalty);
 }
 

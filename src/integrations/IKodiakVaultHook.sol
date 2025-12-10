@@ -46,9 +46,9 @@ interface IKodiakVaultHook {
     /**
      * @notice Smart LP liquidation using statistical estimation and safety buffer
      * @dev Called by vault during withdrawal. Uses configurable buffer to handle slippage efficiently.
-     * @param unstake_usd USD value user wants to withdraw
+     * @param unstakeUsd USD value user wants to withdraw
      */
-    function liquidateLPForAmount(uint256 unstake_usd) external;
+    function liquidateLPForAmount(uint256 unstakeUsd) external;
 
     /**
      * @notice Transfer Island LP tokens from the hook to a recipient vault (for yield transfers).

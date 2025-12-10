@@ -23,6 +23,9 @@ contract ConcreteJuniorVault is JuniorVault {
     /// @dev NEW cooldown mechanism (V3 upgrade)
     mapping(address => uint256) private _cooldownStart;
     
+    /// @dev Reentrancy guard state (V3 upgrade - MUST be in concrete contract)
+    uint256 private _status;
+    
     /// @custom:oz-upgrades-unsafe-allow constructor
     constructor() {
         _disableInitializers();
@@ -116,9 +119,13 @@ contract ConcreteJuniorVault is JuniorVault {
     /**
      * @notice Initialize V3 - no new state to set, just version bump
      * @dev Cooldown mapping is already declared, no initialization needed
+     * @dev Initialize reentrancy guard status
+     * @dev SECURITY: Protected by onlyAdmin to prevent unauthorized reinitialization
      */
-    function initializeV3() external reinitializer(3) {
-        // Nothing to initialize - cooldown mapping defaults to 0 for all users
+    function initializeV3() external reinitializer(3) onlyAdmin {
+        // Initialize reentrancy guard
+        _status = 1; // _NOT_ENTERED
+        // Cooldown mapping defaults to 0 for all users
     }
     
     /**
@@ -162,9 +169,6 @@ contract ConcreteJuniorVault is JuniorVault {
         uint256 amount
     ) external view returns (uint256 penalty, uint256 netAmount) {
         uint256 cooldownTime = _cooldownStart[user];
-        if (cooldownTime == 0) {
-            return FeeLib.calculateWithdrawalPenalty(amount, 0, block.timestamp);
-        }
         return FeeLib.calculateWithdrawalPenalty(amount, cooldownTime, block.timestamp);
     }
     
@@ -186,14 +190,8 @@ contract ConcreteJuniorVault is JuniorVault {
         
         // Calculate early withdrawal penalty (20% if cooldown not met)
         uint256 cooldownTime = _cooldownStart[owner];
-        uint256 earlyPenalty;
-        uint256 amountAfterEarlyPenalty;
-        
-        if (cooldownTime == 0) {
-            (earlyPenalty, amountAfterEarlyPenalty) = FeeLib.calculateWithdrawalPenalty(assets, 0, block.timestamp);
-        } else {
-            (earlyPenalty, amountAfterEarlyPenalty) = FeeLib.calculateWithdrawalPenalty(assets, cooldownTime, block.timestamp);
-        }
+        (uint256 earlyPenalty, uint256 amountAfterEarlyPenalty) = 
+            FeeLib.calculateWithdrawalPenalty(assets, cooldownTime, block.timestamp);
         
         // Calculate 1% withdrawal fee (applied to amount after early penalty)
         uint256 withdrawalFee = (amountAfterEarlyPenalty * MathLib.WITHDRAWAL_FEE) / MathLib.PRECISION;
@@ -205,59 +203,8 @@ contract ConcreteJuniorVault is JuniorVault {
             _cooldownStart[owner] = 0;
         }
         
-        // Free up liquidity if needed (iterative approach)
-        uint256 maxAttempts = 3;
-        uint256 totalFreed = 0;
-        
-        for (uint256 i = 0; i < maxAttempts; i++) {
-            uint256 vaultBalance = _stablecoin.balanceOf(address(this));
-            
-            if (vaultBalance >= amountAfterEarlyPenalty) {
-                break; // We have enough!
-            }
-            
-            if (address(kodiakHook) == address(0)) {
-                revert InsufficientLiquidity();
-            }
-            
-            // Calculate how much more we need
-            uint256 needed = amountAfterEarlyPenalty - vaultBalance;
-            uint256 balanceBefore = vaultBalance;
-            
-            // VN003 FIX: Calculate minimum expected amount with slippage tolerance
-            uint256 minExpected = _calculateMinExpectedFromLP(needed);
-            
-            // Call hook to liquidate LP
-            try kodiakHook.liquidateLPForAmount(needed) {
-                uint256 balanceAfter = _stablecoin.balanceOf(address(this));
-                uint256 freedThisRound = balanceAfter > balanceBefore ? balanceAfter - balanceBefore : 0;
-                totalFreed += freedThisRound;
-                
-                // VN003 FIX: Check slippage protection (only if minExpected > 0)
-                if (minExpected > 0 && freedThisRound < minExpected) {
-                    revert SlippageTooHigh();
-                }
-                
-                emit LPLiquidationExecuted(needed, freedThisRound, minExpected);
-                
-                if (freedThisRound == 0) {
-                    break;
-                }
-            } catch {
-                break;
-            }
-        }
-        
-        // Final check
-        uint256 finalBalance = _stablecoin.balanceOf(address(this));
-        if (finalBalance < amountAfterEarlyPenalty) {
-            revert InsufficientLiquidity();
-        }
-        
-        // Emit event if we freed liquidity
-        if (totalFreed > 0) {
-            emit LiquidityFreedForWithdrawal(amountAfterEarlyPenalty, totalFreed);
-        }
+        // Ensure sufficient liquidity (DRY: using extracted helper from BaseVault)
+        _ensureLiquidityAvailable(amountAfterEarlyPenalty);
         
         // Burn shares from owner
         _burn(owner, shares);
@@ -302,5 +249,25 @@ contract ConcreteJuniorVault is JuniorVault {
     /// @dev Events
     event CooldownInitiated(address indexed user, uint256 timestamp);
     event WithdrawalPenaltyCharged(address indexed user, uint256 penalty);
+    
+    // ============================================
+    // Reentrancy Guard Implementation (Required by BaseVault)
+    // ============================================
+    
+    /**
+     * @notice Get reentrancy guard status
+     * @dev Implements virtual function from BaseVault
+     */
+    function _getReentrancyStatus() internal view override returns (uint256) {
+        return _status;
+    }
+    
+    /**
+     * @notice Set reentrancy guard status
+     * @dev Implements virtual function from BaseVault
+     */
+    function _setReentrancyStatus(uint256 status) internal override {
+        _status = status;
+    }
 }
 
