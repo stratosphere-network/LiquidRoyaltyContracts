@@ -42,10 +42,9 @@ abstract contract UnifiedSeniorVault is ISeniorVault, IERC20, AdminControlled, P
     using RebaseLib for uint256;
     using SpilloverLib for uint256;
     
-    /// @dev Reentrancy guard
+    /// @dev Reentrancy guard constants
     uint256 private constant _NOT_ENTERED = 1;
     uint256 private constant _ENTERED = 2;
-    uint256 private _status;
     
     modifier nonReentrant() {
         require(_status != _ENTERED, "ReentrancyGuard: reentrant call");
@@ -128,6 +127,9 @@ abstract contract UnifiedSeniorVault is ISeniorVault, IERC20, AdminControlled, P
     uint256 internal _nextDepositId;
     mapping(uint256 => PendingLPDeposit) internal _pendingDeposits;
     mapping(address => uint256[]) internal _userDepositIds;
+    
+    /// @dev Reentrancy guard state (ADDED AT END FOR UPGRADE SAFETY)
+    uint256 private _status;
     
     uint256 internal constant DEPOSIT_EXPIRY_TIME = 48 hours;
     
@@ -658,12 +660,30 @@ abstract contract UnifiedSeniorVault is ISeniorVault, IERC20, AdminControlled, P
         if (amount == 0) revert InvalidAmount();
         if (lpPrice == 0) revert InvalidLPPrice();
         if (address(kodiakHook) == address(0)) revert KodiakHookNotSet();
-          if (lpToken != address(kodiakHook.island())) revert InvalidLPToken();
+        if (lpToken != address(kodiakHook.island())) revert InvalidLPToken();
         
-        // Transfer LP tokens from caller (seeder) to this vault
+        // Transfer LP tokens from caller (seeder) to hook
         IERC20(lpToken).safeTransferFrom(msg.sender, address(kodiakHook), amount);
         
-        emit VaultSeeded(lpToken, msg.sender, amount, lpPrice);
+        // Calculate value = amount * lpPrice / 1e18
+        // Account for LP token decimals
+        uint8 lpDecimals = IERC20Metadata(lpToken).decimals();
+        uint256 normalizedAmount = (lpDecimals == 18) ? amount : 
+            (lpDecimals < 18) ? amount * (10 ** (18 - lpDecimals)) : 
+            amount / (10 ** (lpDecimals - 18));
+        uint256 valueAdded = (normalizedAmount * lpPrice) / 1e18;
+        
+        // Mint tokens to caller (seeder) - use _mint which handles shares internally
+        _mint(msg.sender, valueAdded);
+        
+        // Update vault value
+        _vaultValue += valueAdded;
+        _lastUpdateTime = block.timestamp;
+        
+        // Calculate shares for event
+        uint256 sharesToMint = MathLib.calculateSharesFromBalance(valueAdded, _rebaseIndex);
+        
+        emit VaultSeeded(lpToken, msg.sender, amount, lpPrice, valueAdded, sharesToMint);
     }
     
     // ============================================
