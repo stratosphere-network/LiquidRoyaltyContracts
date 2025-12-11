@@ -170,7 +170,7 @@ abstract contract JuniorVault is BaseVault, IJuniorVault {
      * @dev Reference: Three-Zone System - Zone 1
      * Formula: E_j = E × 0.80
      */
-    function receiveSpillover(uint256 amount) public virtual onlySeniorVault {
+    function receiveSpillover(uint256 amount) public virtual onlySeniorVault nonReentrant {
         if (amount == 0) return;
         
         // Increase vault value
@@ -188,7 +188,7 @@ abstract contract JuniorVault is BaseVault, IJuniorVault {
      * @param lpPrice Current LP token price in USD (18 decimals)
      * @return actualAmount Actual USD amount provided (may be entire vault!)
      */
-    function provideBackstop(uint256 amountUSD, uint256 lpPrice) public virtual onlySeniorVault returns (uint256 actualAmount) {
+    function provideBackstop(uint256 amountUSD, uint256 lpPrice) public virtual onlySeniorVault nonReentrant returns (uint256 actualAmount) {
         if (amountUSD == 0) return 0;
         if (lpPrice == 0) return 0;
         if (address(kodiakHook) == address(0)) revert InsufficientBackstopFunds();
@@ -239,7 +239,7 @@ abstract contract JuniorVault is BaseVault, IJuniorVault {
      * @param amount Amount of LP tokens
      * @return depositId ID of pending deposit
      */
-    function depositLP(address lpToken, uint256 amount) external returns (uint256 depositId) {
+    function depositLP(address lpToken, uint256 amount) external nonReentrant returns (uint256 depositId) {
         if (lpToken == address(0)) revert ZeroAddress();
         if (amount == 0) revert InvalidAmount();
         if (address(kodiakHook) == address(0)) revert KodiakHookNotSet();
@@ -273,7 +273,7 @@ abstract contract JuniorVault is BaseVault, IJuniorVault {
      * @param depositId ID of pending deposit
      * @param lpPrice Price of LP token in USD (18 decimals)
      */
-    function approveLPDeposit(uint256 depositId, uint256 lpPrice) external onlyLiquidityManager {
+    function approveLPDeposit(uint256 depositId, uint256 lpPrice) external onlyLiquidityManager nonReentrant {
         PendingLPDeposit storage pendingDeposit = _pendingDeposits[depositId];
         
         if (pendingDeposit.depositor == address(0)) revert DepositNotFound();
