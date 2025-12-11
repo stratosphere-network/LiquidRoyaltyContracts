@@ -220,61 +220,8 @@ contract ConcreteReserveVault is ReserveVault {
         // 3. INTERACTIONS - External calls LAST
         // ============================================
         
-        // Free up liquidity if needed (iterative approach)
-        uint256 maxAttempts = 3;
-        uint256 totalFreed = 0;
-        
-        for (uint256 i = 0; i < maxAttempts; i++) {
-            uint256 vaultBalance = stablecoin().balanceOf(address(this));
-            
-            if (vaultBalance >= assets) {
-                break; // We have enough
-            }
-            
-            if (address(kodiakHook) == address(0)) {
-                revert InsufficientLiquidity();
-            }
-            
-            // Calculate how much more we need
-            uint256 needed = assets - vaultBalance;
-            uint256 balanceBefore = vaultBalance;
-            
-            // Calculate minimum expected amount with slippage tolerance
-            uint256 minExpected = _calculateMinExpectedFromLP(needed);
-            
-            // Call hook to liquidate LP with smart estimation
-            try kodiakHook.liquidateLPForAmount(needed) {
-                uint256 balanceAfter = stablecoin().balanceOf(address(this));
-                uint256 freedThisRound = balanceAfter > balanceBefore ? balanceAfter - balanceBefore : 0;
-                totalFreed += freedThisRound;
-                
-                // Check slippage protection (only if minExpected > 0)
-                if (minExpected > 0 && freedThisRound < minExpected) {
-                    revert SlippageTooHigh();
-                }
-                
-                emit LPLiquidationExecuted(needed, freedThisRound, minExpected);
-                
-                // If we didn't get any more funds, stop trying
-                if (freedThisRound == 0) {
-                    break;
-                }
-            } catch {
-                // If hook call fails, stop trying
-                break;
-            }
-        }
-        
-        // Final check: do we have enough now?
-        uint256 finalBalance = stablecoin().balanceOf(address(this));
-        if (finalBalance < assets) {
-            revert InsufficientLiquidity();
-        }
-        
-        // Emit event if we had to free up liquidity
-        if (totalFreed > 0) {
-            emit LiquidityFreedForWithdrawal(assets, totalFreed);
-        }
+        // Ensure sufficient liquidity (may call kodiakHook.liquidateLPForAmount)
+        _ensureLiquidityAvailable(amountAfterEarlyPenalty);
         
         // Transfer net assets to receiver
         stablecoin().transfer(receiver, netAssets);
