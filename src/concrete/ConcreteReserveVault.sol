@@ -177,6 +177,7 @@ contract ConcreteReserveVault is ReserveVault {
     /**
      * @notice Override withdraw to add cooldown penalty
      * @dev Applies 20% penalty if cooldown not met, then 1% withdrawal fee
+     * @dev SECURITY: Follows Checks-Effects-Interactions (CEI) pattern strictly
      */
     function _withdraw(
         address caller,
@@ -184,25 +185,40 @@ contract ConcreteReserveVault is ReserveVault {
         address owner,
         uint256 assets,
         uint256 shares
-    ) internal override {
-        // Check allowance if caller is not the owner
+    ) internal override nonReentrant {
+        // ============================================
+        // 1. CHECKS - All validations first
+        // ============================================
         if (caller != owner) {
             _spendAllowance(owner, caller, shares);
         }
         
-        // Calculate early withdrawal penalty (20% if cooldown not met)
+        // Calculate penalties and fees
         uint256 cooldownTime = _cooldownStart[owner];
         (uint256 earlyPenalty, uint256 amountAfterEarlyPenalty) = 
             FeeLib.calculateWithdrawalPenalty(assets, cooldownTime, block.timestamp);
         
-        // Calculate 1% withdrawal fee (applied to amount after early penalty)
         uint256 withdrawalFee = (amountAfterEarlyPenalty * MathLib.WITHDRAWAL_FEE) / MathLib.PRECISION;
         uint256 netAssets = amountAfterEarlyPenalty - withdrawalFee;
         
-        // SECURITY FIX (CEI Pattern): Reset cooldown BEFORE external calls
+        // ============================================
+        // 2. EFFECTS - All state changes BEFORE external calls
+        // ============================================
+        
+        // Burn shares first
+        _burn(owner, shares);
+        
+        // Update vault value
+        _vaultValue -= amountAfterEarlyPenalty;
+        
+        // Reset cooldown
         if (_cooldownStart[owner] != 0) {
             _cooldownStart[owner] = 0;
         }
+        
+        // ============================================
+        // 3. INTERACTIONS - External calls LAST
+        // ============================================
         
         // Free up liquidity if needed (iterative approach)
         uint256 maxAttempts = 3;
@@ -260,13 +276,7 @@ contract ConcreteReserveVault is ReserveVault {
             emit LiquidityFreedForWithdrawal(assets, totalFreed);
         }
         
-        // REENTRANCY FIX: Effects before Interactions
-        _burn(owner, shares);
-        
-        // Track capital outflow (must update since we override parent's _withdraw)
-        _vaultValue -= amountAfterEarlyPenalty;
-        
-        // Interactions: Transfer assets (after state changes)
+        // Transfer net assets to receiver
         stablecoin().transfer(receiver, netAssets);
         
         // Transfer withdrawal fee to treasury
@@ -276,7 +286,7 @@ contract ConcreteReserveVault is ReserveVault {
             emit WithdrawalFeeCharged(owner, withdrawalFee, netAssets);
         }
         
-        // Emit early penalty event if applicable
+        // Emit events
         if (earlyPenalty > 0) {
             emit WithdrawalPenaltyCharged(owner, earlyPenalty);
         }
