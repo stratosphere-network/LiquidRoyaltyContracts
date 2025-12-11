@@ -19,9 +19,6 @@ artifacts/
 .env.local
 .env.production
 
-# Docs
-docs/
-
 # Foundry dependencies (installed via forge install)
 lib/
 
