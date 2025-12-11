@@ -470,7 +470,7 @@ abstract contract UnifiedSeniorVault is ISeniorVault, IERC20, AdminControlled, P
      * @param lp Address of the whitelisted LP to transfer to
      * @param amount Amount of stablecoins to transfer
      */
-    function investInLP(address lp, uint256 amount) external onlyLiquidityManager {
+    function investInLP(address lp, uint256 amount) external onlyLiquidityManager nonReentrant {
         if (lp == address(0)) revert AdminControlled.ZeroAddress();
         if (amount == 0) revert InvalidAmount();
         if (!_isWhitelistedLP[lp]) revert WhitelistedLPNotFound();
@@ -503,7 +503,7 @@ abstract contract UnifiedSeniorVault is ISeniorVault, IERC20, AdminControlled, P
         bytes calldata swapToToken0Data,
         address swapToToken1Aggregator,
         bytes calldata swapToToken1Data
-    ) external onlyLiquidityManager {
+    ) external onlyLiquidityManager nonReentrant {
         if (amount == 0) revert InvalidAmount();
         if (address(kodiakHook) == address(0)) revert KodiakHookNotSet();
         
@@ -554,7 +554,7 @@ abstract contract UnifiedSeniorVault is ISeniorVault, IERC20, AdminControlled, P
         bytes calldata swapToToken0Data,
         address swapToToken1Aggregator,
         bytes calldata swapToToken1Data
-    ) external onlyLiquidityManager {
+    ) external onlyLiquidityManager nonReentrant {
         if (address(kodiakHook) == address(0)) revert KodiakHookNotSet();
         
         // Get all idle stablecoin balance
@@ -601,7 +601,7 @@ abstract contract UnifiedSeniorVault is ISeniorVault, IERC20, AdminControlled, P
      * @param lp Address of whitelisted LP to send tokens to
      * @param amount Amount of LP tokens to withdraw (0 = withdraw all)
      */
-    function withdrawLPTokens(address lpToken, address lp, uint256 amount) external onlyLiquidityManager {
+    function withdrawLPTokens(address lpToken, address lp, uint256 amount) external onlyLiquidityManager nonReentrant {
         if (lpToken == address(0)) revert AdminControlled.ZeroAddress();
         if (lp == address(0)) revert AdminControlled.ZeroAddress();
         if (!_isWhitelistedLP[lp]) revert WhitelistedLPNotFound();
@@ -655,7 +655,7 @@ abstract contract UnifiedSeniorVault is ISeniorVault, IERC20, AdminControlled, P
         address lpToken,
         uint256 amount,
         uint256 lpPrice
-    ) external onlySeeder {
+    ) external onlySeeder nonReentrant {
         if (lpToken == address(0)) revert AdminControlled.ZeroAddress();
         if (amount == 0) revert InvalidAmount();
         if (lpPrice == 0) revert InvalidLPPrice();
@@ -695,7 +695,7 @@ abstract contract UnifiedSeniorVault is ISeniorVault, IERC20, AdminControlled, P
      * @param amount Amount of LP tokens
      * @return depositId ID of pending deposit
      */
-    function depositLP(address lpToken, uint256 amount) external returns (uint256 depositId) {
+    function depositLP(address lpToken, uint256 amount) external nonReentrant returns (uint256 depositId) {
         if (lpToken == address(0)) revert AdminControlled.ZeroAddress();
         if (amount == 0) revert InvalidAmount();
         if (address(kodiakHook) == address(0)) revert KodiakHookNotSet();
@@ -728,7 +728,7 @@ abstract contract UnifiedSeniorVault is ISeniorVault, IERC20, AdminControlled, P
      * @param depositId ID of pending deposit
      * @param lpPrice Price of LP token in USD (18 decimals)
      */
-    function approveLPDeposit(uint256 depositId, uint256 lpPrice) external onlyLiquidityManager {
+    function approveLPDeposit(uint256 depositId, uint256 lpPrice) external onlyLiquidityManager nonReentrant {
         PendingLPDeposit storage pendingDeposit = _pendingDeposits[depositId];
         
         if (pendingDeposit.depositor == address(0)) revert DepositNotFound();
@@ -1127,7 +1127,7 @@ abstract contract UnifiedSeniorVault is ISeniorVault, IERC20, AdminControlled, P
      * @param receiver Address to receive snrUSD
      * @return shares Amount of snrUSD minted (approximately equals assets at index ~1.0)
      */
-    function deposit(uint256 assets, address receiver) public virtual whenNotPaused returns (uint256 shares) {
+    function deposit(uint256 assets, address receiver) public virtual whenNotPaused nonReentrant returns (uint256 shares) {
         if (assets == 0) revert InvalidAmount();
         if (receiver == address(0)) revert AdminControlled.ZeroAddress();
         

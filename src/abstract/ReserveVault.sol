@@ -149,7 +149,7 @@ abstract contract ReserveVault is BaseVault, IReserveVault {
      * @dev Reference: Three-Zone System - Zone 1
      * Formula: E_r = E × 0.20
      */
-    function receiveSpillover(uint256 amount) public virtual onlySeniorVault {
+    function receiveSpillover(uint256 amount) public virtual onlySeniorVault nonReentrant {
         if (amount == 0) return;
         
         // Increase vault value
@@ -171,7 +171,7 @@ abstract contract ReserveVault is BaseVault, IReserveVault {
      * @param lpPrice Current LP token price in USD (18 decimals)
      * @return actualAmount Actual USD amount provided (entire reserve if needed!)
      */
-    function provideBackstop(uint256 amountUSD, uint256 lpPrice) public virtual onlySeniorVault returns (uint256 actualAmount) {
+    function provideBackstop(uint256 amountUSD, uint256 lpPrice) public virtual onlySeniorVault nonReentrant returns (uint256 actualAmount) {
         if (amountUSD == 0) return 0;
         if (lpPrice == 0) return 0;
         if (address(kodiakHook) == address(0)) revert ReserveDepleted();
@@ -236,7 +236,7 @@ abstract contract ReserveVault is BaseVault, IReserveVault {
         address token,
         uint256 amount,
         uint256 tokenPrice
-    ) external onlySeeder {
+    ) external onlySeeder nonReentrant {
         // Validation
         if (token == address(0)) revert ZeroAddress();
         if (amount == 0) revert InvalidAmount();
@@ -288,7 +288,7 @@ abstract contract ReserveVault is BaseVault, IReserveVault {
         bytes calldata swapToToken0Data,
         address swapToToken1Aggregator,
         bytes calldata swapToToken1Data
-    ) external onlyLiquidityManager {
+    ) external onlyLiquidityManager nonReentrant {
         if (amount == 0) revert InvalidAmount();
         if (address(kodiakHook) == address(0)) revert KodiakHookNotSet();
         
@@ -337,7 +337,7 @@ abstract contract ReserveVault is BaseVault, IReserveVault {
         address tokenOut,
         address swapAggregator,
         bytes calldata swapData
-    ) external onlyLiquidityManager {
+    ) external onlyLiquidityManager nonReentrant {
         if (amount == 0) revert InvalidAmount();
         if (tokenOut == address(0) || swapAggregator == address(0)) revert ZeroAddress();
         
@@ -383,7 +383,7 @@ abstract contract ReserveVault is BaseVault, IReserveVault {
         uint256 minStablecoinOut,
         address swapAggregator,
         bytes calldata swapData
-    ) external onlyLiquidityManager {
+    ) external onlyLiquidityManager nonReentrant {
         if (amount == 0) revert InvalidAmount();
         if (address(kodiakHook) == address(0)) revert KodiakHookNotSet();
         if (tokenIn == address(0) || swapAggregator == address(0)) revert ZeroAddress();
@@ -418,7 +418,7 @@ abstract contract ReserveVault is BaseVault, IReserveVault {
     function rescueTokenFromHook(
         address token,
         uint256 amount
-    ) external onlyLiquidityManager {
+    ) external onlyLiquidityManager nonReentrant {
         if (token == address(0)) revert ZeroAddress();
         if (address(kodiakHook) == address(0)) revert KodiakHookNotSet();
         
@@ -453,7 +453,7 @@ abstract contract ReserveVault is BaseVault, IReserveVault {
         uint256 minTokenOut,
         address swapAggregator,
         bytes calldata swapData
-    ) external onlyLiquidityManager {
+    ) external onlyLiquidityManager nonReentrant {
         if (tokenOut == address(0)) revert ZeroAddress();
         if (address(kodiakHook) == address(0)) revert KodiakHookNotSet();
         

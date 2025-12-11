@@ -266,11 +266,6 @@ contract ConcreteReserveVault is ReserveVault {
         // Track capital outflow (must update since we override parent's _withdraw)
         _vaultValue -= amountAfterEarlyPenalty;
         
-        // Reset cooldown for owner (not receiver!)
-        if (_cooldownStart[owner] != 0) {
-            _cooldownStart[owner] = 0;
-        }
-        
         // Interactions: Transfer assets (after state changes)
         stablecoin().transfer(receiver, netAssets);
         

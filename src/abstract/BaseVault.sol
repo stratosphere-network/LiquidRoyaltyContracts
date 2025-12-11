@@ -375,7 +375,7 @@ abstract contract BaseVault is ERC4626Upgradeable, IVault, AdminControlled, UUPS
      * @param lp Address of the whitelisted LP to transfer to
      * @param amount Amount of stablecoins to transfer
      */
-    function investInLP(address lp, uint256 amount) external onlyLiquidityManager {
+    function investInLP(address lp, uint256 amount) external onlyLiquidityManager nonReentrant {
         if (lp == address(0)) revert AdminControlled.ZeroAddress();
         if (amount == 0) revert InvalidAmount();
         if (!_isWhitelistedLP[lp]) revert WhitelistedLPNotFound();
@@ -397,7 +397,7 @@ abstract contract BaseVault is ERC4626Upgradeable, IVault, AdminControlled, UUPS
      * @param lp Address of the whitelisted LP protocol to send tokens to
      * @param amount Amount of LP tokens to withdraw (0 = withdraw all)
      */
-    function withdrawLPTokens(address lpToken, address lp, uint256 amount) external onlyLiquidityManager {
+    function withdrawLPTokens(address lpToken, address lp, uint256 amount) external onlyLiquidityManager nonReentrant {
         if (lpToken == address(0)) revert AdminControlled.ZeroAddress();
         if (lp == address(0)) revert AdminControlled.ZeroAddress();
         if (!_isWhitelistedLP[lp]) revert WhitelistedLPNotFound();
@@ -472,7 +472,7 @@ abstract contract BaseVault is ERC4626Upgradeable, IVault, AdminControlled, UUPS
         bytes calldata swapToToken0Data,
         address swapToToken1Aggregator,
         bytes calldata swapToToken1Data
-    ) external onlyLiquidityManager {
+    ) external onlyLiquidityManager nonReentrant {
         if (amount == 0) revert InvalidAmount();
         if (address(kodiakHook) == address(0)) revert KodiakHookNotSet();
         
@@ -523,7 +523,7 @@ abstract contract BaseVault is ERC4626Upgradeable, IVault, AdminControlled, UUPS
         bytes calldata swapToToken0Data,
         address swapToToken1Aggregator,
         bytes calldata swapToToken1Data
-    ) external onlyLiquidityManager {
+    ) external onlyLiquidityManager nonReentrant {
         if (address(kodiakHook) == address(0)) revert KodiakHookNotSet();
         
         // Get all idle stablecoin balance
@@ -750,6 +750,7 @@ abstract contract BaseVault is ERC4626Upgradeable, IVault, AdminControlled, UUPS
         public 
         virtual 
         override(ERC4626Upgradeable) 
+        nonReentrant
         returns (uint256 shares) 
     {
         shares = super.deposit(assets, receiver);
@@ -771,6 +772,7 @@ abstract contract BaseVault is ERC4626Upgradeable, IVault, AdminControlled, UUPS
         public 
         virtual 
         override(ERC4626Upgradeable) 
+        nonReentrant
         returns (uint256 assets) 
     {
         assets = super.mint(shares, receiver);
@@ -851,7 +853,7 @@ abstract contract BaseVault is ERC4626Upgradeable, IVault, AdminControlled, UUPS
         address lpToken,
         uint256 amount,
         uint256 lpPrice
-    ) external onlySeeder {
+    ) external onlySeeder nonReentrant {
         // Validation
         if (lpToken == address(0)) revert AdminControlled.ZeroAddress();
         if (amount == 0) revert InvalidAmount();
