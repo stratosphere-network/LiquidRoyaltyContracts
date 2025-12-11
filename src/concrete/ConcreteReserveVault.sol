@@ -4,6 +4,8 @@ pragma solidity ^0.8.20;
 import {ReserveVault} from "../abstract/ReserveVault.sol";
 import {MathLib} from "../libraries/MathLib.sol";
 import {FeeLib} from "../libraries/FeeLib.sol";
+import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
+import {SafeERC20} from "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
 
 /**
  * @title ConcreteReserveVault
@@ -12,6 +14,7 @@ import {FeeLib} from "../libraries/FeeLib.sol";
  * @dev Upgradeable using UUPS proxy pattern
  */
 contract ConcreteReserveVault is ReserveVault {
+    using SafeERC20 for IERC20;
     /// @dev NEW role management (V2 upgrade)
     address private _liquidityManager;
     address private _priceFeedManager;
@@ -224,12 +227,11 @@ contract ConcreteReserveVault is ReserveVault {
         _ensureLiquidityAvailable(amountAfterEarlyPenalty);
         
         // Transfer net assets to receiver
-        stablecoin().transfer(receiver, netAssets);
+        _stablecoin.safeTransfer(receiver, netAssets);
         
         // Transfer withdrawal fee to treasury
-        address treasuryAddr = treasury();
-        if (treasuryAddr != address(0) && withdrawalFee > 0) {
-            stablecoin().transfer(treasuryAddr, withdrawalFee);
+        if (_treasury != address(0) && withdrawalFee > 0) {
+            _stablecoin.safeTransfer(_treasury, withdrawalFee);
             emit WithdrawalFeeCharged(owner, withdrawalFee, netAssets);
         }
         
