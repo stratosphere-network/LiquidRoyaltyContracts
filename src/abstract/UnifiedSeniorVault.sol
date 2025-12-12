@@ -46,8 +46,10 @@ abstract contract UnifiedSeniorVault is ISeniorVault, IERC20, AdminControlled, P
     uint256 private constant _NOT_ENTERED = 1;
     uint256 private constant _ENTERED = 2;
     
+    error ReentrantCall();
+    
     modifier nonReentrant() {
-        require(_getReentrancyStatus() != _ENTERED, "ReentrancyGuard: reentrant call");
+        if (_getReentrancyStatus() == _ENTERED) revert ReentrantCall();
         _setReentrancyStatus(_ENTERED);
         _;
         _setReentrancyStatus(_NOT_ENTERED);
@@ -183,6 +185,7 @@ abstract contract UnifiedSeniorVault is ISeniorVault, IERC20, AdminControlled, P
     );
 
     /// @dev Errors (ZeroAddress inherited from AdminControlled, InsufficientBalance and InvalidAmount from IVault)
+    error NotPaused();
     error InvalidProfitRange();
     error InvalidLPPrice();
     error InvalidRecipient();
@@ -347,23 +350,6 @@ abstract contract UnifiedSeniorVault is ISeniorVault, IERC20, AdminControlled, P
         _isWhitelistedLP[lp] = false;
     }
     
-    /**
-     * @notice Check if LP is whitelisted
-     * @param lp Address to check
-     * @return isWhitelisted True if LP is whitelisted
-     */
-    function isWhitelistedLP(address lp) external view returns (bool) {
-        return _isWhitelistedLP[lp];
-    }
-    
-    /**
-     * @notice Get all whitelisted LPs
-     * @return lps Array of whitelisted LP addresses
-     */
-    function getWhitelistedLPs() external view returns (address[] memory) {
-        return _whitelistedLPs;
-    }
-    
     // ============================================
     // LP Token Management
     // ============================================
@@ -413,55 +399,6 @@ abstract contract UnifiedSeniorVault is ISeniorVault, IERC20, AdminControlled, P
         
         // Remove from mapping
         _isWhitelistedLPToken[lpToken] = false;
-    }
-    
-    /**
-     * @notice Check if LP token is whitelisted
-     * @param lpToken Address to check
-     * @return isWhitelisted True if LP token is whitelisted
-     */
-    function isWhitelistedLPToken(address lpToken) external view returns (bool) {
-        return _isWhitelistedLPToken[lpToken];
-    }
-    
-    /**
-     * @notice Get all whitelisted LP tokens
-     * @return lpTokens Array of whitelisted LP token addresses
-     */
-    function getWhitelistedLPTokens() external view returns (address[] memory) {
-        return _whitelistedLPTokens;
-    }
-    
-    /**
-     * @notice Get vault's LP token holdings for all whitelisted LP tokens
-     * @dev Returns array of LP tokens and their balances held by this vault
-     * @return holdings Array of LPHolding structs containing LP token address and amount
-     */
-    function getLPTokenHoldings() external view returns (LPHolding[] memory holdings) {
-        uint256 lpTokenCount = _whitelistedLPTokens.length;
-        holdings = new LPHolding[](lpTokenCount);
-        
-        for (uint256 i = 0; i < lpTokenCount; i++) {
-            address lpToken = _whitelistedLPTokens[i];
-            uint256 balance = IERC20(lpToken).balanceOf(address(this));
-            
-            holdings[i] = LPHolding({
-                lpToken: lpToken,
-                amount: balance
-            });
-        }
-        
-        return holdings;
-    }
-    
-    /**
-     * @notice Get vault's balance of a specific LP token
-     * @dev Gas-efficient way to check single LP token balance
-     * @param lpToken Address of the LP token to check
-     * @return balance Amount of LP tokens held by this vault
-     */
-    function getLPTokenBalance(address lpToken) external view returns (uint256) {
-        return IERC20(lpToken).balanceOf(address(this));
     }
 
     /**
@@ -1569,7 +1506,7 @@ abstract contract UnifiedSeniorVault is ISeniorVault, IERC20, AdminControlled, P
      * @param amount Amount of stablecoin tokens to withdraw
      */
     function emergencyWithdraw(uint256 amount) external onlyAdmin {
-        if (!paused()) revert("Must be paused");
+        if (!paused()) revert NotPaused();
         if (amount == 0) revert InvalidAmount();
         
         _stablecoin.safeTransfer(_treasury, amount);

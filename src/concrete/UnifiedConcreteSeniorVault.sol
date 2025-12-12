@@ -70,7 +70,7 @@ contract UnifiedConcreteSeniorVault is UnifiedSeniorVault {
             initialValue_
         );
         
-        // N1 FIX: Set roles during initialization (consolidated from initializeV2)
+       
         if (liquidityManager_ == address(0)) revert ZeroAddress();
         if (priceFeedManager_ == address(0)) revert ZeroAddress();
         if (contractUpdater_ == address(0)) revert ZeroAddress();
@@ -79,12 +79,7 @@ contract UnifiedConcreteSeniorVault is UnifiedSeniorVault {
         _contractUpdater = contractUpdater_;
     }
     
-    /**
-     * @notice Initialize V2 - DEPRECATED (kept for backward compatibility)
-     * @dev N1: Redundant - new deployments should use initialize() with all params
-     * @dev Only kept for contracts already deployed with V1 initialize()
-     * @dev SECURITY FIX: Added onlyAdmin to prevent front-running attack
-     */
+  
     function initializeV2(
         address liquidityManager_,
         address priceFeedManager_,
@@ -98,7 +93,7 @@ contract UnifiedConcreteSeniorVault is UnifiedSeniorVault {
         _contractUpdater = contractUpdater_;
     }
     
-    // Role getters (override base)
+   
     function liquidityManager() public view override returns (address) {
         return _liquidityManager;
     }
@@ -127,68 +122,36 @@ contract UnifiedConcreteSeniorVault is UnifiedSeniorVault {
         _contractUpdater = contractUpdater_;
     }
     
-    // ============================================
-    // V3 Initialization
-    // ============================================
-    
-    /**
-     * @notice Initialize V3 - Initialize reentrancy guard
-     * @dev Sets reentrancy guard status to _NOT_ENTERED
-     * @dev SECURITY: Protected by onlyAdmin to prevent unauthorized reinitialization
-     */
+ 
     function initializeV3() external reinitializer(3) onlyAdmin {
-        // Initialize reentrancy guard
-        _status = 1; // _NOT_ENTERED
+        
+        _status = 1; 
     }
     
-    // ============================================
-    // Reentrancy Guard Implementation (Required by UnifiedSeniorVault)
-    // ============================================
-    
-    /**
-     * @notice Get reentrancy guard status
-     * @dev Implements virtual function from UnifiedSeniorVault
-     */
+
     function _getReentrancyStatus() internal view override returns (uint256) {
         return _status;
     }
-    
-    /**
-     * @notice Set reentrancy guard status
-     * @dev Implements virtual function from UnifiedSeniorVault
-     */
+   
     function _setReentrancyStatus(uint256 status) internal override {
         _status = status;
     }
     
-    // ============================================
-    // Asset Transfer Implementation
-    // ============================================
-    
-    /**
-     * @notice Transfer LP tokens to Junior vault
-     * @dev Reference: Three-Zone System - Profit Spillover (80% to Junior)
-     * @param amountUSD Amount in USD to transfer
-     * @param lpPrice Current LP token price in USD (18 decimals)
-     */
+ 
     function _transferToJunior(uint256 amountUSD, uint256 lpPrice) internal override {
-        // Allow graceful exit for zero transfers
+       
         if (amountUSD == 0) return;
-        // Critical: LP price must be valid
-        require(lpPrice > 0, "Invalid LP price");
-        require(address(kodiakHook) != address(0), "Hook not configured");
         
-        // LP DECIMALS FIX: Get LP token and its decimals
+        if (lpPrice == 0) revert InvalidLPPrice();
+        if (address(kodiakHook) == address(0)) revert KodiakHookNotSet();
+      
         address lpToken = address(kodiakHook.island());
         uint8 lpDecimals = IERC20Metadata(lpToken).decimals();
         
-        // SECURITY FIX: Use Math.mulDiv() to avoid divide-before-multiply precision loss
-        // Calculate LP amount from USD amount (accounting for LP decimals)
-        // lpPrice is in 18 decimals (USD per LP token)
-        // We need to convert to LP token's actual decimals
+      
         uint256 lpAmount = Math.mulDiv(amountUSD, 10 ** lpDecimals, lpPrice);
         
-        // Check Senior Hook's LP token balance
+        
         uint256 lpBalance = kodiakHook.getIslandLPBalance();
         uint256 actualLPAmount = lpAmount > lpBalance ? lpBalance : lpAmount;
         
@@ -217,8 +180,8 @@ contract UnifiedConcreteSeniorVault is UnifiedSeniorVault {
         // Allow graceful exit for zero transfers
         if (amountUSD == 0) return;
         // Critical: LP price must be valid
-        require(lpPrice > 0, "Invalid LP price");
-        require(address(kodiakHook) != address(0), "Hook not configured");
+        if (lpPrice == 0) revert InvalidLPPrice();
+        if (address(kodiakHook) == address(0)) revert KodiakHookNotSet();
         
         // LP DECIMALS FIX: Get LP token and its decimals
         address lpToken = address(kodiakHook.island());

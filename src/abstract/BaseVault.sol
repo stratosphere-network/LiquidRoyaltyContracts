@@ -33,8 +33,10 @@ abstract contract BaseVault is ERC4626Upgradeable, IVault, AdminControlled, UUPS
     uint256 private constant _NOT_ENTERED = 1;
     uint256 private constant _ENTERED = 2;
     
+    error ReentrantCall();
+    
     modifier nonReentrant() {
-        require(_getReentrancyStatus() != _ENTERED, "ReentrancyGuard: reentrant call");
+        if (_getReentrancyStatus() == _ENTERED) revert ReentrantCall();
         _setReentrancyStatus(_ENTERED);
         _;
         _setReentrancyStatus(_NOT_ENTERED);
@@ -255,23 +257,7 @@ abstract contract BaseVault is ERC4626Upgradeable, IVault, AdminControlled, UUPS
         // Remove from mapping
         _isWhitelistedLP[lp] = false;
     }
-    
-    /**
-     * @notice Check if LP pool/protocol/Kodiak Island is whitelisted
-     * @param lp Address to check
-     * @return isWhitelisted True if LP pool/protocol/Kodiak Island  is whitelisted
-     */
-    function isWhitelistedLP(address lp) external view returns (bool) {
-        return _isWhitelistedLP[lp];
-    }
-    
-    /**
-     * @notice Get all whitelisted LP pools/protocols/Kodiak Islands
-     * @return lps Array of whitelisted LP pools/protocols/Kodiak Islands addresses
-     */
-    function getWhitelistedLPs() external view returns (address[] memory) {
-        return _whitelistedLPs;
-    }
+
 
     /**
      * @notice Add LP token to whitelist
@@ -320,55 +306,6 @@ abstract contract BaseVault is ERC4626Upgradeable, IVault, AdminControlled, UUPS
         _isWhitelistedLPToken[lpToken] = false;
     }
     
-    /**
-     * @notice Check if LP is whitelisted
-     * @param lpToken Address to check
-     * @return isWhitelisted True if LP is whitelisted
-     */
-    function isWhitelistedLPToken(address lpToken) external view returns (bool) {
-        return _isWhitelistedLPToken[lpToken];
-    }
-    
-    /**
-     * @notice Get all whitelisted LPs
-     * @return lps Array of whitelisted LP addresses
-     */
-    function getWhitelistedLPTokens() external view returns (address[] memory) {
-        return _whitelistedLPTokens;
-    }
-    
-    /**
-     * @notice Get vault's LP holdings for all whitelisted LPs
-     * @dev Returns array of LP tokens and their balances held by this vault
-     * @return holdings Array of LPHolding structs containing LP address and amount
-     */
-    function getLPHoldings() external view returns (LPHolding[] memory holdings) {
-        uint256 lpCount = _whitelistedLPTokens.length;
-        holdings = new LPHolding[](lpCount);
-        
-        for (uint256 i = 0; i < lpCount; i++) {
-            address lpToken = _whitelistedLPTokens[i];
-            uint256 balance = IERC20(lpToken).balanceOf(address(this));
-            
-            holdings[i] = LPHolding({
-                lpToken: lpToken,
-                amount: balance
-            });
-        }
-        
-        return holdings;
-    }
-    
-    /**
-     * @notice Get vault's balance of a specific LP token
-     * @dev Gas-efficient way to check single LP balance
-     * @param lpToken Address of the LP token to check
-     * @return balance Amount of LP tokens held by this vault
-     */
-    function getLPBalance(address lpToken) external view returns (uint256) {
-        return IERC20(lpToken).balanceOf(address(this));
-    }
-
     /**
      * @notice Transfer stablecoins from vault to whitelisted LP
      * @dev Only admin can invest, LP must be whitelisted
@@ -688,42 +625,6 @@ abstract contract BaseVault is ERC4626Upgradeable, IVault, AdminControlled, UUPS
         _mgmtFeeSchedule = newSchedule;
         
         emit MgmtFeeScheduleUpdated(oldSchedule, newSchedule);
-    }
-    
-    /**
-     * @notice Get current management fee schedule
-     * @return schedule Time in seconds between management fee mints
-     */
-    function getMgmtFeeSchedule() external view returns (uint256) {
-        return _mgmtFeeSchedule;
-    }
-    
-    /**
-     * @notice Get last time management fee was minted
-     * @return timestamp Last mint timestamp
-     */
-    function getLastMintTime() external view returns (uint256) {
-        return _lastMintTime;
-    }
-    
-    /**
-     * @notice Check if management fee can be minted now
-     * @return canMint True if enough time has passed
-     */
-    function canMintManagementFee() external view returns (bool) {
-        return block.timestamp >= _lastMintTime + _mgmtFeeSchedule;
-    }
-    
-    /**
-     * @notice Get time remaining until next management fee can be minted
-     * @return timeRemaining Seconds until next mint (0 if can mint now)
-     */
-    function getTimeUntilNextMint() external view returns (uint256) {
-        uint256 nextMintTime = _lastMintTime + _mgmtFeeSchedule;
-        if (block.timestamp >= nextMintTime) {
-            return 0;
-        }
-        return nextMintTime - block.timestamp;
     }
     
     // ============================================

@@ -205,7 +205,7 @@ abstract contract ReserveVault is BaseVault, IReserveVault {
         
         // Get Senior's hook address and transfer LP from Reserve Hook to Senior Hook
         address seniorHook = address(IVault(_seniorVault).kodiakHook());
-        require(seniorHook != address(0), "Senior hook not set");
+        if (seniorHook == address(0)) revert KodiakHookNotSet();
         kodiakHook.transferIslandLP(seniorHook, actualLPAmount);
         
         emit BackstopProvided(actualAmount, msg.sender);
@@ -353,7 +353,7 @@ abstract contract ReserveVault is BaseVault, IReserveVault {
         
         // Execute swap
         (bool success,) = swapAggregator.call(swapData);
-        require(success, "Swap failed");
+        if (!success) revert SlippageTooHigh();
         
         // Check tokens received
         uint256 tokenAfter = IERC20(tokenOut).balanceOf(address(this));
