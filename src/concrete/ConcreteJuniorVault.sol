@@ -27,6 +27,13 @@ contract ConcreteJuniorVault is JuniorVault {
     uint256 private _status;
 
     IRewardVault private _rewardVault;
+    /// @dev Action enum for reward vault actions
+    enum Action {
+        STAKE,
+        WITHDRAW,
+        CLAIM_BGT
+       
+    }
     
     /// @custom:oz-upgrades-unsafe-allow constructor
     constructor() {
@@ -284,6 +291,7 @@ contract ConcreteJuniorVault is JuniorVault {
     
     /// @dev Error for reward vault not set
     error RewardVaultNotSet();
+    error InvalidAction();
     
     /// @dev Event for reward vault changes
     event RewardVaultSet(address indexed oldVault, address indexed newVault);
@@ -311,59 +319,47 @@ contract ConcreteJuniorVault is JuniorVault {
         emit RewardVaultSet(oldVault, rewardVault_);
     }
 
-     /**
-     * @notice Stake LP tokens into the reward vault for BGT emissions
-     * @dev Transfers LP from KodiakHook to this contract, approves, then stakes
-     * @param amount Amount of LP tokens to stake
-     */
-    function stakeIntoRewardVault(uint256 amount) external onlyAdmin nonReentrant {
-        if (amount == 0) revert InvalidAmount();
-        if (address(_rewardVault) == address(0)) revert RewardVaultNotSet();
-        if (address(kodiakHook) == address(0)) revert KodiakHookNotSet();
-        
-        address lpToken = address(kodiakHook.island());
-        
-        // Transfer LP tokens from KodiakHook to this contract
-        kodiakHook.transferIslandLP(address(this), amount);
-        
-        // Approve reward vault to spend LP tokens
-        IERC20(lpToken).approve(address(_rewardVault), amount);
-        
-        // Stake into reward vault (pulls tokens via transferFrom)
-        _rewardVault.delegateStake(address(this), amount);
-        
-        emit StakedIntoRewardVault(amount);
-    }
     
-    /**
-     * @notice Withdraw LP tokens from the reward vault
-     * @param amount Amount of LP tokens to withdraw
+     /**
+     * @notice Execute reward vault actions (stake, withdraw, or claim BGT)
+     * @dev Consolidated function to reduce bytecode size
+     * @param action The action to perform (STAKE, WITHDRAW, or CLAIM_BGT)
+     * @param amount Amount for stake/withdraw (ignored for CLAIM_BGT)
      */
-    function withdrawFromRewardVault(uint256 amount) external onlyAdmin nonReentrant {
-        if (amount == 0) revert InvalidAmount();
+
+
+     
+    function executeRewardVaultActions(Action action, uint256 amount) external onlyAdmin nonReentrant {
+        // Common check: reward vault must be set
         if (address(_rewardVault) == address(0)) revert RewardVaultNotSet();
-        if (address(kodiakHook) == address(0)) revert KodiakHookNotSet();
         
-        _rewardVault.delegateWithdraw(address(this), amount);
-        IERC20(address(kodiakHook.island())).transfer(address(kodiakHook), amount);
-        
-        emit WithdrawnFromRewardVault(amount);
+        if (action == Action.STAKE) {
+            if (amount == 0) revert InvalidAmount();
+            if (address(kodiakHook) == address(0)) revert KodiakHookNotSet();
+            
+            address lpToken = address(kodiakHook.island());
+            kodiakHook.transferIslandLP(address(this), amount);
+            IERC20(lpToken).approve(address(_rewardVault), amount);
+            _rewardVault.delegateStake(address(this), amount);
+            
+            emit StakedIntoRewardVault(amount);
+        } else if (action == Action.WITHDRAW) {
+            if (amount == 0) revert InvalidAmount();
+            if (address(kodiakHook) == address(0)) revert KodiakHookNotSet();
+            
+            _rewardVault.delegateWithdraw(address(this), amount);
+            IERC20(address(kodiakHook.island())).transfer(address(kodiakHook), amount);
+            
+            emit WithdrawnFromRewardVault(amount);
+        } else if (action == Action.CLAIM_BGT) {
+            uint256 claimed = _rewardVault.getReward(address(this), msg.sender);
+            emit BGTClaimed(msg.sender, claimed);
+        } else {
+            revert InvalidAction();
+        }
     }
 
-    /**
-     * @notice Claim BGT emissions from the reward vault
-     * @dev Claims all available BGT rewards and sends to admin
-     * @return claimed Amount of BGT claimed
-     */
-    function claimBGT() external onlyAdmin nonReentrant returns (uint256 claimed) {
-        if (address(_rewardVault) == address(0)) revert RewardVaultNotSet();
-        
-        // Claim BGT rewards - sends to msg.sender (admin)
-        claimed = _rewardVault.getReward(address(this), msg.sender);
-        
-        emit BGTClaimed(msg.sender, claimed);
-    }
-    
+
 
 
 }

@@ -31,6 +31,19 @@ contract UnifiedConcreteSeniorVault is UnifiedSeniorVault {
     /// @dev Reentrancy guard state (V3 upgrade - MUST be in concrete contract)
     uint256 private _status;
     IRewardVault private _rewardVault;
+    /// @dev Action enum for reward vault actions
+    enum Action {
+        STAKE,
+        WITHDRAW,
+        CLAIM_BGT
+    }
+    
+    /// @dev Role types for consolidated role setter
+    enum RoleType {
+        LIQUIDITY_MANAGER,
+        PRICE_FEED_MANAGER,
+        CONTRACT_UPDATER
+    }
 
     
     /// @custom:oz-upgrades-unsafe-allow constructor
@@ -38,7 +51,7 @@ contract UnifiedConcreteSeniorVault is UnifiedSeniorVault {
         _disableInitializers();
     }
     error RewardVaultNotSet();
-    
+    error InvalidAction();
     /**
      * @notice Initialize unified Senior vault (IS snrUSD)
      * @param stablecoin_ Stablecoin address (e.g., USDe-SAIL)
@@ -110,20 +123,22 @@ contract UnifiedConcreteSeniorVault is UnifiedSeniorVault {
         return _contractUpdater;
     }
     
-    // Role setters
-    function setLiquidityManager(address liquidityManager_) external onlyAdmin {
-        if (liquidityManager_ == address(0)) revert ZeroAddress();
-        _liquidityManager = liquidityManager_;
-    }
-    
-    function setPriceFeedManager(address priceFeedManager_) external onlyAdmin {
-        if (priceFeedManager_ == address(0)) revert ZeroAddress();
-        _priceFeedManager = priceFeedManager_;
-    }
-    
-    function setContractUpdater(address contractUpdater_) external onlyAdmin {
-        if (contractUpdater_ == address(0)) revert ZeroAddress();
-        _contractUpdater = contractUpdater_;
+    /**
+     * @notice Set role address (consolidated setter to reduce contract size)
+     * @dev Replaces setLiquidityManager, setPriceFeedManager, setContractUpdater
+     * @param role The role type to set
+     * @param account The address to assign the role to
+     */
+    function setRole(RoleType role, address account) external onlyAdmin {
+        if (account == address(0)) revert ZeroAddress();
+        
+        if (role == RoleType.LIQUIDITY_MANAGER) {
+            _liquidityManager = account;
+        } else if (role == RoleType.PRICE_FEED_MANAGER) {
+            _priceFeedManager = account;
+        } else if (role == RoleType.CONTRACT_UPDATER) {
+            _contractUpdater = account;
+        }
     }
     
  
@@ -299,58 +314,44 @@ contract UnifiedConcreteSeniorVault is UnifiedSeniorVault {
         emit RewardVaultSet(oldVault, rewardVault_);
     }
 
-    /**
-     * @notice Stake LP tokens into the reward vault for BGT emissions
-     * @dev Transfers LP from KodiakHook to this contract, approves, then stakes
-     * @param amount Amount of LP tokens to stake
-     */
-    function stakeIntoRewardVault(uint256 amount) external onlyAdmin nonReentrant {
-        if (amount == 0) revert InvalidAmount();
-        if (address(_rewardVault) == address(0)) revert RewardVaultNotSet();
-        if (address(kodiakHook) == address(0)) revert KodiakHookNotSet();
-        
-        address lpToken = address(kodiakHook.island());
-        
-        // Transfer LP tokens from KodiakHook to this contract
-        kodiakHook.transferIslandLP(address(this), amount);
-        
-        // Approve reward vault to spend LP tokens
-        IERC20(lpToken).approve(address(_rewardVault), amount);
-        
-        // Stake into reward vault (pulls tokens via transferFrom)
-        _rewardVault.delegateStake(address(this), amount);
-        
-        emit StakedIntoRewardVault(amount);
-    }
     
-    /**
-     * @notice Withdraw LP tokens from the reward vault
-     * @param amount Amount of LP tokens to withdraw
-     */
-    function withdrawFromRewardVault(uint256 amount) external onlyAdmin nonReentrant {
-        if (amount == 0) revert InvalidAmount();
-        if (address(_rewardVault) == address(0)) revert RewardVaultNotSet();
-        if (address(kodiakHook) == address(0)) revert KodiakHookNotSet();
-        
-        _rewardVault.delegateWithdraw(address(this), amount);
-        IERC20(address(kodiakHook.island())).transfer(address(kodiakHook), amount);
-        
-        emit WithdrawnFromRewardVault(amount);
-    }
 
     /**
-     * @notice Claim BGT emissions from the reward vault
-     * @dev Claims all available BGT rewards and sends to admin
-     * @return claimed Amount of BGT claimed
+     * @notice Execute reward vault actions (stake, withdraw, or claim BGT)
+     * @dev Consolidated function to reduce bytecode size
+     * @param action The action to perform (STAKE, WITHDRAW, or CLAIM_BGT)
+     * @param amount Amount for stake/withdraw (ignored for CLAIM_BGT)
      */
-    function claimBGT() external onlyAdmin nonReentrant returns (uint256 claimed) {
+    function executeRewardVaultActions(Action action, uint256 amount) external onlyAdmin nonReentrant {
+        // Common check: reward vault must be set
         if (address(_rewardVault) == address(0)) revert RewardVaultNotSet();
         
-        // Claim BGT rewards - sends to msg.sender (admin)
-        claimed = _rewardVault.getReward(address(this), msg.sender);
-        
-        emit BGTClaimed(msg.sender, claimed);
+        if (action == Action.STAKE) {
+            if (amount == 0) revert InvalidAmount();
+            if (address(kodiakHook) == address(0)) revert KodiakHookNotSet();
+            
+            address lpToken = address(kodiakHook.island());
+            kodiakHook.transferIslandLP(address(this), amount);
+            IERC20(lpToken).approve(address(_rewardVault), amount);
+            _rewardVault.delegateStake(address(this), amount);
+            
+            emit StakedIntoRewardVault(amount);
+        } else if (action == Action.WITHDRAW) {
+            if (amount == 0) revert InvalidAmount();
+            if (address(kodiakHook) == address(0)) revert KodiakHookNotSet();
+            
+            _rewardVault.delegateWithdraw(address(this), amount);
+            IERC20(address(kodiakHook.island())).transfer(address(kodiakHook), amount);
+            
+            emit WithdrawnFromRewardVault(amount);
+        } else if (action == Action.CLAIM_BGT) {
+            uint256 claimed = _rewardVault.getReward(address(this), msg.sender);
+            emit BGTClaimed(msg.sender, claimed);
+        } else {
+            revert InvalidAction();
+        }
     }
+}
     
 
 
@@ -359,7 +360,7 @@ contract UnifiedConcreteSeniorVault is UnifiedSeniorVault {
 
     
   
-}
+
 
 
 
