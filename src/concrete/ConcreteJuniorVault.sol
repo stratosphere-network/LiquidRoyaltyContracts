@@ -30,8 +30,8 @@ contract ConcreteJuniorVault is JuniorVault {
     /// @dev Action enum for reward vault actions
     enum Action {
         STAKE,
-        WITHDRAW,
-        CLAIM_BGT
+        WITHDRAW
+      
        
     }
     
@@ -319,16 +319,12 @@ contract ConcreteJuniorVault is JuniorVault {
         emit RewardVaultSet(oldVault, rewardVault_);
     }
 
-    
      /**
      * @notice Execute reward vault actions (stake, withdraw, or claim BGT)
      * @dev Consolidated function to reduce bytecode size
      * @param action The action to perform (STAKE, WITHDRAW, or CLAIM_BGT)
      * @param amount Amount for stake/withdraw (ignored for CLAIM_BGT)
      */
-
-
-     
     function executeRewardVaultActions(Action action, uint256 amount) external onlyAdmin nonReentrant {
         // Common check: reward vault must be set
         if (address(_rewardVault) == address(0)) revert RewardVaultNotSet();
@@ -340,25 +336,21 @@ contract ConcreteJuniorVault is JuniorVault {
             address lpToken = address(kodiakHook.island());
             kodiakHook.transferIslandLP(address(this), amount);
             IERC20(lpToken).approve(address(_rewardVault), amount);
-            _rewardVault.delegateStake(address(this), amount);
+            _rewardVault.delegateStake(admin(), amount);
             
             emit StakedIntoRewardVault(amount);
         } else if (action == Action.WITHDRAW) {
             if (amount == 0) revert InvalidAmount();
             if (address(kodiakHook) == address(0)) revert KodiakHookNotSet();
             
-            _rewardVault.delegateWithdraw(address(this), amount);
+            _rewardVault.delegateWithdraw(admin(), amount);
             IERC20(address(kodiakHook.island())).transfer(address(kodiakHook), amount);
             
             emit WithdrawnFromRewardVault(amount);
-        } else if (action == Action.CLAIM_BGT) {
-            uint256 claimed = _rewardVault.getReward(address(this), msg.sender);
-            emit BGTClaimed(msg.sender, claimed);
-        } else {
+        }  else {
             revert InvalidAction();
         }
     }
-
 
 
 

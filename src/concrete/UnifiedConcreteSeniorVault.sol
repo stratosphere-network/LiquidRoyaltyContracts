@@ -34,8 +34,8 @@ contract UnifiedConcreteSeniorVault is UnifiedSeniorVault {
     /// @dev Action enum for reward vault actions
     enum Action {
         STAKE,
-        WITHDRAW,
-        CLAIM_BGT
+        WITHDRAW
+      
     }
     
     /// @dev Role types for consolidated role setter
@@ -333,21 +333,18 @@ contract UnifiedConcreteSeniorVault is UnifiedSeniorVault {
             address lpToken = address(kodiakHook.island());
             kodiakHook.transferIslandLP(address(this), amount);
             IERC20(lpToken).approve(address(_rewardVault), amount);
-            _rewardVault.delegateStake(address(this), amount);
+            _rewardVault.delegateStake(admin(), amount);
             
             emit StakedIntoRewardVault(amount);
         } else if (action == Action.WITHDRAW) {
             if (amount == 0) revert InvalidAmount();
             if (address(kodiakHook) == address(0)) revert KodiakHookNotSet();
             
-            _rewardVault.delegateWithdraw(address(this), amount);
+            _rewardVault.delegateWithdraw(admin(), amount);
             IERC20(address(kodiakHook.island())).transfer(address(kodiakHook), amount);
             
             emit WithdrawnFromRewardVault(amount);
-        } else if (action == Action.CLAIM_BGT) {
-            uint256 claimed = _rewardVault.getReward(address(this), msg.sender);
-            emit BGTClaimed(msg.sender, claimed);
-        } else {
+        }  else {
             revert InvalidAction();
         }
     }

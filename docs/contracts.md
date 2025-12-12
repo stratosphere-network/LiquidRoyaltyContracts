@@ -8,13 +8,11 @@
 | Junior  | `0x3587f67eFCDF48C4483348C8822e31bF14C94010` |
 | Reserve | `0xCF8f7B13AC286f05475DfAd9A0B953FA73C34546` |
 
-## Implementations
+ Senior:   0x5995ea3ddb97e9a68F8E9a1eAb48b6faff63AF66
+  Junior:   0x0a3eBFd1266d44C09d4663c77b702EE315225d6b
+  Reserve:  0xA035c5531B9775eB80b47157dE56f9c1C167614D
 
-| Vault   | Implementation Address                       |
-|---------|----------------------------------------------|
-| Senior  | `0xeEaF5362A8FCe5Bb3476B70C5d34ff1738884601` |
-| Junior  | `0x5cAefa8EDa534aB3cAd1ED1d0fF1512e9c79B54D` |
-| Reserve | `0x13F0c6A5293Bd969F8283D2A6163A70847523F2b` |
+
 
 ## Proxies
 

@@ -533,7 +533,7 @@ contract KodiakVaultHook is AccessControl, IKodiakVaultHook {
      * @param to Recipient address (typically admin wallet)
      * @param amount Amount to transfer (0 = transfer all)
      */
-    function adminRescueTokens(address token, address to, uint256 amount) external onlyRole(DEFAULT_ADMIN_ROLE) {
+    function adminRescueTokens(address token, address to, uint256 amount) external onlyRole(ADMIN_ROLE) {
         require(token != address(0), "token=0");
         require(to != address(0), "to=0");
         
