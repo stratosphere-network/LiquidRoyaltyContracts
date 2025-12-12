@@ -46,8 +46,10 @@ abstract contract UnifiedSeniorVault is ISeniorVault, IERC20, AdminControlled, P
     uint256 private constant _NOT_ENTERED = 1;
     uint256 private constant _ENTERED = 2;
     
+    error ReentrantCall();
+    
     modifier nonReentrant() {
-        require(_getReentrancyStatus() != _ENTERED, "ReentrancyGuard: reentrant call");
+        if (_getReentrancyStatus() == _ENTERED) revert ReentrantCall();
         _setReentrancyStatus(_ENTERED);
         _;
         _setReentrancyStatus(_NOT_ENTERED);
@@ -128,6 +130,26 @@ abstract contract UnifiedSeniorVault is ISeniorVault, IERC20, AdminControlled, P
         CANCELLED
     }
     
+    /// @dev Admin actions for LP deposits
+    enum LPDepositAction {
+        APPROVE,
+        REJECT
+    }
+    
+    /// @dev Admin actions for whitelist management
+    enum WhitelistAction {
+        ADD_LP,
+        REMOVE_LP,
+        ADD_LP_TOKEN,
+        REMOVE_LP_TOKEN
+    }
+    
+    /// @dev Actions for vault value updates
+    enum VaultValueAction {
+        UPDATE_BY_BPS,
+        SET_ABSOLUTE
+    }
+    
     uint256 internal _nextDepositId;
     mapping(uint256 => PendingLPDeposit) internal _pendingDeposits;
     mapping(address => uint256[]) internal _userDepositIds;
@@ -183,6 +205,7 @@ abstract contract UnifiedSeniorVault is ISeniorVault, IERC20, AdminControlled, P
     );
 
     /// @dev Errors (ZeroAddress inherited from AdminControlled, InsufficientBalance and InvalidAmount from IVault)
+    error NotPaused();
     error InvalidProfitRange();
     error InvalidLPPrice();
     error InvalidRecipient();
@@ -269,20 +292,38 @@ abstract contract UnifiedSeniorVault is ISeniorVault, IERC20, AdminControlled, P
     }
     
     /**
-     * @notice Add LP to whitelist
-     * @dev Only admin can whitelist LPs
-     * @param lp Address to whitelist
+     * @notice Execute whitelist management actions (add/remove LP or LP token)
+     * @dev Consolidates 4 whitelist functions to reduce contract size
+     * @param action ADD_LP, REMOVE_LP, ADD_LP_TOKEN, or REMOVE_LP_TOKEN
+     * @param target Address to add/remove from whitelist
      */
-    function addWhitelistedLP(address lp) external onlyAdmin {
-        if (lp == address(0)) revert AdminControlled.ZeroAddress();
-        if (_isWhitelistedLP[lp]) revert LPAlreadyWhitelisted();
+    function executeWhitelistAction(WhitelistAction action, address target) external onlyAdmin {
+        if (target == address(0)) revert AdminControlled.ZeroAddress();
         
-        _whitelistedLPs.push(lp);
-        _isWhitelistedLP[lp] = true;
-
-        
-        emit WhitelistedLPAdded(lp);
+        if (action == WhitelistAction.ADD_LP) {
+            if (_isWhitelistedLP[target]) revert LPAlreadyWhitelisted();
+            _whitelistedLPs.push(target);
+            _isWhitelistedLP[target] = true;
+            emit WhitelistedLPAdded(target);
+            
+        } else if (action == WhitelistAction.REMOVE_LP) {
+            if (!_isWhitelistedLP[target]) revert WhitelistedLPNotFound();
+            _removeWhitelistedLPInternal(target);
+            emit WhitelistedLPRemoved(target);
+            
+        } else if (action == WhitelistAction.ADD_LP_TOKEN) {
+            if (_isWhitelistedLPToken[target]) revert LPAlreadyWhitelisted();
+            _whitelistedLPTokens.push(target);
+            _isWhitelistedLPToken[target] = true;
+            emit WhitelistedLPTokenAdded(target);
+            
+        } else if (action == WhitelistAction.REMOVE_LP_TOKEN) {
+            if (!_isWhitelistedLPToken[target]) revert WhitelistedLPNotFound();
+            _removeWhitelistedLPTokenInternal(target);
+            emit WhitelistedLPTokenRemoved(target);
+        }
     }
+    
     /**
      * @notice Set Kodiak hook and automatically whitelist it
      * @dev Hook must implement IKodiakVaultHook and vault() must return this vault's address
@@ -314,20 +355,6 @@ abstract contract UnifiedSeniorVault is ISeniorVault, IERC20, AdminControlled, P
         
         emit KodiakHookUpdated(hook);
     }
-
-    /**
-     * @notice Remove LP from whitelist
-     * @dev Only admin can remove LPs
-     * @param lp Address to remove
-     */
-    function removeWhitelistedLP(address lp) external onlyAdmin {
-        if (lp == address(0)) revert AdminControlled.ZeroAddress();
-        if (!_isWhitelistedLP[lp]) revert WhitelistedLPNotFound();
-        
-        _removeWhitelistedLPInternal(lp);
-        
-        emit WhitelistedLPRemoved(lp);
-    }
     
     /**
      * @dev Internal function to remove LP from whitelist (used by setKodiakHook)
@@ -348,56 +375,6 @@ abstract contract UnifiedSeniorVault is ISeniorVault, IERC20, AdminControlled, P
     }
     
     /**
-     * @notice Check if LP is whitelisted
-     * @param lp Address to check
-     * @return isWhitelisted True if LP is whitelisted
-     */
-    function isWhitelistedLP(address lp) external view returns (bool) {
-        return _isWhitelistedLP[lp];
-    }
-    
-    /**
-     * @notice Get all whitelisted LPs
-     * @return lps Array of whitelisted LP addresses
-     */
-    function getWhitelistedLPs() external view returns (address[] memory) {
-        return _whitelistedLPs;
-    }
-    
-    // ============================================
-    // LP Token Management
-    // ============================================
-
-    /**
-     * @notice Add LP token to whitelist
-     * @dev Only admin can whitelist LP tokens
-     * @param lpToken Address of LP token to whitelist
-     */
-    function addWhitelistedLPToken(address lpToken) external onlyAdmin {
-        if (lpToken == address(0)) revert AdminControlled.ZeroAddress();
-        if (_isWhitelistedLPToken[lpToken]) revert LPAlreadyWhitelisted();
-        
-        _whitelistedLPTokens.push(lpToken);
-        _isWhitelistedLPToken[lpToken] = true;
-        
-        emit WhitelistedLPTokenAdded(lpToken);
-    }
-
-    /**
-     * @notice Remove LP token from whitelist
-     * @dev Only admin can remove LP tokens
-     * @param lpToken Address of LP token to remove
-     */
-    function removeWhitelistedLPToken(address lpToken) external onlyAdmin {
-        if (lpToken == address(0)) revert AdminControlled.ZeroAddress();
-        if (!_isWhitelistedLPToken[lpToken]) revert WhitelistedLPNotFound();
-        
-        _removeWhitelistedLPTokenInternal(lpToken);
-        
-        emit WhitelistedLPTokenRemoved(lpToken);
-    }
-    
-    /**
      * @dev Internal helper to remove LP token from whitelist
      * @param lpToken Address to remove
      */
@@ -413,55 +390,6 @@ abstract contract UnifiedSeniorVault is ISeniorVault, IERC20, AdminControlled, P
         
         // Remove from mapping
         _isWhitelistedLPToken[lpToken] = false;
-    }
-    
-    /**
-     * @notice Check if LP token is whitelisted
-     * @param lpToken Address to check
-     * @return isWhitelisted True if LP token is whitelisted
-     */
-    function isWhitelistedLPToken(address lpToken) external view returns (bool) {
-        return _isWhitelistedLPToken[lpToken];
-    }
-    
-    /**
-     * @notice Get all whitelisted LP tokens
-     * @return lpTokens Array of whitelisted LP token addresses
-     */
-    function getWhitelistedLPTokens() external view returns (address[] memory) {
-        return _whitelistedLPTokens;
-    }
-    
-    /**
-     * @notice Get vault's LP token holdings for all whitelisted LP tokens
-     * @dev Returns array of LP tokens and their balances held by this vault
-     * @return holdings Array of LPHolding structs containing LP token address and amount
-     */
-    function getLPTokenHoldings() external view returns (LPHolding[] memory holdings) {
-        uint256 lpTokenCount = _whitelistedLPTokens.length;
-        holdings = new LPHolding[](lpTokenCount);
-        
-        for (uint256 i = 0; i < lpTokenCount; i++) {
-            address lpToken = _whitelistedLPTokens[i];
-            uint256 balance = IERC20(lpToken).balanceOf(address(this));
-            
-            holdings[i] = LPHolding({
-                lpToken: lpToken,
-                amount: balance
-            });
-        }
-        
-        return holdings;
-    }
-    
-    /**
-     * @notice Get vault's balance of a specific LP token
-     * @dev Gas-efficient way to check single LP token balance
-     * @param lpToken Address of the LP token to check
-     * @return balance Amount of LP tokens held by this vault
-     */
-    function getLPTokenBalance(address lpToken) external view returns (uint256) {
-        return IERC20(lpToken).balanceOf(address(this));
     }
 
     /**
@@ -723,62 +651,59 @@ abstract contract UnifiedSeniorVault is ISeniorVault, IERC20, AdminControlled, P
     }
     
     /**
-     * @notice Approve pending LP deposit and mint shares
-     * @dev Only admin can approve. For Senior: mints 1:1 snrUSD.
+     * @notice Execute LP deposit admin actions (approve/reject)
+     * @dev Consolidates approveLPDeposit and rejectLPDeposit to reduce contract size
+     * @param action APPROVE or REJECT
      * @param depositId ID of pending deposit
-     * @param lpPrice Price of LP token in USD (18 decimals)
+     * @param lpPrice Price of LP token in USD (18 decimals) - required for APPROVE, ignored for REJECT
+     * @param reason Reason for rejection - required for REJECT, ignored for APPROVE
      */
-    function approveLPDeposit(uint256 depositId, uint256 lpPrice) external onlyLiquidityManager nonReentrant {
+    function executeLPDepositAction(
+        LPDepositAction action,
+        uint256 depositId,
+        uint256 lpPrice,
+        string calldata reason
+    ) external onlyLiquidityManager nonReentrant {
         PendingLPDeposit storage pendingDeposit = _pendingDeposits[depositId];
         
-        if (pendingDeposit.depositor == address(0)) revert DepositNotFound();
-        if (pendingDeposit.status != DepositStatus.PENDING) revert DepositNotPending();
-        if (block.timestamp > pendingDeposit.expiresAt) revert DepositExpired();
-        if (lpPrice == 0) revert InvalidLPPrice();
-        
-        // Calculate value and shares (Senior: 1:1 with USD)
-        // Q5 FIX: Account for LP token decimals
-        uint8 lpDecimals = IERC20Metadata(pendingDeposit.lpToken).decimals();
-        uint256 normalizedAmount = _normalizeToDecimals(pendingDeposit.amount, lpDecimals, 18);
-        uint256 valueAdded = (normalizedAmount * lpPrice) / 1e18;
-        
-        // For Senior: mint 1:1 (snrUSD is rebasing token, not ERC4626)
-        // NOTE: UnifiedSeniorVault uses rebasing (balance = shares × index)
-        // _mint() will convert the balance amount to internal shares automatically
-        if (valueAdded == 0) revert InvalidAmount(); // Safety: prevent 0-value minting
-        
-        // Update status (Effects - state updates BEFORE external call)
-        pendingDeposit.status = DepositStatus.APPROVED;
-        
-        emit PendingLPDepositApproved(depositId, pendingDeposit.depositor, lpPrice, valueAdded);
-        
-        // N1-2 FIX: Mint shares BEFORE updating vault value (matches standard deposit flow)
-        _mint(pendingDeposit.depositor, valueAdded);
-        
-        // Update vault value AFTER minting (consistent with deposit() pattern)
-        _vaultValue += valueAdded;
-        _lastUpdateTime = block.timestamp;
-    }
-    
-    /**
-     * @notice Reject pending LP deposit and return LP to depositor
-     * @dev Only admin can reject
-     * @param depositId ID of pending deposit
-     * @param reason Reason for rejection
-     */
-    function rejectLPDeposit(uint256 depositId, string calldata reason) external onlyLiquidityManager nonReentrant {
-        PendingLPDeposit storage pendingDeposit = _pendingDeposits[depositId];
-        
+        // Common validation
         if (pendingDeposit.depositor == address(0)) revert DepositNotFound();
         if (pendingDeposit.status != DepositStatus.PENDING) revert DepositNotPending();
         
-        // Update status (Effects - state update BEFORE external call)
-        pendingDeposit.status = DepositStatus.REJECTED;
-        
-        emit PendingLPDepositRejected(depositId, pendingDeposit.depositor, reason);
-        
-        // Transfer LP back from hook to depositor (Interaction - external call LAST per CEI pattern)
-        kodiakHook.transferIslandLP(pendingDeposit.depositor, pendingDeposit.amount);
+        if (action == LPDepositAction.APPROVE) {
+            if (block.timestamp > pendingDeposit.expiresAt) revert DepositExpired();
+            if (lpPrice == 0) revert InvalidLPPrice();
+            
+            // Calculate value and shares (Senior: 1:1 with USD)
+            // Q5 FIX: Account for LP token decimals
+            uint8 lpDecimals = IERC20Metadata(pendingDeposit.lpToken).decimals();
+            uint256 normalizedAmount = _normalizeToDecimals(pendingDeposit.amount, lpDecimals, 18);
+            uint256 valueAdded = (normalizedAmount * lpPrice) / 1e18;
+            
+            // Safety: prevent 0-value minting
+            if (valueAdded == 0) revert InvalidAmount();
+            
+            // Update status (Effects - state updates BEFORE external call)
+            pendingDeposit.status = DepositStatus.APPROVED;
+            
+            emit PendingLPDepositApproved(depositId, pendingDeposit.depositor, lpPrice, valueAdded);
+            
+            // N1-2 FIX: Mint shares BEFORE updating vault value (matches standard deposit flow)
+            _mint(pendingDeposit.depositor, valueAdded);
+            
+            // Update vault value AFTER minting (consistent with deposit() pattern)
+            _vaultValue += valueAdded;
+            _lastUpdateTime = block.timestamp;
+            
+        } else if (action == LPDepositAction.REJECT) {
+            // Update status (Effects - state update BEFORE external call)
+            pendingDeposit.status = DepositStatus.REJECTED;
+            
+            emit PendingLPDepositRejected(depositId, pendingDeposit.depositor, reason);
+            
+            // Transfer LP back from hook to depositor (Interaction - external call LAST per CEI pattern)
+            kodiakHook.transferIslandLP(pendingDeposit.depositor, pendingDeposit.amount);
+        }
     }
     
     /**
@@ -821,44 +746,6 @@ abstract contract UnifiedSeniorVault is ISeniorVault, IERC20, AdminControlled, P
         
         // Transfer LP back from hook to original depositor (Interaction - external call LAST per CEI pattern)
         kodiakHook.transferIslandLP(pendingDeposit.depositor, pendingDeposit.amount);
-    }
-    
-    /**
-     * @notice Get pending deposit details
-     * @param depositId ID of pending deposit
-     */
-    function getPendingDeposit(uint256 depositId) external view returns (
-        address depositor,
-        address lpToken,
-        uint256 amount,
-        uint256 timestamp,
-        uint256 expiresAt,
-        DepositStatus status
-    ) {
-        PendingLPDeposit memory pendingDeposit = _pendingDeposits[depositId];
-        return (
-            pendingDeposit.depositor,
-            pendingDeposit.lpToken,
-            pendingDeposit.amount,
-            pendingDeposit.timestamp,
-            pendingDeposit.expiresAt,
-            pendingDeposit.status
-        );
-    }
-    
-    /**
-     * @notice Get all deposit IDs for a user
-     * @param user Address of user
-     */
-    function getUserDepositIds(address user) external view returns (uint256[] memory) {
-        return _userDepositIds[user];
-    }
-    
-    /**
-     * @notice Get next deposit ID
-     */
-    function getNextDepositId() external view returns (uint256) {
-        return _nextDepositId;
     }
     
     // ============================================
@@ -1080,45 +967,44 @@ abstract contract UnifiedSeniorVault is ISeniorVault, IERC20, AdminControlled, P
         return address(this); // Senior vault IS itself
     }
     
-    function totalAssets() public view virtual returns (uint256) {
-        return _vaultValue;
-    }
-    
     /**
-     * @notice Update vault value based on off-chain calculation
-     * @dev Reference: Instructions - Monthly Rebase Flow
+     * @notice Update vault value (consolidated: by BPS or absolute)
+     * @dev Consolidates updateVaultValue and setVaultValue to reduce contract size
+     * @param action UPDATE_BY_BPS (apply percentage) or SET_ABSOLUTE (set exact value)
+     * @param value For UPDATE_BY_BPS: profitBps (int256, can be negative)
+     *              For SET_ABSOLUTE: new absolute value (must be positive, cast to uint256)
      */
-    function updateVaultValue(int256 profitBps) public virtual onlyPriceFeedManager {
-        if (profitBps < MIN_PROFIT_BPS || profitBps > MAX_PROFIT_BPS) {
-            revert InvalidProfitRange();
-        }
-        
+    function executeVaultValueAction(VaultValueAction action, int256 value) public virtual onlyPriceFeedManager {
         uint256 oldValue = _vaultValue;
-        uint256 newValue = MathLib.applyPercentage(oldValue, profitBps);
         
-        _vaultValue = newValue;
-        _lastUpdateTime = block.timestamp;
-        
-        emit VaultValueUpdated(oldValue, _vaultValue, profitBps);
-    }
-
-    /**
-     * @notice Directly set vault value (no BPS calculation)
-     * @dev Simple admin function to set exact vault value
-     * @param newValue New vault value in wei
-     */
-    function setVaultValue(uint256 newValue) public virtual onlyPriceFeedManager {
-        uint256 oldValue = _vaultValue;
-        _vaultValue = newValue;
-        _lastUpdateTime = block.timestamp;
-        
-        // Calculate BPS for event logging
-        int256 bps = 0;
-        if (oldValue > 0) {
-            bps = int256((newValue * 10000 / oldValue)) - 10000;
+        if (action == VaultValueAction.UPDATE_BY_BPS) {
+            // value is profitBps (can be negative for losses)
+            if (value < MIN_PROFIT_BPS || value > MAX_PROFIT_BPS) {
+                revert InvalidProfitRange();
+            }
+            
+            uint256 newValue = MathLib.applyPercentage(oldValue, value);
+            _vaultValue = newValue;
+            _lastUpdateTime = block.timestamp;
+            
+            emit VaultValueUpdated(oldValue, _vaultValue, value);
+            
+        } else if (action == VaultValueAction.SET_ABSOLUTE) {
+            // value is absolute value (must be positive)
+            if (value < 0) revert InvalidAmount();
+            
+            uint256 newValue = uint256(value);
+            _vaultValue = newValue;
+            _lastUpdateTime = block.timestamp;
+            
+            // Calculate BPS for event logging
+            int256 bps = 0;
+            if (oldValue > 0) {
+                bps = int256((newValue * 10000 / oldValue)) - 10000;
+            }
+            
+            emit VaultValueUpdated(oldValue, _vaultValue, bps);
         }
-        
-        emit VaultValueUpdated(oldValue, _vaultValue, bps);
     }
     
     /**
@@ -1317,23 +1203,6 @@ abstract contract UnifiedSeniorVault is ISeniorVault, IERC20, AdminControlled, P
         return netAssets;
     }
     
-    function previewDeposit(uint256 assets) public view virtual returns (uint256) {
-        // N6 FIX: Return actual shares that would be minted (accounting for rebase index)
-        // Even though snrUSD displays 1:1 balance, internally it's stored as shares
-        return MathLib.calculateSharesFromBalance(assets, _rebaseIndex);
-    }
-    
-    function previewWithdraw(uint256 amount) public view virtual returns (uint256) {
-        // Calculate early withdrawal penalty first
-        (, uint256 amountAfterEarlyPenalty) = calculateWithdrawalPenalty(msg.sender, amount);
-        
-        // Calculate 1% withdrawal fee on the amount after early penalty
-        uint256 withdrawalFee = (amountAfterEarlyPenalty * MathLib.WITHDRAWAL_FEE) / MathLib.PRECISION;
-        uint256 netAssets = amountAfterEarlyPenalty - withdrawalFee;
-        
-        return netAssets;
-    }
-    
     // ============================================
     // ISeniorVault Interface Implementation
     // ============================================
@@ -1417,16 +1286,6 @@ abstract contract UnifiedSeniorVault is ISeniorVault, IERC20, AdminControlled, P
     }
     
     /**
-     * @notice Check if user can withdraw without penalty
-     * @dev Reference: Fee Calculations - Early Withdrawal Penalty
-     */
-    function canWithdrawWithoutPenalty(address user) public view virtual returns (bool) {
-        uint256 cooldownTime = _cooldownStart[user];
-        if (cooldownTime == 0) return false;
-        return (block.timestamp - cooldownTime) >= MathLib.COOLDOWN_PERIOD;
-    }
-    
-    /**
      * @notice Calculate withdrawal penalty
      * @dev Reference: Fee Calculations - P(w, t_c)
      * @dev Q1 FIX: Delegates to FeeLib which handles all cases including cooldownTime == 0
@@ -1503,51 +1362,21 @@ abstract contract UnifiedSeniorVault is ISeniorVault, IERC20, AdminControlled, P
         emit FeesCollected(mgmtFeeTokens, selection.feeTokens);  // Now shows both fees
     }
     
-    /**
-     * @notice Simulate rebase without executing
-     * @dev Reference: Rebase Algorithm - for off-chain analysis
-     * TIME-BASED FIX: Now simulates with actual time elapsed and management fees
-     */
-    function simulateRebase() public view virtual returns (
-        RebaseLib.APYSelection memory selection,
-        SpilloverLib.Zone zone,
-        uint256 newBackingRatio
-    ) {
-        uint256 currentSupply = totalSupply();
-        if (currentSupply == 0) {
-            return (selection, SpilloverLib.Zone.HEALTHY, MathLib.PRECISION);
-        }
-        
-        // Calculate time elapsed and management fee (same as real rebase)
-        uint256 timeElapsed = block.timestamp - _lastRebaseTime;
-        uint256 mgmtFeeTokens = FeeLib.calculateManagementFeeTokens(_vaultValue, timeElapsed);
-        
-        // TIME-BASED FIX: Pass timeElapsed and mgmtFeeTokens
-        selection = RebaseLib.selectDynamicAPY(currentSupply, _vaultValue, timeElapsed, mgmtFeeTokens);
-        newBackingRatio = MathLib.calculateBackingRatio(_vaultValue, selection.newSupply);
-        zone = SpilloverLib.determineZone(newBackingRatio);
-        
-        return (selection, zone, newBackingRatio);
-    }
-    
     // ============================================
     // Emergency Functions
     // ============================================
     
     /**
-     * @notice Pause all deposits and withdrawals
-     * @dev Can only be called by admin
+     * @notice Set pause state for deposits and withdrawals
+     * @dev Consolidates pause/unpause to reduce contract size
+     * @param paused True to pause, false to unpause
      */
-    function pause() external onlyAdmin {
-        _pause();
-    }
-    
-    /**
-     * @notice Unpause all deposits and withdrawals
-     * @dev Can only be called by admin
-     */
-    function unpause() external onlyAdmin {
-        _unpause();
+    function setPaused(bool paused) external onlyAdmin {
+        if (paused) {
+            _pause();
+        } else {
+            _unpause();
+        }
     }
     
     // ============================================
@@ -1569,7 +1398,7 @@ abstract contract UnifiedSeniorVault is ISeniorVault, IERC20, AdminControlled, P
      * @param amount Amount of stablecoin tokens to withdraw
      */
     function emergencyWithdraw(uint256 amount) external onlyAdmin {
-        if (!paused()) revert("Must be paused");
+        if (!paused()) revert NotPaused();
         if (amount == 0) revert InvalidAmount();
         
         _stablecoin.safeTransfer(_treasury, amount);

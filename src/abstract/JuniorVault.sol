@@ -220,7 +220,7 @@ abstract contract JuniorVault is BaseVault, IJuniorVault {
         
         // Get Senior's hook address and transfer LP from Junior Hook to Senior Hook
         address seniorHook = address(IVault(_seniorVault).kodiakHook());
-        require(seniorHook != address(0), "Senior hook not set");
+        if (seniorHook == address(0)) revert KodiakHookNotSet();
         kodiakHook.transferIslandLP(seniorHook, actualLPAmount);
         
         emit BackstopProvided(actualAmount, msg.sender);

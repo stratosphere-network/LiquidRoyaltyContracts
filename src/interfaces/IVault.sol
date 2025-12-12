@@ -54,7 +54,7 @@ interface IVault {
      * Called by admin with stablecoin profit/loss percentage
      * @param profitBps Profit/loss in basis points (250 = 2.5%, -1000 = -10%)
      */
-    function updateVaultValue(int256 profitBps) external;
+   
     
     /**
      * @notice Get last value update timestamp

@@ -6,7 +6,7 @@ import {MathLib} from "../libraries/MathLib.sol";
 import {FeeLib} from "../libraries/FeeLib.sol";
 import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import {SafeERC20} from "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
-
+import {IRewardVault} from "../integrations/IRewardVault.sol";
 /**
  * @title ConcreteJuniorVault
  * @notice Concrete implementation of Junior vault (ERC4626)
@@ -25,6 +25,15 @@ contract ConcreteJuniorVault is JuniorVault {
     
     /// @dev Reentrancy guard state (V3 upgrade - MUST be in concrete contract)
     uint256 private _status;
+
+    IRewardVault private _rewardVault;
+    /// @dev Action enum for reward vault actions
+    enum Action {
+        STAKE,
+        WITHDRAW
+      
+       
+    }
     
     /// @custom:oz-upgrades-unsafe-allow constructor
     constructor() {
@@ -279,5 +288,71 @@ contract ConcreteJuniorVault is JuniorVault {
     function _setReentrancyStatus(uint256 status) internal override {
         _status = status;
     }
+    
+    /// @dev Error for reward vault not set
+    error RewardVaultNotSet();
+    error InvalidAction();
+    
+    /// @dev Event for reward vault changes
+    event RewardVaultSet(address indexed oldVault, address indexed newVault);
+    event StakedIntoRewardVault(uint256 amount);
+    event WithdrawnFromRewardVault(uint256 amount);
+    event BGTClaimed(address indexed recipient, uint256 amount);
+
+    /**
+     * @notice Get the current reward vault address
+     * @return rewardVault The reward vault contract
+     */
+    function rewardVault() external view returns (IRewardVault) {
+        return _rewardVault;
+    }
+    
+    /**
+     * @notice Set the reward vault address
+     * @dev Only admin can set the reward vault
+     * @param rewardVault_ Address of the new reward vault
+     */
+    function setRewardVault(address rewardVault_) external onlyAdmin {
+        if (rewardVault_ == address(0)) revert ZeroAddress();
+        address oldVault = address(_rewardVault);
+        _rewardVault = IRewardVault(rewardVault_);
+        emit RewardVaultSet(oldVault, rewardVault_);
+    }
+
+     /**
+     * @notice Execute reward vault actions (stake, withdraw, or claim BGT)
+     * @dev Consolidated function to reduce bytecode size
+     * @param action The action to perform (STAKE, WITHDRAW, or CLAIM_BGT)
+     * @param amount Amount for stake/withdraw (ignored for CLAIM_BGT)
+     */
+    function executeRewardVaultActions(Action action, uint256 amount) external onlyAdmin nonReentrant {
+        // Common check: reward vault must be set
+        if (address(_rewardVault) == address(0)) revert RewardVaultNotSet();
+        
+        if (action == Action.STAKE) {
+            if (amount == 0) revert InvalidAmount();
+            if (address(kodiakHook) == address(0)) revert KodiakHookNotSet();
+            
+            address lpToken = address(kodiakHook.island());
+            kodiakHook.transferIslandLP(address(this), amount);
+            IERC20(lpToken).approve(address(_rewardVault), amount);
+            _rewardVault.delegateStake(admin(), amount);
+            
+            emit StakedIntoRewardVault(amount);
+        } else if (action == Action.WITHDRAW) {
+            if (amount == 0) revert InvalidAmount();
+            if (address(kodiakHook) == address(0)) revert KodiakHookNotSet();
+            
+            _rewardVault.delegateWithdraw(admin(), amount);
+            IERC20(address(kodiakHook.island())).transfer(address(kodiakHook), amount);
+            
+            emit WithdrawnFromRewardVault(amount);
+        }  else {
+            revert InvalidAction();
+        }
+    }
+
+
+
 }
 

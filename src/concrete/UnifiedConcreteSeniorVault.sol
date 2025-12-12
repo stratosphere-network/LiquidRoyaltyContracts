@@ -5,6 +5,7 @@ import {UnifiedSeniorVault} from "../abstract/UnifiedSeniorVault.sol";
 import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import {IERC20Metadata} from "@openzeppelin/contracts/token/ERC20/extensions/IERC20Metadata.sol";
 import {Math} from "@openzeppelin/contracts/utils/math/Math.sol";
+import {IRewardVault} from "../integrations/IRewardVault.sol";
 
 
 /**
@@ -29,12 +30,28 @@ contract UnifiedConcreteSeniorVault is UnifiedSeniorVault {
     
     /// @dev Reentrancy guard state (V3 upgrade - MUST be in concrete contract)
     uint256 private _status;
+    IRewardVault private _rewardVault;
+    /// @dev Action enum for reward vault actions
+    enum Action {
+        STAKE,
+        WITHDRAW
+      
+    }
+    
+    /// @dev Role types for consolidated role setter
+    enum RoleType {
+        LIQUIDITY_MANAGER,
+        PRICE_FEED_MANAGER,
+        CONTRACT_UPDATER
+    }
+
     
     /// @custom:oz-upgrades-unsafe-allow constructor
     constructor() {
         _disableInitializers();
     }
-    
+    error RewardVaultNotSet();
+    error InvalidAction();
     /**
      * @notice Initialize unified Senior vault (IS snrUSD)
      * @param stablecoin_ Stablecoin address (e.g., USDe-SAIL)
@@ -70,7 +87,7 @@ contract UnifiedConcreteSeniorVault is UnifiedSeniorVault {
             initialValue_
         );
         
-        // N1 FIX: Set roles during initialization (consolidated from initializeV2)
+       
         if (liquidityManager_ == address(0)) revert ZeroAddress();
         if (priceFeedManager_ == address(0)) revert ZeroAddress();
         if (contractUpdater_ == address(0)) revert ZeroAddress();
@@ -79,12 +96,7 @@ contract UnifiedConcreteSeniorVault is UnifiedSeniorVault {
         _contractUpdater = contractUpdater_;
     }
     
-    /**
-     * @notice Initialize V2 - DEPRECATED (kept for backward compatibility)
-     * @dev N1: Redundant - new deployments should use initialize() with all params
-     * @dev Only kept for contracts already deployed with V1 initialize()
-     * @dev SECURITY FIX: Added onlyAdmin to prevent front-running attack
-     */
+  
     function initializeV2(
         address liquidityManager_,
         address priceFeedManager_,
@@ -98,7 +110,7 @@ contract UnifiedConcreteSeniorVault is UnifiedSeniorVault {
         _contractUpdater = contractUpdater_;
     }
     
-    // Role getters (override base)
+   
     function liquidityManager() public view override returns (address) {
         return _liquidityManager;
     }
@@ -111,84 +123,54 @@ contract UnifiedConcreteSeniorVault is UnifiedSeniorVault {
         return _contractUpdater;
     }
     
-    // Role setters
-    function setLiquidityManager(address liquidityManager_) external onlyAdmin {
-        if (liquidityManager_ == address(0)) revert ZeroAddress();
-        _liquidityManager = liquidityManager_;
-    }
-    
-    function setPriceFeedManager(address priceFeedManager_) external onlyAdmin {
-        if (priceFeedManager_ == address(0)) revert ZeroAddress();
-        _priceFeedManager = priceFeedManager_;
-    }
-    
-    function setContractUpdater(address contractUpdater_) external onlyAdmin {
-        if (contractUpdater_ == address(0)) revert ZeroAddress();
-        _contractUpdater = contractUpdater_;
-    }
-    
-    // ============================================
-    // V3 Initialization
-    // ============================================
-    
     /**
-     * @notice Initialize V3 - Initialize reentrancy guard
-     * @dev Sets reentrancy guard status to _NOT_ENTERED
-     * @dev SECURITY: Protected by onlyAdmin to prevent unauthorized reinitialization
+     * @notice Set role address (consolidated setter to reduce contract size)
+     * @dev Replaces setLiquidityManager, setPriceFeedManager, setContractUpdater
+     * @param role The role type to set
+     * @param account The address to assign the role to
      */
+    function setRole(RoleType role, address account) external onlyAdmin {
+        if (account == address(0)) revert ZeroAddress();
+        
+        if (role == RoleType.LIQUIDITY_MANAGER) {
+            _liquidityManager = account;
+        } else if (role == RoleType.PRICE_FEED_MANAGER) {
+            _priceFeedManager = account;
+        } else if (role == RoleType.CONTRACT_UPDATER) {
+            _contractUpdater = account;
+        }
+    }
+    
+ 
     function initializeV3() external reinitializer(3) onlyAdmin {
-        // Initialize reentrancy guard
-        _status = 1; // _NOT_ENTERED
+        
+        _status = 1; 
     }
     
-    // ============================================
-    // Reentrancy Guard Implementation (Required by UnifiedSeniorVault)
-    // ============================================
-    
-    /**
-     * @notice Get reentrancy guard status
-     * @dev Implements virtual function from UnifiedSeniorVault
-     */
+
     function _getReentrancyStatus() internal view override returns (uint256) {
         return _status;
     }
-    
-    /**
-     * @notice Set reentrancy guard status
-     * @dev Implements virtual function from UnifiedSeniorVault
-     */
+   
     function _setReentrancyStatus(uint256 status) internal override {
         _status = status;
     }
     
-    // ============================================
-    // Asset Transfer Implementation
-    // ============================================
-    
-    /**
-     * @notice Transfer LP tokens to Junior vault
-     * @dev Reference: Three-Zone System - Profit Spillover (80% to Junior)
-     * @param amountUSD Amount in USD to transfer
-     * @param lpPrice Current LP token price in USD (18 decimals)
-     */
+ 
     function _transferToJunior(uint256 amountUSD, uint256 lpPrice) internal override {
-        // Allow graceful exit for zero transfers
+       
         if (amountUSD == 0) return;
-        // Critical: LP price must be valid
-        require(lpPrice > 0, "Invalid LP price");
-        require(address(kodiakHook) != address(0), "Hook not configured");
         
-        // LP DECIMALS FIX: Get LP token and its decimals
+        if (lpPrice == 0) revert InvalidLPPrice();
+        if (address(kodiakHook) == address(0)) revert KodiakHookNotSet();
+      
         address lpToken = address(kodiakHook.island());
         uint8 lpDecimals = IERC20Metadata(lpToken).decimals();
         
-        // SECURITY FIX: Use Math.mulDiv() to avoid divide-before-multiply precision loss
-        // Calculate LP amount from USD amount (accounting for LP decimals)
-        // lpPrice is in 18 decimals (USD per LP token)
-        // We need to convert to LP token's actual decimals
+      
         uint256 lpAmount = Math.mulDiv(amountUSD, 10 ** lpDecimals, lpPrice);
         
-        // Check Senior Hook's LP token balance
+        
         uint256 lpBalance = kodiakHook.getIslandLPBalance();
         uint256 actualLPAmount = lpAmount > lpBalance ? lpBalance : lpAmount;
         
@@ -217,8 +199,8 @@ contract UnifiedConcreteSeniorVault is UnifiedSeniorVault {
         // Allow graceful exit for zero transfers
         if (amountUSD == 0) return;
         // Critical: LP price must be valid
-        require(lpPrice > 0, "Invalid LP price");
-        require(address(kodiakHook) != address(0), "Hook not configured");
+        if (lpPrice == 0) revert InvalidLPPrice();
+        if (address(kodiakHook) == address(0)) revert KodiakHookNotSet();
         
         // LP DECIMALS FIX: Get LP token and its decimals
         address lpToken = address(kodiakHook.island());
@@ -301,5 +283,82 @@ contract UnifiedConcreteSeniorVault is UnifiedSeniorVault {
     
     /// @dev Event for tracking backstop shortfalls
     event BackstopShortfall(address indexed vault, uint256 requested, uint256 received);
+    
+    /// @dev Event for reward vault changes
+    event RewardVaultSet(address indexed oldVault, address indexed newVault);
+    event StakedIntoRewardVault(uint256 amount);
+    event WithdrawnFromRewardVault(uint256 amount);
+    event BGTClaimed(address indexed recipient, uint256 amount);
+    
+    // ============================================
+    // Reward Vault Management
+    // ============================================
+    
+    /**
+     * @notice Get the current reward vault address
+     * @return rewardVault The reward vault contract
+     */
+    function rewardVault() external view returns (IRewardVault) {
+        return _rewardVault;
+    }
+    
+    /**
+     * @notice Set the reward vault address
+     * @dev Only admin can set the reward vault
+     * @param rewardVault_ Address of the new reward vault
+     */
+    function setRewardVault(address rewardVault_) external onlyAdmin {
+        if (rewardVault_ == address(0)) revert ZeroAddress();
+        address oldVault = address(_rewardVault);
+        _rewardVault = IRewardVault(rewardVault_);
+        emit RewardVaultSet(oldVault, rewardVault_);
+    }
+
+    
+
+    /**
+     * @notice Execute reward vault actions (stake, withdraw, or claim BGT)
+     * @dev Consolidated function to reduce bytecode size
+     * @param action The action to perform (STAKE, WITHDRAW, or CLAIM_BGT)
+     * @param amount Amount for stake/withdraw (ignored for CLAIM_BGT)
+     */
+    function executeRewardVaultActions(Action action, uint256 amount) external onlyAdmin nonReentrant {
+        // Common check: reward vault must be set
+        if (address(_rewardVault) == address(0)) revert RewardVaultNotSet();
+        
+        if (action == Action.STAKE) {
+            if (amount == 0) revert InvalidAmount();
+            if (address(kodiakHook) == address(0)) revert KodiakHookNotSet();
+            
+            address lpToken = address(kodiakHook.island());
+            kodiakHook.transferIslandLP(address(this), amount);
+            IERC20(lpToken).approve(address(_rewardVault), amount);
+            _rewardVault.delegateStake(admin(), amount);
+            
+            emit StakedIntoRewardVault(amount);
+        } else if (action == Action.WITHDRAW) {
+            if (amount == 0) revert InvalidAmount();
+            if (address(kodiakHook) == address(0)) revert KodiakHookNotSet();
+            
+            _rewardVault.delegateWithdraw(admin(), amount);
+            IERC20(address(kodiakHook.island())).transfer(address(kodiakHook), amount);
+            
+            emit WithdrawnFromRewardVault(amount);
+        }  else {
+            revert InvalidAction();
+        }
+    }
 }
+    
+
+
+
+
+
+    
+  
+
+
+
+
 

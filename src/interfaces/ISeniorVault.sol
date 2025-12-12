@@ -116,18 +116,18 @@ interface ISeniorVault is IVault {
      */
     function rebase(uint256 lpPrice) external;
     
-    /**
-     * @notice Simulate rebase without executing
-     * @dev Useful for off-chain analysis
-     * @return selection APY selection result
-     * @return zone Operating zone after rebase
-     * @return newBackingRatio Backing ratio after rebase
-     */
-    function simulateRebase() external view returns (
-        RebaseLib.APYSelection memory selection,
-        SpilloverLib.Zone zone,
-        uint256 newBackingRatio
-    );
+    // /**
+    //  * @notice Simulate rebase without executing
+    //  * @dev Useful for off-chain analysis
+    //  * @return selection APY selection result
+    //  * @return zone Operating zone after rebase
+    //  * @return newBackingRatio Backing ratio after rebase
+    //  */
+    // function simulateRebase() external view returns (
+    //     RebaseLib.APYSelection memory selection,
+    //     SpilloverLib.Zone zone,
+    //     uint256 newBackingRatio
+    // );
     
     /**
      * @notice Initiate withdrawal cooldown
@@ -144,13 +144,13 @@ interface ISeniorVault is IVault {
      */
     function cooldownStart(address user) external view returns (uint256 cooldownStart);
     
-    /**
-     * @notice Check if user can withdraw without penalty
-     * @dev Reference: Fee Calculations - Early Withdrawal Penalty
-     * @param user User address
-     * @return canWithdraw True if cooldown period has passed
-     */
-    function canWithdrawWithoutPenalty(address user) external view returns (bool canWithdraw);
+    // /**
+    //  * @notice Check if user can withdraw without penalty
+    //  * @dev Reference: Fee Calculations - Early Withdrawal Penalty
+    //  * @param user User address
+    //  * @return canWithdraw True if cooldown period has passed
+    //  */
+    // function canWithdrawWithoutPenalty(address user) external view returns (bool canWithdraw);
     
     /**
      * @notice Calculate withdrawal penalty for user
@@ -199,12 +199,12 @@ interface ISeniorVault is IVault {
      */
     function isDepositCapReached() external view returns (bool isReached);
     
-    /**
-     * @notice Get current deposit cap
-     * @dev Reference: Constraints & Invariants (Invariant 4)
-     * @return cap Maximum allowed supply based on reserve
-     */
-    function depositCap() external view returns (uint256 cap);
+    // /**
+    //  * @notice Get current deposit cap
+    //  * @dev Reference: Constraints & Invariants (Invariant 4)
+    //  * @return cap Maximum allowed supply based on reserve
+    //  */
+    // function depositCap() external view returns (uint256 cap);
 }
 
 
