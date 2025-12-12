@@ -16,4 +16,8 @@ fs_permissions = [
     { access = "read-write", path = "./simulation_output" },
 ]
 
+# Etherscan verification config
+[etherscan]
+berachain = { key = "${ETHERSCAN_API_KEY}", url = "https://api.berascan.io/api", chain = 80094 }
+
 # See more config options https://github.com/foundry-rs/foundry/blob/master/crates/config/README.md#all-options
