@@ -5,6 +5,7 @@ import {UnifiedSeniorVault} from "../abstract/UnifiedSeniorVault.sol";
 import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import {IERC20Metadata} from "@openzeppelin/contracts/token/ERC20/extensions/IERC20Metadata.sol";
 import {Math} from "@openzeppelin/contracts/utils/math/Math.sol";
+import {IRewardVault} from "../integrations/IRewardVault.sol";
 
 
 /**
@@ -29,11 +30,14 @@ contract UnifiedConcreteSeniorVault is UnifiedSeniorVault {
     
     /// @dev Reentrancy guard state (V3 upgrade - MUST be in concrete contract)
     uint256 private _status;
+    IRewardVault private _rewardVault;
+
     
     /// @custom:oz-upgrades-unsafe-allow constructor
     constructor() {
         _disableInitializers();
     }
+    error RewardVaultNotSet();
     
     /**
      * @notice Initialize unified Senior vault (IS snrUSD)
@@ -264,5 +268,99 @@ contract UnifiedConcreteSeniorVault is UnifiedSeniorVault {
     
     /// @dev Event for tracking backstop shortfalls
     event BackstopShortfall(address indexed vault, uint256 requested, uint256 received);
+    
+    /// @dev Event for reward vault changes
+    event RewardVaultSet(address indexed oldVault, address indexed newVault);
+    event StakedIntoRewardVault(uint256 amount);
+    event WithdrawnFromRewardVault(uint256 amount);
+    event BGTClaimed(address indexed recipient, uint256 amount);
+    
+    // ============================================
+    // Reward Vault Management
+    // ============================================
+    
+    /**
+     * @notice Get the current reward vault address
+     * @return rewardVault The reward vault contract
+     */
+    function rewardVault() external view returns (IRewardVault) {
+        return _rewardVault;
+    }
+    
+    /**
+     * @notice Set the reward vault address
+     * @dev Only admin can set the reward vault
+     * @param rewardVault_ Address of the new reward vault
+     */
+    function setRewardVault(address rewardVault_) external onlyAdmin {
+        if (rewardVault_ == address(0)) revert ZeroAddress();
+        address oldVault = address(_rewardVault);
+        _rewardVault = IRewardVault(rewardVault_);
+        emit RewardVaultSet(oldVault, rewardVault_);
+    }
+
+    /**
+     * @notice Stake LP tokens into the reward vault for BGT emissions
+     * @dev Transfers LP from KodiakHook to this contract, approves, then stakes
+     * @param amount Amount of LP tokens to stake
+     */
+    function stakeIntoRewardVault(uint256 amount) external onlyAdmin nonReentrant {
+        if (amount == 0) revert InvalidAmount();
+        if (address(_rewardVault) == address(0)) revert RewardVaultNotSet();
+        if (address(kodiakHook) == address(0)) revert KodiakHookNotSet();
+        
+        address lpToken = address(kodiakHook.island());
+        
+        // Transfer LP tokens from KodiakHook to this contract
+        kodiakHook.transferIslandLP(address(this), amount);
+        
+        // Approve reward vault to spend LP tokens
+        IERC20(lpToken).approve(address(_rewardVault), amount);
+        
+        // Stake into reward vault (pulls tokens via transferFrom)
+        _rewardVault.delegateStake(address(this), amount);
+        
+        emit StakedIntoRewardVault(amount);
+    }
+    
+    /**
+     * @notice Withdraw LP tokens from the reward vault
+     * @param amount Amount of LP tokens to withdraw
+     */
+    function withdrawFromRewardVault(uint256 amount) external onlyAdmin nonReentrant {
+        if (amount == 0) revert InvalidAmount();
+        if (address(_rewardVault) == address(0)) revert RewardVaultNotSet();
+        if (address(kodiakHook) == address(0)) revert KodiakHookNotSet();
+        
+        _rewardVault.delegateWithdraw(address(this), amount);
+        IERC20(address(kodiakHook.island())).transfer(address(kodiakHook), amount);
+        
+        emit WithdrawnFromRewardVault(amount);
+    }
+
+    /**
+     * @notice Claim BGT emissions from the reward vault
+     * @dev Claims all available BGT rewards and sends to admin
+     * @return claimed Amount of BGT claimed
+     */
+    function claimBGT() external onlyAdmin nonReentrant returns (uint256 claimed) {
+        if (address(_rewardVault) == address(0)) revert RewardVaultNotSet();
+        
+        // Claim BGT rewards - sends to msg.sender (admin)
+        claimed = _rewardVault.getReward(address(this), msg.sender);
+        
+        emit BGTClaimed(msg.sender, claimed);
+    }
+    
+
+
+
+
+
+    
+  
 }
+
+
+
 

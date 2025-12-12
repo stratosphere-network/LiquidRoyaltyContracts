@@ -25,6 +25,7 @@ contract ConcreteReserveVault is ReserveVault {
     
     /// @dev Reentrancy guard state (V3 upgrade - MUST be in concrete contract)
     uint256 private _status;
+   
     
     /// @custom:oz-upgrades-unsafe-allow constructor
     constructor() {
@@ -280,7 +281,13 @@ contract ConcreteReserveVault is ReserveVault {
     // ============================================
     // Events (additional to parent interface)
     // ============================================
-    
+    /// @dev Error for reward vault not set
+    error RewardVaultNotSet();
+  
     event WithdrawalPenaltyCharged(address indexed user, uint256 penalty);
+
+   
+    
+
 }
 
