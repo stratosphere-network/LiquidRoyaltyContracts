@@ -723,7 +723,7 @@ abstract contract UnifiedSeniorVault is ISeniorVault, IERC20, AdminControlled, P
             if (allow != type(uint256).max) _approve(owner, msg.sender, allow - amount);
         }
         (uint256 penalty, uint256 afterPenalty) = calculateWithdrawalPenalty(owner, amount);
-        uint256 fee = (afterPenalty * MathLib.WITHDRAWAL_FEE) / MathLib.PRECISION;
+        uint256 fee = (afterPenalty * MathLib.SENIOR_WITHDRAWAL_FEE) / MathLib.PRECISION;
         uint256 net = afterPenalty - fee;
         
         _burn(owner, amount);
