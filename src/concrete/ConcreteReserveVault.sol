@@ -6,6 +6,7 @@ import {MathLib} from "../libraries/MathLib.sol";
 import {FeeLib} from "../libraries/FeeLib.sol";
 import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import {SafeERC20} from "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
+import {IRewardVault} from "../integrations/IRewardVault.sol";
 
 /**
  * @title ConcreteReserveVault
@@ -89,201 +90,53 @@ contract ConcreteReserveVault is ReserveVault {
         _contractUpdater = contractUpdater_;
     }
     
-    function liquidityManager() public view override returns (address) {
-        return _liquidityManager;
-    }
+    function liquidityManager() public view override returns (address) { return _liquidityManager; }
+    function priceFeedManager() public view override returns (address) { return _priceFeedManager; }
+    function contractUpdater() public view override returns (address) { return _contractUpdater; }
     
-    function priceFeedManager() public view override returns (address) {
-        return _priceFeedManager;
-    }
-    
-    function contractUpdater() public view override returns (address) {
-        return _contractUpdater;
-    }
-    
-    function setLiquidityManager(address liquidityManager_) external onlyAdmin {
-        if (liquidityManager_ == address(0)) revert ZeroAddress();
-        _liquidityManager = liquidityManager_;
-    }
-    
-    function setPriceFeedManager(address priceFeedManager_) external onlyAdmin {
-        if (priceFeedManager_ == address(0)) revert ZeroAddress();
-        _priceFeedManager = priceFeedManager_;
-    }
-    
-    function setContractUpdater(address contractUpdater_) external onlyAdmin {
-        if (contractUpdater_ == address(0)) revert ZeroAddress();
-        _contractUpdater = contractUpdater_;
-    }
+    function setLiquidityManager(address m) external onlyAdmin { if (m == address(0)) revert ZeroAddress(); _liquidityManager = m; }
+    function setPriceFeedManager(address m) external onlyAdmin { if (m == address(0)) revert ZeroAddress(); _priceFeedManager = m; }
+    function setContractUpdater(address m) external onlyAdmin { if (m == address(0)) revert ZeroAddress(); _contractUpdater = m; }
     
     // ============================================
     // V3 Initialization
     // ============================================
     
-    /**
-     * @notice Initialize V3 - Initialize reentrancy guard
-     * @dev Cooldown mapping defaults to 0 for all users
-     * @dev SECURITY: Protected by onlyAdmin to prevent unauthorized reinitialization
-     */
-    function initializeV3() external reinitializer(3) onlyAdmin {
-        // Initialize reentrancy guard
-        _status = 1; // _NOT_ENTERED
-    }
+    function initializeV3() external reinitializer(3) onlyAdmin { _status = 1; }
     
-    // ============================================
-    // Cooldown Mechanism (V3 - moved from abstract for storage safety)
-    // ============================================
+    // Cooldown mechanism
+    function initiateCooldown() external { _cooldownStart[msg.sender] = block.timestamp; emit CooldownInitiated(msg.sender, block.timestamp); }
+    function cooldownStart(address user) external view returns (uint256) { return _cooldownStart[user]; }
+    function canWithdrawWithoutPenalty(address user) external view returns (bool) { return _cooldownStart[user] > 0 && (block.timestamp - _cooldownStart[user]) >= MathLib.COOLDOWN_PERIOD; }
+    function calculateWithdrawalPenalty(address user, uint256 amount) external view returns (uint256 penalty, uint256 netAmount) { return FeeLib.calculateWithdrawalPenalty(amount, _cooldownStart[user], block.timestamp); }
     
-    /**
-     * @notice Initiate withdrawal cooldown
-     * @dev After 7 days, user can withdraw without 20% penalty
-     */
-    function initiateCooldown() external {
-        _cooldownStart[msg.sender] = block.timestamp;
-        emit CooldownInitiated(msg.sender, block.timestamp);
-    }
-    
-    /**
-     * @notice Get user's cooldown start timestamp
-     * @param user User address
-     * @return Cooldown start timestamp (0 if not initiated)
-     */
-    function cooldownStart(address user) external view returns (uint256) {
-        return _cooldownStart[user];
-    }
-    
-    /**
-     * @notice Check if user can withdraw without penalty
-     * @param user User address
-     * @return True if cooldown period has passed
-     */
-    function canWithdrawWithoutPenalty(address user) external view returns (bool) {
-        uint256 cooldownTime = _cooldownStart[user];
-        if (cooldownTime == 0) return false;
-        return (block.timestamp - cooldownTime) >= MathLib.COOLDOWN_PERIOD;
-    }
-    
-    /**
-     * @notice Calculate withdrawal penalty for user
-     * @param user User address
-     * @param amount Withdrawal amount
-     * @return penalty Penalty amount
-     * @return netAmount Amount after penalty
-     */
-    function calculateWithdrawalPenalty(
-        address user,
-        uint256 amount
-    ) external view returns (uint256 penalty, uint256 netAmount) {
-        uint256 cooldownTime = _cooldownStart[user];
-        return FeeLib.calculateWithdrawalPenalty(amount, cooldownTime, block.timestamp);
-    }
-    
-    /**
-     * @notice Override withdraw to add cooldown penalty
-     * @dev Applies 20% penalty if cooldown not met, then 1% withdrawal fee
-     * @dev SECURITY: Follows Checks-Effects-Interactions (CEI) pattern strictly
-     */
-    function _withdraw(
-        address caller,
-        address receiver,
-        address owner,
-        uint256 assets,
-        uint256 shares
-    ) internal override nonReentrant {
-        // ============================================
-        // 1. CHECKS - All validations first
-        // ============================================
-        if (caller != owner) {
-            _spendAllowance(owner, caller, shares);
-        }
+    /// @notice Override withdraw to add cooldown penalty (CEI pattern)
+    function _withdraw(address caller, address receiver, address owner, uint256 assets, uint256 shares) internal override nonReentrant {
+        if (caller != owner) _spendAllowance(owner, caller, shares);
         
-        // Calculate penalties and fees
-        uint256 cooldownTime = _cooldownStart[owner];
-        (uint256 earlyPenalty, uint256 amountAfterEarlyPenalty) = 
-            FeeLib.calculateWithdrawalPenalty(assets, cooldownTime, block.timestamp);
+        (uint256 earlyPenalty, uint256 afterPenalty) = FeeLib.calculateWithdrawalPenalty(assets, _cooldownStart[owner], block.timestamp);
+        uint256 fee = (afterPenalty * MathLib.WITHDRAWAL_FEE) / MathLib.PRECISION;
+        uint256 net = afterPenalty - fee;
         
-        uint256 withdrawalFee = (amountAfterEarlyPenalty * MathLib.WITHDRAWAL_FEE) / MathLib.PRECISION;
-        uint256 netAssets = amountAfterEarlyPenalty - withdrawalFee;
-        
-        // ============================================
-        // 2. EFFECTS - All state changes BEFORE external calls
-        // ============================================
-        
-        // Burn shares first
         _burn(owner, shares);
+        _vaultValue -= afterPenalty;
+        if (_cooldownStart[owner] != 0) _cooldownStart[owner] = 0;
         
-        // Update vault value
-        _vaultValue -= amountAfterEarlyPenalty;
-        
-        // Reset cooldown
-        if (_cooldownStart[owner] != 0) {
-            _cooldownStart[owner] = 0;
-        }
-        
-        // ============================================
-        // 3. INTERACTIONS - External calls LAST
-        // ============================================
-        
-        // Ensure sufficient liquidity (may call kodiakHook.liquidateLPForAmount)
-        _ensureLiquidityAvailable(amountAfterEarlyPenalty);
-        
-        // Transfer net assets to receiver
-        _stablecoin.safeTransfer(receiver, netAssets);
-        
-        // Transfer withdrawal fee to treasury
-        if (_treasury != address(0) && withdrawalFee > 0) {
-            _stablecoin.safeTransfer(_treasury, withdrawalFee);
-            emit WithdrawalFeeCharged(owner, withdrawalFee, netAssets);
-        }
-        
-        // Emit events
-        if (earlyPenalty > 0) {
-            emit WithdrawalPenaltyCharged(owner, earlyPenalty);
-        }
-        
-        emit Withdraw(caller, receiver, owner, amountAfterEarlyPenalty, shares);
+        _ensureLiquidityAvailable(afterPenalty);
+        _stablecoin.safeTransfer(receiver, net);
+        if (_treasury != address(0) && fee > 0) { _stablecoin.safeTransfer(_treasury, fee); emit WithdrawalFeeCharged(owner, fee, net); }
+        if (earlyPenalty > 0) emit WithdrawalPenaltyCharged(owner, earlyPenalty);
+        emit Withdraw(caller, receiver, owner, afterPenalty, shares);
     }
     
-    /**
-     * @notice Override ERC20 _update to reset cooldown on token transfers
-     * @dev SECURITY FIX: Prevents cooldown bypass by transferring tokens between addresses
-     */
-    function _update(address from, address to, uint256 value) internal override {
-        // Call parent implementation first
-        super._update(from, to, value);
-        
-        // SECURITY FIX: Reset cooldown when receiving tokens (transfer or mint)
-        if (to != address(0) && _cooldownStart[to] != 0) {
-            _cooldownStart[to] = 0;
-        }
-    }
+    function _update(address from, address to, uint256 value) internal override { super._update(from, to, value); if (to != address(0) && _cooldownStart[to] != 0) _cooldownStart[to] = 0; }
     
-    // ============================================
-    // Reentrancy Guard Implementation (Required by BaseVault)
-    // ============================================
+    // Reentrancy guard
+    function _getReentrancyStatus() internal view override returns (uint256) { return _status; }
+    function _setReentrancyStatus(uint256 status) internal override { _status = status; }
+    function _getRewardVault() internal pure override returns (IRewardVault) { return IRewardVault(address(0)); }
     
-    /**
-     * @notice Get reentrancy guard status
-     * @dev Implements virtual function from BaseVault
-     */
-    function _getReentrancyStatus() internal view override returns (uint256) {
-        return _status;
-    }
-    
-    /**
-     * @notice Set reentrancy guard status
-     * @dev Implements virtual function from BaseVault
-     */
-    function _setReentrancyStatus(uint256 status) internal override {
-        _status = status;
-    }
-    
-    // ============================================
-    // Events (additional to parent interface)
-    // ============================================
-    /// @dev Error for reward vault not set
     error RewardVaultNotSet();
-  
     event WithdrawalPenaltyCharged(address indexed user, uint256 penalty);
 
    

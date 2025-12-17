@@ -9,6 +9,7 @@ import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import {IERC20Metadata} from "@openzeppelin/contracts/token/ERC20/extensions/IERC20Metadata.sol";
 import {SafeERC20} from "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
 import {Math} from "@openzeppelin/contracts/utils/math/Math.sol";
+import {IRewardVault} from "../integrations/IRewardVault.sol";
 
 /**
  * @title JuniorVault
@@ -31,64 +32,13 @@ abstract contract JuniorVault is BaseVault, IJuniorVault {
     uint256 internal _totalBackstopProvided;     // Cumulative backstop
     uint256 internal _lastMonthValue;            // For return calculation
     
-    /// @dev Pending LP Deposit System
-    struct PendingLPDeposit {
-        address depositor;
-        address lpToken;
-        uint256 amount;
-        uint256 timestamp;
-        uint256 expiresAt;
-        DepositStatus status;
-    }
-    
-    enum DepositStatus {
-        PENDING,
-        APPROVED,
-        REJECTED,
-        EXPIRED,
-        CANCELLED
-    }
-    
+    /// @dev DEPRECATED: LP deposit storage (kept for upgrade compatibility)
+    struct PendingLPDeposit { address depositor; address lpToken; uint256 amount; uint256 timestamp; uint256 expiresAt; uint8 status; }
+    enum DepositStatus { PENDING, APPROVED, REJECTED, EXPIRED, CANCELLED } // DEPRECATED
     uint256 internal _nextDepositId;
     mapping(uint256 => PendingLPDeposit) internal _pendingDeposits;
     mapping(address => uint256[]) internal _userDepositIds;
-    
     uint256 internal constant DEPOSIT_EXPIRY_TIME = 48 hours;
-    
-    /// @dev Pending LP Deposit Events
-    event PendingLPDepositCreated(
-        uint256 indexed depositId,
-        address indexed depositor,
-        address indexed lpToken,
-        uint256 amount,
-        uint256 expiresAt
-    );
-    event PendingLPDepositApproved(
-        uint256 indexed depositId,
-        address indexed depositor,
-        uint256 lpPrice,
-        uint256 sharesMinted
-    );
-    event PendingLPDepositRejected(
-        uint256 indexed depositId,
-        address indexed depositor,
-        string reason
-    );
-    event PendingLPDepositCancelled(
-        uint256 indexed depositId,
-        address indexed depositor
-    );
-    event PendingLPDepositExpired(
-        uint256 indexed depositId,
-        address indexed depositor
-    );
-    
-    /// @dev Pending LP Deposit Errors
-    error DepositNotFound();
-    error DepositNotPending();
-    error DepositExpired();
-    error NotDepositor();
-    error DepositNotExpired();
     
     /**
      * @notice Initialize Junior vault (replaces constructor for upgradeable)
@@ -113,7 +63,7 @@ abstract contract JuniorVault is BaseVault, IJuniorVault {
     // View Functions
     // ============================================
     
-    function seniorVault() public view virtual override(BaseVault, IVault) returns (address) {
+    function seniorVault() public view virtual override returns (address) {
         return _seniorVault;
     }
     
@@ -199,11 +149,28 @@ abstract contract JuniorVault is BaseVault, IJuniorVault {
         
         // SECURITY FIX: Use Math.mulDiv() to avoid divide-before-multiply precision loss
         // Calculate LP amount needed (accounting for LP decimals)
-        // lpPrice is in 18 decimals (USD per LP token)
         uint256 lpAmountNeeded = Math.mulDiv(amountUSD, 10 ** lpDecimals, lpPrice);
         
         // Check Junior Hook's actual LP token balance
         uint256 lpBalance = kodiakHook.getIslandLPBalance();
+        
+        // If hook doesn't have enough LP, try to withdraw from reward vault
+        IRewardVault rewardVault = _getRewardVault();
+        if (lpBalance < lpAmountNeeded && address(rewardVault) != address(0)) {
+            uint256 lpDeficit = lpAmountNeeded - lpBalance;
+            // Check staked balance before withdrawing
+            uint256 stakedBalance = rewardVault.getTotalDelegateStaked(admin());
+            uint256 lpToWithdraw = lpDeficit > stakedBalance ? stakedBalance : lpDeficit;
+            
+            if (lpToWithdraw > 0) {
+                // Withdraw LP from reward vault to this contract
+                rewardVault.delegateWithdraw(admin(), lpToWithdraw);
+                // Transfer LP tokens to kodiakHook
+                IERC20(lpToken).transfer(address(kodiakHook), lpToWithdraw);
+                // Update lpBalance after withdrawal
+                lpBalance = kodiakHook.getIslandLPBalance();
+            }
+        }
         
         // Provide up to available LP tokens
         uint256 actualLPAmount = lpAmountNeeded > lpBalance ? lpBalance : lpAmountNeeded;
@@ -228,181 +195,6 @@ abstract contract JuniorVault is BaseVault, IJuniorVault {
         return actualAmount;
     }
     
-    // ============================================
-    // Pending LP Deposit System (Junior Only)
-    // ============================================
-    
-    /**
-     * @notice Deposit LP tokens (pending admin approval)
-     * @dev LP tokens are transferred to vault's hook immediately
-     * @param lpToken Address of LP token to deposit
-     * @param amount Amount of LP tokens
-     * @return depositId ID of pending deposit
-     */
-    function depositLP(address lpToken, uint256 amount) external nonReentrant returns (uint256 depositId) {
-        if (lpToken == address(0)) revert ZeroAddress();
-        if (amount == 0) revert InvalidAmount();
-        if (address(kodiakHook) == address(0)) revert KodiakHookNotSet();
-      
-        if (lpToken != address(kodiakHook.island())) revert InvalidLPToken();
-        
-        // Create pending deposit (Effects - state updates BEFORE external call)
-        depositId = _nextDepositId++;
-        uint256 expiresAt = block.timestamp + DEPOSIT_EXPIRY_TIME;
-        
-        _pendingDeposits[depositId] = PendingLPDeposit({
-            depositor: msg.sender,
-            lpToken: lpToken,
-            amount: amount,
-            timestamp: block.timestamp,
-            expiresAt: expiresAt,
-            status: DepositStatus.PENDING
-        });
-        
-        _userDepositIds[msg.sender].push(depositId);
-        
-        emit PendingLPDepositCreated(depositId, msg.sender, lpToken, amount, expiresAt);
-        
-        // Transfer LP from user to hook (Interaction - external call LAST per CEI pattern)
-        IERC20(lpToken).safeTransferFrom(msg.sender, address(kodiakHook), amount);
-    }
-    
-    /**
-     * @notice Approve pending LP deposit and mint shares
-     * @dev Only admin can approve. Mints shares based on LP price.
-     * @param depositId ID of pending deposit
-     * @param lpPrice Price of LP token in USD (18 decimals)
-     */
-    function approveLPDeposit(uint256 depositId, uint256 lpPrice) external onlyLiquidityManager nonReentrant {
-        PendingLPDeposit storage pendingDeposit = _pendingDeposits[depositId];
-        
-        if (pendingDeposit.depositor == address(0)) revert DepositNotFound();
-        if (pendingDeposit.status != DepositStatus.PENDING) revert DepositNotPending();
-        if (block.timestamp > pendingDeposit.expiresAt) revert DepositExpired();
-        if (lpPrice == 0) revert InvalidLPPrice();
-        
-        // Calculate value and shares (Q5 FIX: account for LP token decimals)
-        uint8 lpDecimals = IERC20Metadata(pendingDeposit.lpToken).decimals();
-        uint256 normalizedAmount = _normalizeToDecimals(pendingDeposit.amount, lpDecimals, 18);
-        uint256 valueAdded = (normalizedAmount * lpPrice) / 1e18;
-        
-        // N1-2 FIX: Use ERC4626 standard preview (calculates shares based on current state)
-        uint256 sharesToMint = previewDeposit(valueAdded);
-        if (sharesToMint == 0) revert InvalidAmount(); // Safety: prevent 0-share minting
-        
-        // Update status (Effects - state updates BEFORE external call)
-        pendingDeposit.status = DepositStatus.APPROVED;
-        
-        emit PendingLPDepositApproved(depositId, pendingDeposit.depositor, lpPrice, sharesToMint);
-        
-        // N1-2 FIX: Mint shares BEFORE updating vault value (matches standard ERC4626 flow)
-        _mint(pendingDeposit.depositor, sharesToMint);
-        
-        // Update vault value AFTER minting (consistent with deposit() override pattern)
-        _vaultValue += valueAdded;
-        _lastUpdateTime = block.timestamp;
-    }
-    
-    /**
-     * @notice Reject pending LP deposit and return LP to depositor
-     * @dev Only admin can reject
-     * @param depositId ID of pending deposit
-     * @param reason Reason for rejection
-     */
-    function rejectLPDeposit(uint256 depositId, string calldata reason) external onlyLiquidityManager nonReentrant {
-        PendingLPDeposit storage pendingDeposit = _pendingDeposits[depositId];
-        
-        if (pendingDeposit.depositor == address(0)) revert DepositNotFound();
-        if (pendingDeposit.status != DepositStatus.PENDING) revert DepositNotPending();
-        
-        // Update status (Effects - state update BEFORE external call)
-        pendingDeposit.status = DepositStatus.REJECTED;
-        
-        emit PendingLPDepositRejected(depositId, pendingDeposit.depositor, reason);
-        
-        // Transfer LP back from hook to depositor (Interaction - external call LAST per CEI pattern)
-        kodiakHook.transferIslandLP(pendingDeposit.depositor, pendingDeposit.amount);
-    }
-    
-    /**
-     * @notice Cancel pending LP deposit (depositor only)
-     * @dev Depositor can cancel anytime before approval
-     * @param depositId ID of pending deposit
-     */
-    function cancelPendingDeposit(uint256 depositId) external nonReentrant {
-        PendingLPDeposit storage pendingDeposit = _pendingDeposits[depositId];
-        
-        if (pendingDeposit.depositor == address(0)) revert DepositNotFound();
-        if (pendingDeposit.depositor != msg.sender) revert NotDepositor();
-        if (pendingDeposit.status != DepositStatus.PENDING) revert DepositNotPending();
-        
-        // Update status (Effects - state update BEFORE external call)
-        pendingDeposit.status = DepositStatus.CANCELLED;
-        
-        emit PendingLPDepositCancelled(depositId, pendingDeposit.depositor);
-        
-        // Transfer LP back from hook to depositor (Interaction - external call LAST per CEI pattern)
-        kodiakHook.transferIslandLP(pendingDeposit.depositor, pendingDeposit.amount);
-    }
-    
-    /**
-     * @notice Claim expired deposit (anyone can call)
-     * @dev Returns LP to original depositor after expiry
-     * @param depositId ID of pending deposit
-     */
-    function claimExpiredDeposit(uint256 depositId) external nonReentrant {
-        PendingLPDeposit storage pendingDeposit = _pendingDeposits[depositId];
-        
-        if (pendingDeposit.depositor == address(0)) revert DepositNotFound();
-        if (pendingDeposit.status != DepositStatus.PENDING) revert DepositNotPending();
-        if (block.timestamp <= pendingDeposit.expiresAt) revert DepositNotExpired();
-        
-        // Update status (Effects - state update BEFORE external call)
-        pendingDeposit.status = DepositStatus.EXPIRED;
-        
-        emit PendingLPDepositExpired(depositId, pendingDeposit.depositor);
-        
-        // Transfer LP back from hook to original depositor (Interaction - external call LAST per CEI pattern)
-        kodiakHook.transferIslandLP(pendingDeposit.depositor, pendingDeposit.amount);
-    }
-    
-    /**
-     * @notice Get pending deposit details
-     * @param depositId ID of pending deposit
-     */
-    function getPendingDeposit(uint256 depositId) external view returns (
-        address depositor,
-        address lpToken,
-        uint256 amount,
-        uint256 timestamp,
-        uint256 expiresAt,
-        DepositStatus status
-    ) {
-        PendingLPDeposit memory pendingDeposit = _pendingDeposits[depositId];
-        return (
-            pendingDeposit.depositor,
-            pendingDeposit.lpToken,
-            pendingDeposit.amount,
-            pendingDeposit.timestamp,
-            pendingDeposit.expiresAt,
-            pendingDeposit.status
-        );
-    }
-    
-    /**
-     * @notice Get all deposit IDs for a user
-     * @param user Address of user
-     */
-    function getUserDepositIds(address user) external view returns (uint256[] memory) {
-        return _userDepositIds[user];
-    }
-    
-    /**
-     * @notice Get next deposit ID
-     */
-    function getNextDepositId() external view returns (uint256) {
-        return _nextDepositId;
-    }
     
     // ============================================
     // Internal Functions

@@ -16,6 +16,8 @@ import {SpilloverLib} from "../libraries/SpilloverLib.sol";
 import {AdminControlled} from "./AdminControlled.sol";
 import {IKodiakVaultHook} from "../integrations/IKodiakVaultHook.sol";
 import {IKodiakIsland} from "../integrations/IKodiakIsland.sol";
+import {IRewardVault} from "../integrations/IRewardVault.sol";
+import {Math} from "@openzeppelin/contracts/utils/math/Math.sol";
 /**
  * @title UnifiedSeniorVault
  * @notice Senior vault that IS the snrUSD rebasing token (unified architecture)
@@ -58,6 +60,9 @@ abstract contract UnifiedSeniorVault is ISeniorVault, IERC20, AdminControlled, P
     /// @dev Virtual functions for reentrancy guard (implemented in concrete contracts)
     function _getReentrancyStatus() internal view virtual returns (uint256);
     function _setReentrancyStatus(uint256 status) internal virtual;
+    
+    /// @dev Virtual function to get reward vault (implemented in concrete contracts)
+    function _getRewardVault() internal view virtual returns (IRewardVault);
     
     /// @dev Struct for LP holdings data
     struct LPHolding {
@@ -112,29 +117,9 @@ abstract contract UnifiedSeniorVault is ISeniorVault, IERC20, AdminControlled, P
     mapping(address => bool) internal _isWhitelistedLP;
     mapping(address => bool) internal _isWhitelistedLPToken;
     
-    /// @dev Pending LP deposits
-    struct PendingLPDeposit {
-        address depositor;
-        address lpToken;
-        uint256 amount;
-        uint256 timestamp;
-        uint256 expiresAt;
-        DepositStatus status;
-    }
-    
-    enum DepositStatus {
-        PENDING,
-        APPROVED,
-        REJECTED,
-        EXPIRED,
-        CANCELLED
-    }
-    
-    /// @dev Admin actions for LP deposits
-    enum LPDepositAction {
-        APPROVE,
-        REJECT
-    }
+    /// @dev DEPRECATED: LP deposit storage (kept for upgrade compatibility)
+    struct PendingLPDeposit { address depositor; address lpToken; uint256 amount; uint256 timestamp; uint256 expiresAt; uint8 status; }
+    enum DepositStatus { PENDING, APPROVED, REJECTED, EXPIRED, CANCELLED } // DEPRECATED
     
     /// @dev Admin actions for whitelist management
     enum WhitelistAction {
@@ -177,32 +162,6 @@ abstract contract UnifiedSeniorVault is ISeniorVault, IERC20, AdminControlled, P
     event VaultSeeded(address indexed lpToken, address indexed seedProvider, uint256 amount, uint256 lpPrice, uint256 valueAdded, uint256 sharesMinted);
     event JuniorReserveUpdated(address indexed juniorVault, address indexed reserveVault);
     event KodiakHookUpdated(address indexed newHook);
-    event PendingLPDepositCreated(
-        uint256 indexed depositId,
-        address indexed depositor,
-        address indexed lpToken,
-        uint256 amount,
-        uint256 expiresAt
-    );
-    event PendingLPDepositApproved(
-        uint256 indexed depositId,
-        address indexed depositor,
-        uint256 lpPrice,
-        uint256 sharesMinted
-    );
-    event PendingLPDepositRejected(
-        uint256 indexed depositId,
-        address indexed depositor,
-        string reason
-    );
-    event PendingLPDepositCancelled(
-        uint256 indexed depositId,
-        address indexed depositor
-    );
-    event PendingLPDepositExpired(
-        uint256 indexed depositId,
-        address indexed depositor
-    );
 
     /// @dev Errors (ZeroAddress inherited from AdminControlled, InsufficientBalance and InvalidAmount from IVault)
     error NotPaused();
@@ -216,11 +175,6 @@ abstract contract UnifiedSeniorVault is ISeniorVault, IERC20, AdminControlled, P
     error KodiakHookNotSet();
     error SlippageTooHigh();
     error InsufficientLiquidity();
-    error DepositNotFound();
-    error DepositNotPending();
-    error DepositExpired();
-    error NotDepositor();
-    error DepositNotExpired();
     error InvalidLPToken();
     error IdleBalanceDeviation();
     error InvalidStablecoinDecimals();
@@ -308,7 +262,7 @@ abstract contract UnifiedSeniorVault is ISeniorVault, IERC20, AdminControlled, P
             
         } else if (action == WhitelistAction.REMOVE_LP) {
             if (!_isWhitelistedLP[target]) revert WhitelistedLPNotFound();
-            _removeWhitelistedLPInternal(target);
+            _removeFromWhitelist(target, false);
             emit WhitelistedLPRemoved(target);
             
         } else if (action == WhitelistAction.ADD_LP_TOKEN) {
@@ -319,256 +273,96 @@ abstract contract UnifiedSeniorVault is ISeniorVault, IERC20, AdminControlled, P
             
         } else if (action == WhitelistAction.REMOVE_LP_TOKEN) {
             if (!_isWhitelistedLPToken[target]) revert WhitelistedLPNotFound();
-            _removeWhitelistedLPTokenInternal(target);
+            _removeFromWhitelist(target, true);
             emit WhitelistedLPTokenRemoved(target);
         }
     }
     
-    /**
-     * @notice Set Kodiak hook and automatically whitelist it
-     * @dev Hook must implement IKodiakVaultHook and vault() must return this vault's address
-     * @param hook Address of Kodiak hook contract
-     */
+    /// @notice Set Kodiak hook and auto-whitelist
     function setKodiakHook(address hook) external onlyAdmin {
-        // Remove old hook from whitelist if exists
-        if (address(kodiakHook) != address(0)) {
-            // Remove from whitelist
-            if (_isWhitelistedLP[address(kodiakHook)]) {
-                _removeWhitelistedLPInternal(address(kodiakHook));
-            }
-        }
-        
-        // Validate new hook
+        if (address(kodiakHook) != address(0) && _isWhitelistedLP[address(kodiakHook)]) _removeFromWhitelist(address(kodiakHook), false);
         if (hook != address(0)) {
             (bool ok, bytes memory data) = hook.staticcall(abi.encodeWithSignature("vault()"));
             if (!(ok && data.length >= 32 && abi.decode(data, (address)) == address(this))) revert WrongVault();
-            
-            // Automatically whitelist the new hook so investInLP() can send funds to it
-            if (!_isWhitelistedLP[hook]) {
-                _whitelistedLPs.push(hook);
-                _isWhitelistedLP[hook] = true;
-                emit WhitelistedLPAdded(hook);
-            }
+            if (!_isWhitelistedLP[hook]) { _whitelistedLPs.push(hook); _isWhitelistedLP[hook] = true; emit WhitelistedLPAdded(hook); }
         }
-        
         kodiakHook = IKodiakVaultHook(hook);
-        
         emit KodiakHookUpdated(hook);
     }
     
-    /**
-     * @dev Internal function to remove LP from whitelist (used by setKodiakHook)
-     * @param lp Address to remove
-     */
-    function _removeWhitelistedLPInternal(address lp) internal {
-        // Find and remove from array using swap-and-pop
-        for (uint256 i = 0; i < _whitelistedLPs.length; i++) {
-            if (_whitelistedLPs[i] == lp) {
-                _whitelistedLPs[i] = _whitelistedLPs[_whitelistedLPs.length - 1];
-                _whitelistedLPs.pop();
-                break;
+    /// @dev Remove from whitelist (isToken=false for LP, true for LPToken)
+    function _removeFromWhitelist(address addr, bool isToken) internal {
+        if (isToken) {
+            for (uint256 i = 0; i < _whitelistedLPTokens.length; i++) {
+                if (_whitelistedLPTokens[i] == addr) { _whitelistedLPTokens[i] = _whitelistedLPTokens[_whitelistedLPTokens.length - 1]; _whitelistedLPTokens.pop(); break; }
             }
-        }
-        
-        // Remove from mapping
-        _isWhitelistedLP[lp] = false;
-    }
-    
-    /**
-     * @dev Internal helper to remove LP token from whitelist
-     * @param lpToken Address to remove
-     */
-    function _removeWhitelistedLPTokenInternal(address lpToken) internal {
-        // Find and remove from array using swap-and-pop
-        for (uint256 i = 0; i < _whitelistedLPTokens.length; i++) {
-            if (_whitelistedLPTokens[i] == lpToken) {
-                _whitelistedLPTokens[i] = _whitelistedLPTokens[_whitelistedLPTokens.length - 1];
-                _whitelistedLPTokens.pop();
-                break;
+            _isWhitelistedLPToken[addr] = false;
+        } else {
+            for (uint256 i = 0; i < _whitelistedLPs.length; i++) {
+                if (_whitelistedLPs[i] == addr) { _whitelistedLPs[i] = _whitelistedLPs[_whitelistedLPs.length - 1]; _whitelistedLPs.pop(); break; }
             }
+            _isWhitelistedLP[addr] = false;
         }
-        
-        // Remove from mapping
-        _isWhitelistedLPToken[lpToken] = false;
     }
 
-    /**
-     * @notice Transfer stablecoins from vault to whitelisted LP
-     * @dev Only admin can invest, LP must be whitelisted
-     * @param lp Address of the whitelisted LP to transfer to
-     * @param amount Amount of stablecoins to transfer
-     */
+    /// @notice Invest stablecoin into whitelisted LP
     function investInLP(address lp, uint256 amount) external onlyLiquidityManager nonReentrant {
-        if (lp == address(0)) revert AdminControlled.ZeroAddress();
-        if (amount == 0) revert InvalidAmount();
+        if (lp == address(0) || amount == 0) revert InvalidAmount();
         if (!_isWhitelistedLP[lp]) revert WhitelistedLPNotFound();
-        
-        // Check vault has sufficient stablecoin balance
-        uint256 vaultBalance = _stablecoin.balanceOf(address(this));
-        if (vaultBalance < amount) revert InsufficientBalance();
-        
-        // Transfer stablecoins from vault to LP
+        if (_stablecoin.balanceOf(address(this)) < amount) revert InsufficientBalance();
         _stablecoin.safeTransfer(lp, amount);
-        
         emit LPInvestment(lp, amount);
     }
 
-    /**
-     * @notice Deploy idle stablecoin funds to Kodiak Island
-     * @dev Only callable by admin with off-chain verified swap params
-     *      Provides slippage protection via minLPTokens parameter
-     * @param amount Amount of stablecoin to deploy to Kodiak
-     * @param minLPTokens Minimum Island LP tokens expected (slippage protection)
-     * @param swapToToken0Aggregator Aggregator address for token0 swap (verified off-chain)
-     * @param swapToToken0Data Swap calldata for token0 (verified off-chain)
-     * @param swapToToken1Aggregator Aggregator address for token1 swap (verified off-chain)
-     * @param swapToToken1Data Swap calldata for token1 (verified off-chain)
-     */
+    /// @notice Consolidated deploy to Kodiak (amount=0 means sweep all, expectedIdle/maxDeviation for sweep mode)
     function deployToKodiak(
-        uint256 amount,
-        uint256 minLPTokens,
-        address swapToToken0Aggregator,
-        bytes calldata swapToToken0Data,
-        address swapToToken1Aggregator,
-        bytes calldata swapToToken1Data
-    ) external onlyLiquidityManager nonReentrant {
-        if (amount == 0) revert InvalidAmount();
-        if (address(kodiakHook) == address(0)) revert KodiakHookNotSet();
-        
-        // Check vault has enough idle stablecoin
-        uint256 vaultBalance = _stablecoin.balanceOf(address(this));
-        if (vaultBalance < amount) revert InsufficientBalance();
-        
-        // Record LP balance before deployment
-        uint256 lpBefore = kodiakHook.getIslandLPBalance();
-        
-        // Transfer stablecoins to hook
-        _stablecoin.safeTransfer(address(kodiakHook), amount);
-        
-        // Deploy to Kodiak with verified swap params
-        kodiakHook.onAfterDepositWithSwaps(
-            amount,
-            swapToToken0Aggregator,
-            swapToToken0Data,
-            swapToToken1Aggregator,
-            swapToToken1Data
-        );
-        
-        // Verify slippage protection
-        uint256 lpAfter = kodiakHook.getIslandLPBalance();
-        uint256 lpReceived = lpAfter - lpBefore;
-        if (lpReceived < minLPTokens) revert SlippageTooHigh();
-        
-        emit KodiakDeployment(amount, lpReceived, block.timestamp);
-    }
-    
-    /**
-     * @notice Deploy all idle stablecoins to Kodiak (sweep dust)
-     * @dev Convenience function to deploy entire vault balance without specifying amount
-     * @dev N10 FIX: Protects against stale slippage params when deposits happen in same block
-     * @param expectedIdle Expected idle balance when tx was prepared (prevents stale minLPTokens)
-     * @param maxDeviation Maximum allowed deviation from expectedIdle in basis points (e.g., 100 = 1%)
-     * @param minLPTokens Minimum LP tokens to receive (slippage protection)
-     * @param swapToToken0Aggregator DEX aggregator for token0 swap
-     * @param swapToToken0Data Swap calldata for token0
-     * @param swapToToken1Aggregator DEX aggregator for token1 swap
-     * @param swapToToken1Data Swap calldata for token1
-     */
-    function sweepToKodiak(
-        uint256 expectedIdle,
-        uint256 maxDeviation,
-        uint256 minLPTokens,
-        address swapToToken0Aggregator,
-        bytes calldata swapToToken0Data,
-        address swapToToken1Aggregator,
-        bytes calldata swapToToken1Data
+        uint256 amount, uint256 minLPTokens, uint256 expectedIdle, uint256 maxDeviation,
+        address agg0, bytes calldata data0, address agg1, bytes calldata data1
     ) external onlyLiquidityManager nonReentrant {
         if (address(kodiakHook) == address(0)) revert KodiakHookNotSet();
-        
-        // Get all idle stablecoin balance
-        uint256 idle = _stablecoin.balanceOf(address(this));
-        if (idle == 0) revert InvalidAmount();
-        
-        // N10 FIX: Ensure idle balance hasn't changed significantly since tx preparation
-        // This prevents stale minLPTokens from being used when deposits happen in same block
-        if (idle != expectedIdle) {
-            uint256 deviation = idle > expectedIdle ? idle - expectedIdle : expectedIdle - idle;
-            uint256 maxAllowedDeviation = (expectedIdle * maxDeviation) / 10000;
-            if (deviation > maxAllowedDeviation) {
-                revert IdleBalanceDeviation();
+        uint256 deployAmt = amount;
+        if (amount == 0) {
+            deployAmt = _stablecoin.balanceOf(address(this));
+            if (deployAmt == 0) revert InvalidAmount();
+            if (deployAmt != expectedIdle) {
+                uint256 dev = deployAmt > expectedIdle ? deployAmt - expectedIdle : expectedIdle - deployAmt;
+                if (dev > (expectedIdle * maxDeviation) / 10000) revert IdleBalanceDeviation();
             }
+        } else {
+            if (_stablecoin.balanceOf(address(this)) < amount) revert InsufficientBalance();
         }
-        
-        // Deploy all idle funds
         uint256 lpBefore = kodiakHook.getIslandLPBalance();
-        
-        // Transfer all idle stablecoins to hook
-        _stablecoin.safeTransfer(address(kodiakHook), idle);
-        
-        // Deploy to Kodiak with verified swap params
-        kodiakHook.onAfterDepositWithSwaps(
-            idle,
-            swapToToken0Aggregator,
-            swapToToken0Data,
-            swapToToken1Aggregator,
-            swapToToken1Data
-        );
-        
-        // Verify slippage protection
-        uint256 lpAfter = kodiakHook.getIslandLPBalance();
-        uint256 lpReceived = lpAfter - lpBefore;
+        _stablecoin.safeTransfer(address(kodiakHook), deployAmt);
+        kodiakHook.onAfterDepositWithSwaps(deployAmt, agg0, data0, agg1, data1);
+        uint256 lpReceived = kodiakHook.getIslandLPBalance() - lpBefore;
         if (lpReceived < minLPTokens) revert SlippageTooHigh();
-        
-        emit KodiakDeployment(idle, lpReceived, block.timestamp);
+        emit KodiakDeployment(deployAmt, lpReceived, block.timestamp);
     }
 
-    /**
-     * @notice Withdraw LP tokens from vault for liquidation
-     * @dev Only admin can withdraw, must be sent to whitelisted LP address
-     * @param lpToken Address of the LP token to withdraw
-     * @param lp Address of whitelisted LP to send tokens to
-     * @param amount Amount of LP tokens to withdraw (0 = withdraw all)
-     */
+    /// @notice Withdraw LP tokens to whitelisted LP (amount=0 withdraws all)
     function withdrawLPTokens(address lpToken, address lp, uint256 amount) external onlyLiquidityManager nonReentrant {
-        if (lpToken == address(0)) revert AdminControlled.ZeroAddress();
-        if (lp == address(0)) revert AdminControlled.ZeroAddress();
-        if (!_isWhitelistedLP[lp]) revert WhitelistedLPNotFound();
-        if (!_isWhitelistedLPToken[lpToken]) revert WhitelistedLPNotFound();
-        
-        // Get LP token balance
-        IERC20 lpTokenContract = IERC20(lpToken);
-        uint256 balance = lpTokenContract.balanceOf(address(this));
-        
-        // If amount is 0, withdraw all
-        uint256 withdrawAmount = amount == 0 ? balance : amount;
-        
-        if (withdrawAmount == 0) revert InvalidAmount();
-        if (balance < withdrawAmount) revert InsufficientBalance();
-        
-        // Transfer LP tokens to whitelisted LP address for liquidation
-        lpTokenContract.safeTransfer(lp, withdrawAmount);
-        
-        emit LPTokensWithdrawn(lpToken, lp, withdrawAmount);
+        if (lpToken == address(0) || lp == address(0)) revert AdminControlled.ZeroAddress();
+        if (!_isWhitelistedLP[lp] || !_isWhitelistedLPToken[lpToken]) revert WhitelistedLPNotFound();
+        uint256 bal = IERC20(lpToken).balanceOf(address(this));
+        uint256 amt = amount == 0 ? bal : amount;
+        if (amt == 0 || bal < amt) revert InsufficientBalance();
+        IERC20(lpToken).safeTransfer(lp, amt);
+        emit LPTokensWithdrawn(lpToken, lp, amt);
     }
     
-    /**
-     * @notice Update the minimum rebase interval
-     * @dev Only admin can update this value
-     * @param newInterval New minimum time between rebases (in seconds)
-     */
-    function setMinRebaseInterval(uint256 newInterval) external onlyAdmin {
-        uint256 oldInterval = _minRebaseInterval;
-        _minRebaseInterval = newInterval;
-        emit MinRebaseIntervalUpdated(oldInterval, newInterval);
-    }
+    /// @notice Admin config actions
+    enum AdminConfig { SET_MIN_REBASE_INTERVAL, SET_TREASURY }
     
-    /**
-     * @notice Set treasury address for fee collection
-     * @param treasury_ New treasury address
-     */
-    function setTreasury(address treasury_) external onlyAdmin {
-        if (treasury_ == address(0)) revert AdminControlled.ZeroAddress();
-        _treasury = treasury_;
+    /// @notice Consolidated admin config setter
+    function setAdminConfig(AdminConfig config, uint256 value, address addr) external onlyAdmin {
+        if (config == AdminConfig.SET_MIN_REBASE_INTERVAL) {
+            uint256 old = _minRebaseInterval;
+            _minRebaseInterval = value;
+            emit MinRebaseIntervalUpdated(old, value);
+        } else if (config == AdminConfig.SET_TREASURY) {
+            if (addr == address(0)) revert AdminControlled.ZeroAddress();
+            _treasury = addr;
+        }
     }
     
     /**
@@ -596,7 +390,7 @@ abstract contract UnifiedSeniorVault is ISeniorVault, IERC20, AdminControlled, P
         // Calculate value = amount * lpPrice / 1e18
         // Account for LP token decimals
         uint8 lpDecimals = IERC20Metadata(lpToken).decimals();
-        uint256 normalizedAmount = _normalizeToDecimals(amount, lpDecimals, 18);
+        uint256 normalizedAmount = MathLib.normalizeDecimals(amount, lpDecimals, 18);
         uint256 valueAdded = (normalizedAmount * lpPrice) / 1e18;
         
         // Mint tokens to caller (seeder) - use _mint which handles shares internally
@@ -612,141 +406,6 @@ abstract contract UnifiedSeniorVault is ISeniorVault, IERC20, AdminControlled, P
         emit VaultSeeded(lpToken, msg.sender, amount, lpPrice, valueAdded, sharesToMint);
     }
     
-    // ============================================
-    // Pending LP Deposit System
-    // ============================================
-    
-    /**
-     * @notice Deposit LP tokens (pending admin approval)
-     * @dev LP tokens are transferred to vault's hook immediately
-     * @param lpToken Address of LP token to deposit
-     * @param amount Amount of LP tokens
-     * @return depositId ID of pending deposit
-     */
-    function depositLP(address lpToken, uint256 amount) external nonReentrant returns (uint256 depositId) {
-        if (lpToken == address(0)) revert AdminControlled.ZeroAddress();
-        if (amount == 0) revert InvalidAmount();
-        if (address(kodiakHook) == address(0)) revert KodiakHookNotSet();
-        if (lpToken != address(kodiakHook.island())) revert InvalidLPToken();
-        
-        // Create pending deposit (Effects - state updates BEFORE external call)
-        depositId = _nextDepositId++;
-        uint256 expiresAt = block.timestamp + DEPOSIT_EXPIRY_TIME;
-        
-        _pendingDeposits[depositId] = PendingLPDeposit({
-            depositor: msg.sender,
-            lpToken: lpToken,
-            amount: amount,
-            timestamp: block.timestamp,
-            expiresAt: expiresAt,
-            status: DepositStatus.PENDING
-        });
-        
-        _userDepositIds[msg.sender].push(depositId);
-        
-        emit PendingLPDepositCreated(depositId, msg.sender, lpToken, amount, expiresAt);
-        
-        // Transfer LP from user to hook (Interaction - external call LAST per CEI pattern)
-        IERC20(lpToken).safeTransferFrom(msg.sender, address(kodiakHook), amount);
-    }
-    
-    /**
-     * @notice Execute LP deposit admin actions (approve/reject)
-     * @dev Consolidates approveLPDeposit and rejectLPDeposit to reduce contract size
-     * @param action APPROVE or REJECT
-     * @param depositId ID of pending deposit
-     * @param lpPrice Price of LP token in USD (18 decimals) - required for APPROVE, ignored for REJECT
-     * @param reason Reason for rejection - required for REJECT, ignored for APPROVE
-     */
-    function executeLPDepositAction(
-        LPDepositAction action,
-        uint256 depositId,
-        uint256 lpPrice,
-        string calldata reason
-    ) external onlyLiquidityManager nonReentrant {
-        PendingLPDeposit storage pendingDeposit = _pendingDeposits[depositId];
-        
-        // Common validation
-        if (pendingDeposit.depositor == address(0)) revert DepositNotFound();
-        if (pendingDeposit.status != DepositStatus.PENDING) revert DepositNotPending();
-        
-        if (action == LPDepositAction.APPROVE) {
-            if (block.timestamp > pendingDeposit.expiresAt) revert DepositExpired();
-            if (lpPrice == 0) revert InvalidLPPrice();
-            
-            // Calculate value and shares (Senior: 1:1 with USD)
-            // Q5 FIX: Account for LP token decimals
-            uint8 lpDecimals = IERC20Metadata(pendingDeposit.lpToken).decimals();
-            uint256 normalizedAmount = _normalizeToDecimals(pendingDeposit.amount, lpDecimals, 18);
-            uint256 valueAdded = (normalizedAmount * lpPrice) / 1e18;
-            
-            // Safety: prevent 0-value minting
-            if (valueAdded == 0) revert InvalidAmount();
-            
-            // Update status (Effects - state updates BEFORE external call)
-            pendingDeposit.status = DepositStatus.APPROVED;
-            
-            emit PendingLPDepositApproved(depositId, pendingDeposit.depositor, lpPrice, valueAdded);
-            
-            // N1-2 FIX: Mint shares BEFORE updating vault value (matches standard deposit flow)
-            _mint(pendingDeposit.depositor, valueAdded);
-            
-            // Update vault value AFTER minting (consistent with deposit() pattern)
-            _vaultValue += valueAdded;
-            _lastUpdateTime = block.timestamp;
-            
-        } else if (action == LPDepositAction.REJECT) {
-            // Update status (Effects - state update BEFORE external call)
-            pendingDeposit.status = DepositStatus.REJECTED;
-            
-            emit PendingLPDepositRejected(depositId, pendingDeposit.depositor, reason);
-            
-            // Transfer LP back from hook to depositor (Interaction - external call LAST per CEI pattern)
-            kodiakHook.transferIslandLP(pendingDeposit.depositor, pendingDeposit.amount);
-        }
-    }
-    
-    /**
-     * @notice Cancel pending LP deposit (depositor only)
-     * @dev Depositor can cancel anytime before approval
-     * @param depositId ID of pending deposit
-     */
-    function cancelPendingDeposit(uint256 depositId) external nonReentrant {
-        PendingLPDeposit storage pendingDeposit = _pendingDeposits[depositId];
-        
-        if (pendingDeposit.depositor == address(0)) revert DepositNotFound();
-        if (pendingDeposit.depositor != msg.sender) revert NotDepositor();
-        if (pendingDeposit.status != DepositStatus.PENDING) revert DepositNotPending();
-        
-        // Update status (Effects - state update BEFORE external call)
-        pendingDeposit.status = DepositStatus.CANCELLED;
-        
-        emit PendingLPDepositCancelled(depositId, pendingDeposit.depositor);
-        
-        // Transfer LP back from hook to depositor (Interaction - external call LAST per CEI pattern)
-        kodiakHook.transferIslandLP(pendingDeposit.depositor, pendingDeposit.amount);
-    }
-    
-    /**
-     * @notice Claim expired deposit (anyone can call)
-     * @dev Returns LP to original depositor after expiry
-     * @param depositId ID of pending deposit
-     */
-    function claimExpiredDeposit(uint256 depositId) external nonReentrant {
-        PendingLPDeposit storage pendingDeposit = _pendingDeposits[depositId];
-        
-        if (pendingDeposit.depositor == address(0)) revert DepositNotFound();
-        if (pendingDeposit.status != DepositStatus.PENDING) revert DepositNotPending();
-        if (block.timestamp <= pendingDeposit.expiresAt) revert DepositNotExpired();
-        
-        // Update status (Effects - state update BEFORE external call)
-        pendingDeposit.status = DepositStatus.EXPIRED;
-        
-        emit PendingLPDepositExpired(depositId, pendingDeposit.depositor);
-        
-        // Transfer LP back from hook to original depositor (Interaction - external call LAST per CEI pattern)
-        kodiakHook.transferIslandLP(pendingDeposit.depositor, pendingDeposit.amount);
-    }
     
     // ============================================
     // ERC20 Implementation (Rebasing)
@@ -828,36 +487,10 @@ abstract contract UnifiedSeniorVault is ISeniorVault, IERC20, AdminControlled, P
         return true;
     }
     
-    /**
-     * @notice Get user's share balance
-     * @dev Reference: User State (σ_i)
-     */
-    function sharesOf(address account) public view virtual returns (uint256) {
-        return _shares[account];
-    }
-    
-    /**
-     * @notice Get total shares
-     * @dev Reference: Notation (Σ)
-     */
-    function totalShares() public view virtual returns (uint256) {
-        return _totalShares;
-    }
-    
-    /**
-     * @notice Get current rebase index
-     * @dev Reference: Core Formulas (I)
-     */
-    function rebaseIndex() public view virtual returns (uint256) {
-        return _rebaseIndex;
-    }
-    
-    /**
-     * @notice Get current rebase epoch
-     */
-    function epoch() public view virtual returns (uint256) {
-        return _epoch;
-    }
+    function sharesOf(address account) public view virtual returns (uint256) { return _shares[account]; }
+    function totalShares() public view virtual returns (uint256) { return _totalShares; }
+    function rebaseIndex() public view virtual returns (uint256) { return _rebaseIndex; }
+    function epoch() public view virtual returns (uint256) { return _epoch; }
     
     // ============================================
     // Internal ERC20 Functions
@@ -955,18 +588,6 @@ abstract contract UnifiedSeniorVault is ISeniorVault, IERC20, AdminControlled, P
         return _stablecoin;
     }
     
-    function depositToken() public view virtual returns (IERC20) {
-        return _stablecoin;
-    }
-    
-    function lastUpdateTime() public view virtual returns (uint256) {
-        return _lastUpdateTime;
-    }
-    
-    function seniorVault() public view virtual returns (address) {
-        return address(this); // Senior vault IS itself
-    }
-    
     /**
      * @notice Update vault value (consolidated: by BPS or absolute)
      * @dev Consolidates updateVaultValue and setVaultValue to reduce contract size
@@ -1040,228 +661,168 @@ abstract contract UnifiedSeniorVault is ISeniorVault, IERC20, AdminControlled, P
      * @param needed Amount of stablecoin needed
      * @return minExpected Minimum acceptable amount after applying slippage tolerance
      */
-    function _calculateMinExpectedFromLP(uint256 needed) internal view returns (uint256 minExpected) {
-        if (address(kodiakHook) == address(0)) return 0;
-        
+    /// @dev Calculate minimum expected output with 2% slippage tolerance
+    function _calculateMinExpectedFromLP(uint256 needed) internal pure returns (uint256) {
+        return (needed * 9800) / 10000; // 98% of needed (2% slippage)
+    }
+    
+    /// @dev Get LP conversion data for USD amount
+    function _getLpConversionData(uint256 usdAmt) internal view returns (uint256 lpTokens, uint256 lpValUsd, uint256 honey, uint256 lpSupply) {
+        if (address(kodiakHook) == address(0)) return (0, 0, 0, 0);
         try kodiakHook.island() returns (IKodiakIsland island) {
-            if (address(island) == address(0)) return 0;
-            
-            // Query pool reserves
-            (, uint256 honeyInPool) = island.getUnderlyingBalances();
-            uint256 totalLP = island.totalSupply();
-            
-            if (totalLP == 0 || honeyInPool == 0) return 0;
-            
-            // Calculate expected return (conservative: assume 1:1 on needed amount)
-            // Note: We could calculate exact amount using honeyPerLP, but conservative is safer
-            uint256 expectedReturn = needed;
-            
-            // Apply 2% slippage tolerance (hardcoded for Senior - 9800/10000)
-            minExpected = (expectedReturn * 9800) / 10000;
-            
-            return minExpected;
-        } catch {
-            // If query fails, return 0 to disable check
-            return 0;
-        }
+            if (address(island) == address(0)) return (0, 0, 0, 0);
+            (, honey) = island.getUnderlyingBalances();
+            lpSupply = island.totalSupply();
+            if (lpSupply == 0 || honey == 0) return (0, 0, 0, 0);
+            lpValUsd = Math.mulDiv(kodiakHook.getIslandLPBalance(), honey, lpSupply);
+            lpTokens = Math.mulDiv(usdAmt, lpSupply, honey) * 102 / 100;
+        } catch { return (0, 0, 0, 0); }
     }
     
-    /**
-     * @notice Ensures sufficient liquidity by freeing LP tokens if needed
-     * @dev DRY Refactor: Extracted from multiple withdraw functions to eliminate code duplication
-     * @dev Iteratively liquidates LP tokens up to 3 times with slippage protection
-     * @param amountNeeded Amount of stablecoin needed
-     * @return totalFreed Total amount of stablecoin freed from LP liquidation
-     */
+    /// @notice Ensures liquidity by freeing LP if needed (up to 3 attempts)
     function _ensureLiquidityAvailable(uint256 amountNeeded) internal returns (uint256 totalFreed) {
-        uint256 maxAttempts = 3;
-        totalFreed = 0;
-        
-        for (uint256 i = 0; i < maxAttempts; i++) {
-            uint256 vaultBalance = _stablecoin.balanceOf(address(this));
+        for (uint256 i = 0; i < 3; i++) {
+            uint256 bal = _stablecoin.balanceOf(address(this));
+            if (bal >= amountNeeded) break;
+            if (address(kodiakHook) == address(0)) revert InsufficientLiquidity();
             
-            // Check if we have enough liquidity
-            if (vaultBalance >= amountNeeded) {
-                break;
+            uint256 needed = amountNeeded - bal;
+            uint256 minExp = _calculateMinExpectedFromLP(needed);
+            
+            // Try withdraw from reward vault if hook LP insufficient
+            (uint256 lpNeeded, uint256 lpVal, uint256 honey, uint256 lpSupply) = _getLpConversionData(needed);
+            if (lpVal < needed && lpNeeded > 0 && honey > 0 && lpSupply > 0) {
+                uint256 lpToGet = Math.mulDiv(needed - lpVal, lpSupply, honey) * 102 / 100;
+                IRewardVault rv = _getRewardVault();
+                if (address(rv) != address(0)) {
+                    uint256 staked = rv.getTotalDelegateStaked(admin());
+                    uint256 toWithdraw = lpToGet > staked ? staked : lpToGet;
+                    if (toWithdraw > 0) { rv.delegateWithdraw(admin(), toWithdraw); IERC20(address(kodiakHook.island())).transfer(address(kodiakHook), toWithdraw); }
+                }
             }
             
-            // Ensure hook is set
-            if (address(kodiakHook) == address(0)) {
-                revert InsufficientLiquidity();
-            }
-            
-            // Calculate deficit
-            uint256 needed = amountNeeded - vaultBalance;
-            uint256 balanceBefore = vaultBalance;
-            
-            // VN003 FIX: Calculate minimum expected amount with slippage tolerance
-            uint256 minExpected = _calculateMinExpectedFromLP(needed);
-            
-            // Attempt to liquidate LP tokens
             try kodiakHook.liquidateLPForAmount(needed) {
-                uint256 balanceAfter = _stablecoin.balanceOf(address(this));
-                uint256 freedThisRound = balanceAfter > balanceBefore ? balanceAfter - balanceBefore : 0;
-                totalFreed += freedThisRound;
-                
-                // VN003 FIX: Slippage protection
-                if (minExpected > 0 && freedThisRound < minExpected) {
-                    revert SlippageTooHigh();
-                }
-                
-                emit LPLiquidationExecuted(needed, freedThisRound, minExpected);
-                
-                // Stop if no progress
-                if (freedThisRound == 0) {
-                    break;
-                }
-            } catch {
-                // Stop on liquidation failure
-                break;
-            }
+                uint256 freed = _stablecoin.balanceOf(address(this)) - bal;
+                totalFreed += freed;
+                if (minExp > 0 && freed < minExp) revert SlippageTooHigh();
+                emit LPLiquidationExecuted(needed, freed, minExp);
+                if (freed == 0) break;
+            } catch { break; }
         }
-        
-        // Final liquidity check
-        uint256 finalBalance = _stablecoin.balanceOf(address(this));
-        if (finalBalance < amountNeeded) {
-            revert InsufficientLiquidity();
-        }
-        
-        // Emit summary event if liquidity was freed
-        if (totalFreed > 0) {
-            emit LiquidityFreedForWithdrawal(amountNeeded, totalFreed);
-        }
+        if (_stablecoin.balanceOf(address(this)) < amountNeeded) revert InsufficientLiquidity();
+        if (totalFreed > 0) emit LiquidityFreedForWithdrawal(amountNeeded, totalFreed);
     }
     
-    /**
-     * @notice Withdraw stablecoin by burning snrUSD
-     * @dev VN003 FIX: Added slippage protection when liquidating LP tokens
-     * @param amount Amount of snrUSD to burn
-     * @param receiver Address to receive stablecoin tokens
-     * @param owner Owner of snrUSD
-     * @return assets Amount of stablecoin tokens withdrawn (after penalty + 1% withdrawal fee)
-     */
+    /// @notice Withdraw stablecoin by burning snrUSD
     function withdraw(uint256 amount, address receiver, address owner) public virtual whenNotPausedOrAdmin nonReentrant returns (uint256 assets) {
         if (amount == 0) revert InvalidAmount();
         if (receiver == address(0)) revert AdminControlled.ZeroAddress();
-        
-        // Check allowance if not owner
         if (msg.sender != owner) {
-            uint256 currentAllowance = _allowances[owner][msg.sender];
-            if (currentAllowance < amount) revert InsufficientAllowance();
-            if (currentAllowance != type(uint256).max) {
-                _approve(owner, msg.sender, currentAllowance - amount);
-            }
+            uint256 allow = _allowances[owner][msg.sender];
+            if (allow < amount) revert InsufficientAllowance();
+            if (allow != type(uint256).max) _approve(owner, msg.sender, allow - amount);
         }
+        (uint256 penalty, uint256 afterPenalty) = calculateWithdrawalPenalty(owner, amount);
+        uint256 fee = (afterPenalty * MathLib.WITHDRAWAL_FEE) / MathLib.PRECISION;
+        uint256 net = afterPenalty - fee;
         
-        // Calculate early withdrawal penalty (20% if cooldown not met)
-        (uint256 earlyPenalty, uint256 amountAfterEarlyPenalty) = calculateWithdrawalPenalty(owner, amount);
-        
-        // Calculate 1% withdrawal fee (applied to amount after early penalty)
-        uint256 withdrawalFee = (amountAfterEarlyPenalty * MathLib.WITHDRAWAL_FEE) / MathLib.PRECISION;
-        uint256 netAssets = amountAfterEarlyPenalty - withdrawalFee;
-        
-        // Total needed = netAssets + withdrawalFee (we need enough for both receiver and treasury)
-        uint256 totalNeeded = amountAfterEarlyPenalty;
-        
-        // ============================================
-        // EFFECTS - All state changes BEFORE external calls (CEI Pattern)
-        // ============================================
-        
-        // Burn snrUSD first
         _burn(owner, amount);
+        _vaultValue -= afterPenalty;
+        if (_cooldownStart[owner] != 0) _cooldownStart[owner] = 0;
         
-        // Update vault value
-        _vaultValue -= amountAfterEarlyPenalty;
-        
-        // Reset cooldown
-        if (_cooldownStart[owner] != 0) {
-            _cooldownStart[owner] = 0;
-        }
-        
-        // ============================================
-        // INTERACTIONS - External calls LAST
-        // ============================================
-        
-        // Ensure sufficient liquidity (may call kodiakHook.liquidateLPForAmount)
-        _ensureLiquidityAvailable(totalNeeded);
-        
-        // Transfer net amount to receiver (after both early penalty and withdrawal fee)
-        _stablecoin.safeTransfer(receiver, netAssets);
-        
-        // Transfer withdrawal fee to treasury
-        if (_treasury != address(0) && withdrawalFee > 0) {
-            _stablecoin.safeTransfer(_treasury, withdrawalFee);
-            emit WithdrawalFeeCharged(owner, withdrawalFee, netAssets);
-        }
-        
-        if (earlyPenalty > 0) {
-            emit WithdrawalPenaltyCharged(owner, earlyPenalty);
-        }
-        
-        emit Withdraw(owner, netAssets, amount);
-        
-        return netAssets;
+        _ensureLiquidityAvailable(afterPenalty);
+        _stablecoin.safeTransfer(receiver, net);
+        if (_treasury != address(0) && fee > 0) { _stablecoin.safeTransfer(_treasury, fee); emit WithdrawalFeeCharged(owner, fee, net); }
+        if (penalty > 0) emit WithdrawalPenaltyCharged(owner, penalty);
+        emit Withdraw(owner, net, amount);
+        return net;
     }
     
     // ============================================
     // ISeniorVault Interface Implementation
     // ============================================
     
-    function juniorVault() public view virtual returns (address) {
-        return address(_juniorVault);
+    // Interface-required view functions (single-line to minimize bytecode)
+    function juniorVault() public view virtual returns (address) { return address(_juniorVault); }
+    function reserveVault() public view virtual returns (address) { return address(_reserveVault); }
+    function treasury() public view virtual returns (address) { return _treasury; }
+    function lastRebaseTime() public view virtual returns (uint256) { return _lastRebaseTime; }
+    function minRebaseInterval() public view virtual returns (uint256) { return _minRebaseInterval; }
+    function depositCap() public view virtual returns (uint256) { return MathLib.calculateDepositCap(_reserveVault.vaultValue()); }
+    function isDepositCapReached() public view virtual returns (bool) { return totalSupply() >= depositCap(); }
+    function backingRatio() public view virtual returns (uint256) { 
+        uint256 s = totalSupply(); 
+        return s == 0 ? MathLib.PRECISION : MathLib.calculateBackingRatio(_vaultValue, s); 
+    }
+    function currentZone() public view virtual returns (SpilloverLib.Zone) { return SpilloverLib.determineZone(backingRatio()); }
+    
+    // ============================================
+    // Rebase Simulation (View Only)
+    // ============================================
+    
+    /// @notice Result of rebase simulation
+    struct RebaseSimulation {
+        uint256 currentBackingRatio;      // Current backing ratio before rebase
+        uint256 newBackingRatio;          // Backing ratio after rebase
+        uint256 selectedAPY;              // APY tier that would be selected (11%, 12%, or 13%)
+        uint256 mgmtFeeTokens;            // Management fee tokens to mint
+        uint256 perfFeeTokens;            // Performance fee tokens to mint
+        uint256 newSupply;                // Total supply after rebase
+        SpilloverLib.Zone currentZoneVal; // Current zone
+        SpilloverLib.Zone newZone;        // Zone after rebase
+        bool willSpillover;               // True if spillover will occur
+        bool willBackstop;                // True if backstop will be needed
+        uint256 spilloverAmount;          // Amount that would spillover (if any)
+        uint256 backstopNeeded;           // Amount of backstop needed (if any)
+        uint256 timeUntilNextRebase;      // Seconds until next rebase allowed (0 if can rebase now)
     }
     
-    function reserveVault() public view virtual returns (address) {
-        return address(_reserveVault);
-    }
-    
-    function treasury() public view virtual returns (address) {
-        return _treasury;
-    }
-    
-    function lastRebaseTime() public view virtual returns (uint256) {
-        return _lastRebaseTime;
-    }
-    
-    function minRebaseInterval() public view virtual returns (uint256) {
-        return _minRebaseInterval;
-    }
-    
-    /**
-     * @notice Get current backing ratio
-     * @dev Reference: Core Formulas - R_senior = V_s / S
-     */
-    function backingRatio() public view virtual returns (uint256) {
-        uint256 supply = totalSupply();
-        if (supply == 0) return MathLib.PRECISION;
-        return MathLib.calculateBackingRatio(_vaultValue, supply);
-    }
-    
-    /**
-     * @notice Get current operating zone
-     * @dev Reference: Three-Zone Spillover System
-     */
-    function currentZone() public view virtual returns (SpilloverLib.Zone) {
-        return SpilloverLib.determineZone(backingRatio());
-    }
-    
-    /**
-     * @notice Check if deposit cap is reached
-     * @dev Reference: Deposit Cap - S_max = 10 × V_r
-     */
-    function isDepositCapReached() public view virtual returns (bool) {
-        uint256 supply = totalSupply();
-        uint256 cap = depositCap();
-        return supply >= cap;
-    }
-    
-    /**
-     * @notice Get current deposit cap
-     * @dev Reference: Constraints & Invariants (Invariant 4)
-     */
-    function depositCap() public view virtual returns (uint256) {
-        uint256 reserveValue = _reserveVault.vaultValue();
-        return MathLib.calculateDepositCap(reserveValue);
+    /// @notice Simulate rebase without executing - shows what would happen
+    /// @return sim Simulation results
+    function simulateRebase() external view returns (RebaseSimulation memory sim) {
+        uint256 currentSupply = totalSupply();
+        if (currentSupply == 0) return sim;
+        
+        // Time calculations
+        uint256 timeElapsed = block.timestamp > _lastRebaseTime ? block.timestamp - _lastRebaseTime : 0;
+        sim.timeUntilNextRebase = block.timestamp < _lastRebaseTime + _minRebaseInterval 
+            ? (_lastRebaseTime + _minRebaseInterval) - block.timestamp : 0;
+        
+        // Current state
+        sim.currentBackingRatio = backingRatio();
+        sim.currentZoneVal = SpilloverLib.determineZone(sim.currentBackingRatio);
+        
+        // Step 1: Management fee calculation
+        sim.mgmtFeeTokens = FeeLib.calculateManagementFeeTokens(_vaultValue, timeElapsed);
+        
+        // Step 2 & 3: Dynamic APY selection
+        RebaseLib.APYSelection memory selection = RebaseLib.selectDynamicAPY(
+            currentSupply, _vaultValue, timeElapsed, sim.mgmtFeeTokens
+        );
+        
+        sim.selectedAPY = selection.selectedRate;
+        sim.perfFeeTokens = selection.feeTokens;
+        sim.newSupply = selection.newSupply;
+        
+        // Step 4: Calculate new backing ratio and zone
+        sim.newBackingRatio = MathLib.calculateBackingRatio(_vaultValue, sim.newSupply);
+        sim.newZone = SpilloverLib.determineZone(sim.newBackingRatio);
+        
+        // Determine spillover/backstop
+        sim.willSpillover = (sim.newZone == SpilloverLib.Zone.SPILLOVER);
+        sim.willBackstop = (sim.newZone == SpilloverLib.Zone.BACKSTOP || selection.backstopNeeded);
+        
+        // Calculate spillover amount if applicable (excess above 110% target)
+        if (sim.willSpillover) {
+            uint256 targetValue = (sim.newSupply * MathLib.SENIOR_TARGET_BACKING) / MathLib.PRECISION;
+            sim.spilloverAmount = _vaultValue > targetValue ? _vaultValue - targetValue : 0;
+        }
+        
+        // Calculate backstop amount if applicable
+        if (sim.willBackstop) {
+            uint256 targetBacking = (sim.newSupply * MathLib.SENIOR_RESTORE_BACKING) / MathLib.PRECISION;
+            sim.backstopNeeded = targetBacking > _vaultValue ? targetBacking - _vaultValue : 0;
+        }
     }
     
     // ============================================
@@ -1513,29 +1074,5 @@ abstract contract UnifiedSeniorVault is ISeniorVault, IERC20, AdminControlled, P
      * @return actualReceived Actual USD value received (may be less than requested)
      */
     function _pullFromJunior(uint256 amountUSD, uint256 lpPrice) internal virtual returns (uint256 actualReceived);
-    
-    /**
-     * @notice Normalize token amount to target decimals (Q5 FIX)
-     * @dev Handles tokens with different decimals (WBTC=8, USDC=6, LP=18, etc.)
-     * @param amount Amount in source decimals
-     * @param fromDecimals Source token decimals
-     * @param toDecimals Target decimals
-     * @return Normalized amount in target decimals
-     */
-    function _normalizeToDecimals(
-        uint256 amount,
-        uint8 fromDecimals,
-        uint8 toDecimals
-    ) internal pure returns (uint256) {
-        if (fromDecimals == toDecimals) {
-            return amount;
-        } else if (fromDecimals < toDecimals) {
-            // Scale up: amount * 10^(toDecimals - fromDecimals)
-            return amount * (10 ** (toDecimals - fromDecimals));
-        } else {
-            // Scale down: amount / 10^(fromDecimals - toDecimals)
-            return amount / (10 ** (fromDecimals - toDecimals));
-        }
-    }
 }
 

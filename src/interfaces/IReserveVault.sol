@@ -44,59 +44,13 @@ interface IReserveVault is IVault {
      */
     function provideBackstop(uint256 amountUSD, uint256 lpPrice) external returns (uint256 actualAmount);
     
-    /**
-     * @notice Get total spillover received (lifetime)
-     * @return totalSpillover Cumulative spillover from Senior
-     */
-    function totalSpilloverReceived() external view returns (uint256 totalSpillover);
-    
-    /**
-     * @notice Get total backstop provided (lifetime)
-     * @return totalBackstop Cumulative backstop to Senior
-     */
-    function totalBackstopProvided() external view returns (uint256 totalBackstop);
-    
-    /**
-     * @notice Calculate effective monthly return including spillover/backstop
-     * @dev Reference: Reserve growth tracking
-     * @return effectiveReturn Monthly return in 18 decimal precision
-     */
-    function effectiveMonthlyReturn() external view returns (int256 effectiveReturn);
-    
-    /**
-     * @notice Get current deposit cap for Senior based on Reserve
-     * @dev Reference: Deposit Cap - S_max = γ × V_r = 10 × V_r
-     * @return cap Maximum Senior supply allowed (10x reserve value)
-     */
-    function currentDepositCap() external view returns (uint256 cap);
-    
-    /**
-     * @notice Check if Reserve is depleted (wiped out)
-     * @dev Can happen in catastrophic backstop scenarios
-     * @return isDepleted True if reserve value is effectively zero
-     */
-    function isDepleted() external view returns (bool isDepleted);
-    
-    /**
-     * @notice Get available backstop capacity
-     * @dev Reference: Backstop waterfall - Reserve provides EVERYTHING if needed
-     * @return capacity Full reserve value (no limits!)
-     */
-    function backstopCapacity() external view returns (uint256 capacity);
-    
-    /**
-     * @notice Check if Reserve can provide full backstop amount
-     * @param amount Amount needed
-     * @return canProvide True if reserve has enough, false if would be depleted
-     */
-    function canProvideFullBackstop(uint256 amount) external view returns (bool canProvide);
-    
-    /**
-     * @notice Get utilization rate (how much has been used for backstop vs total)
-     * @dev Useful for risk assessment
-     * @return utilization Percentage in basis points (10000 = 100%)
-     */
-    function utilizationRate() external view returns (uint256 utilization);
+    function totalSpilloverReceived() external view returns (uint256);
+    function totalBackstopProvided() external view returns (uint256);
+    function currentDepositCap() external view returns (uint256);
+    function backstopCapacity() external view returns (uint256);
+    function isDepleted() external view returns (bool);
+    function canProvideFullBackstop(uint256 amount) external view returns (bool);
+    function utilizationRate() external view returns (uint256);
     
     /**
      * @notice Initiate withdrawal cooldown

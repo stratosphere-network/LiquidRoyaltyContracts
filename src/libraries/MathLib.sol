@@ -171,18 +171,13 @@ library MathLib {
         return (a * b) / PRECISION;
     }
     
-    /**
-     * @notice Calculate minimum of two values
-     */
-    function min(uint256 a, uint256 b) internal pure returns (uint256) {
-        return a < b ? a : b;
-    }
+    function min(uint256 a, uint256 b) internal pure returns (uint256) { return a < b ? a : b; }
+    function max(uint256 a, uint256 b) internal pure returns (uint256) { return a > b ? a : b; }
     
-    /**
-     * @notice Calculate maximum of two values
-     */
-    function max(uint256 a, uint256 b) internal pure returns (uint256) {
-        return a > b ? a : b;
+    /// @notice Normalize token amount between different decimals
+    function normalizeDecimals(uint256 amount, uint8 from, uint8 to) internal pure returns (uint256) {
+        if (from == to) return amount;
+        return from < to ? amount * (10 ** (to - from)) : amount / (10 ** (from - to));
     }
 }
 
