@@ -156,6 +156,9 @@ contract UnifiedConcreteSeniorVault is UnifiedSeniorVault {
         _status = status;
     }
     
+    function _getRewardVault() internal view override returns (IRewardVault) {
+        return _rewardVault;
+    }
  
     function _transferToJunior(uint256 amountUSD, uint256 lpPrice) internal override {
        
@@ -167,11 +170,29 @@ contract UnifiedConcreteSeniorVault is UnifiedSeniorVault {
         address lpToken = address(kodiakHook.island());
         uint8 lpDecimals = IERC20Metadata(lpToken).decimals();
         
-      
+        // Calculate LP amount needed from USD
         uint256 lpAmount = Math.mulDiv(amountUSD, 10 ** lpDecimals, lpPrice);
         
-        
+        // Check Senior Hook's LP token balance
         uint256 lpBalance = kodiakHook.getIslandLPBalance();
+        
+        // If hook doesn't have enough LP, try to withdraw from reward vault
+        if (lpBalance < lpAmount && address(_rewardVault) != address(0)) {
+            uint256 lpDeficit = lpAmount - lpBalance;
+            // Check staked balance before withdrawing
+            uint256 stakedBalance = _rewardVault.getTotalDelegateStaked(admin());
+            uint256 lpToWithdraw = lpDeficit > stakedBalance ? stakedBalance : lpDeficit;
+            
+            if (lpToWithdraw > 0) {
+                // Withdraw LP from reward vault to this contract
+                _rewardVault.delegateWithdraw(admin(), lpToWithdraw);
+                // Transfer LP tokens to kodiakHook
+                IERC20(lpToken).transfer(address(kodiakHook), lpToWithdraw);
+                // Update lpBalance after withdrawal
+                lpBalance = kodiakHook.getIslandLPBalance();
+            }
+        }
+        
         uint256 actualLPAmount = lpAmount > lpBalance ? lpBalance : lpAmount;
         
         if (actualLPAmount == 0) return; // No LP tokens available
@@ -208,12 +229,28 @@ contract UnifiedConcreteSeniorVault is UnifiedSeniorVault {
         
         // SECURITY FIX: Use Math.mulDiv() to avoid divide-before-multiply precision loss
         // Calculate LP amount from USD amount (accounting for LP decimals)
-        // lpPrice is in 18 decimals (USD per LP token)
-        // We need to convert to LP token's actual decimals
         uint256 lpAmount = Math.mulDiv(amountUSD, 10 ** lpDecimals, lpPrice);
         
         // Check Senior Hook's LP token balance
         uint256 lpBalance = kodiakHook.getIslandLPBalance();
+        
+        // If hook doesn't have enough LP, try to withdraw from reward vault
+        if (lpBalance < lpAmount && address(_rewardVault) != address(0)) {
+            uint256 lpDeficit = lpAmount - lpBalance;
+            // Check staked balance before withdrawing
+            uint256 stakedBalance = _rewardVault.getTotalDelegateStaked(admin());
+            uint256 lpToWithdraw = lpDeficit > stakedBalance ? stakedBalance : lpDeficit;
+            
+            if (lpToWithdraw > 0) {
+                // Withdraw LP from reward vault to this contract
+                _rewardVault.delegateWithdraw(admin(), lpToWithdraw);
+                // Transfer LP tokens to kodiakHook
+                IERC20(lpToken).transfer(address(kodiakHook), lpToWithdraw);
+                // Update lpBalance after withdrawal
+                lpBalance = kodiakHook.getIslandLPBalance();
+            }
+        }
+        
         uint256 actualLPAmount = lpAmount > lpBalance ? lpBalance : lpAmount;
         
         if (actualLPAmount == 0) return; // No LP tokens available

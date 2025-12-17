@@ -28,7 +28,8 @@ library MathLib {
     uint256 public constant MGMT_FEE_ANNUAL = 1e16; // 0.01 = 1% (f_mgmt)
     uint256 public constant PERF_FEE = 2e16; // 0.02 = 2% (f_perf)
     uint256 public constant EARLY_WITHDRAWAL_PENALTY = 2e17; // 0.20 = 20% (f_penalty)
-    uint256 public constant WITHDRAWAL_FEE = 1e16; // 0.01 = 1% (f_withdrawal)
+    uint256 public constant WITHDRAWAL_FEE = 1e16; // 0.01 = 1% (f_withdrawal) - Junior/Reserve
+    uint256 public constant SENIOR_WITHDRAWAL_FEE = 3e15; // 0.003 = 0.3% (f_withdrawal) - Senior only
     
     uint256 public constant SENIOR_TARGET_BACKING = 110e16; // 1.10 = 110% (α_target)
     uint256 public constant SENIOR_TRIGGER_BACKING = 100e16; // 1.00 = 100% (α_trigger)
@@ -171,18 +172,13 @@ library MathLib {
         return (a * b) / PRECISION;
     }
     
-    /**
-     * @notice Calculate minimum of two values
-     */
-    function min(uint256 a, uint256 b) internal pure returns (uint256) {
-        return a < b ? a : b;
-    }
+    function min(uint256 a, uint256 b) internal pure returns (uint256) { return a < b ? a : b; }
+    function max(uint256 a, uint256 b) internal pure returns (uint256) { return a > b ? a : b; }
     
-    /**
-     * @notice Calculate maximum of two values
-     */
-    function max(uint256 a, uint256 b) internal pure returns (uint256) {
-        return a > b ? a : b;
+    /// @notice Normalize token amount between different decimals
+    function normalizeDecimals(uint256 amount, uint8 from, uint8 to) internal pure returns (uint256) {
+        if (from == to) return amount;
+        return from < to ? amount * (10 ** (to - from)) : amount / (10 ** (from - to));
     }
 }
 

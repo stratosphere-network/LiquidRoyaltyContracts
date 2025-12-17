@@ -11,6 +11,7 @@ import {IERC20Metadata} from "@openzeppelin/contracts/token/ERC20/extensions/IER
 import {SafeERC20} from "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
 import {IKodiakIsland} from "../integrations/IKodiakIsland.sol";
 import {Math} from "@openzeppelin/contracts/utils/math/Math.sol";
+import {IRewardVault} from "../integrations/IRewardVault.sol";
 
 /**
  * @title ReserveVault
@@ -62,432 +63,159 @@ abstract contract ReserveVault is BaseVault, IReserveVault {
         _lastMonthValue = initialValue_;
     }
     
-    // ============================================
-    // View Functions
-    // ============================================
-    
-    function seniorVault() public view virtual override(BaseVault, IVault) returns (address) {
-        return _seniorVault;
-    }
-    
-    function totalSpilloverReceived() public view virtual returns (uint256) {
-        return _totalSpilloverReceived;
-    }
-    
-    function totalBackstopProvided() public view virtual returns (uint256) {
-        return _totalBackstopProvided;
-    }
-    
-    /**
-     * @notice Calculate effective monthly return
-     */
-    function effectiveMonthlyReturn() public view virtual returns (int256) {
-        if (_lastMonthValue == 0) return 0;
-        
-        // Calculate profit/loss from strategy + spillover - backstop
-        int256 strategyReturn = int256(_vaultValue) - int256(_lastMonthValue);
-        
-        // Return as percentage (in 18 decimals)
-        return (strategyReturn * int256(MathLib.PRECISION)) / int256(_lastMonthValue);
-    }
-    
-    /**
-     * @notice Get current deposit cap for Senior
-     * @dev Reference: Deposit Cap - S_max = γ × V_r = 10 × V_r
-     */
-    function currentDepositCap() public view virtual returns (uint256) {
-        return MathLib.calculateDepositCap(_vaultValue);
-    }
-    
-    /**
-     * @notice Check if reserve is depleted
-     * @dev Reserve considered depleted if below 1% of initial value
-     */
-    function isDepleted() public view virtual returns (bool) {
-        uint256 initialValue = _lastMonthValue; // Simplified: use last month as reference
-        uint256 threshold = (initialValue * DEPLETION_THRESHOLD) / MathLib.PRECISION;
-        return _vaultValue < threshold;
-    }
-    
-    /**
-     * @notice Get available backstop capacity
-     * @dev Reference: Backstop - Reserve provides EVERYTHING (no cap!)
-     */
-    function backstopCapacity() public view virtual returns (uint256) {
-        return _vaultValue;
-    }
-    
-    /**
-     * @notice Check if can provide full backstop
-     */
-    function canProvideFullBackstop(uint256 amount) public view virtual returns (bool) {
-        return _vaultValue >= amount;
-    }
-    
-    /**
-     * @notice Get utilization rate
-     * @dev Percentage of reserve that has been used for backstop
-     */
-    function utilizationRate() public view virtual returns (uint256) {
-        uint256 totalReceived = _totalSpilloverReceived;
-        uint256 totalProvided = _totalBackstopProvided;
-        
-        if (totalReceived == 0 && totalProvided == 0) return 0;
-        
-        uint256 total = totalReceived + _lastMonthValue;
-        if (total == 0) return 0;
-        
-        return (totalProvided * MathLib.BPS_DENOMINATOR) / total;
-    }
+    // View functions (condensed single-line)
+    function seniorVault() public view virtual override returns (address) { return _seniorVault; }
+    function totalSpilloverReceived() public view virtual returns (uint256) { return _totalSpilloverReceived; }
+    function totalBackstopProvided() public view virtual returns (uint256) { return _totalBackstopProvided; }
+    function currentDepositCap() public view virtual returns (uint256) { return MathLib.calculateDepositCap(_vaultValue); }
+    function backstopCapacity() public view virtual returns (uint256) { return _vaultValue; }
+    function canProvideFullBackstop(uint256 amount) public view virtual returns (bool) { return _vaultValue >= amount; }
+    function isDepleted() public view virtual returns (bool) { return _vaultValue < (_lastMonthValue * DEPLETION_THRESHOLD) / MathLib.PRECISION; }
+    function utilizationRate() public view virtual returns (uint256) { uint256 t = _totalSpilloverReceived + _lastMonthValue; return t == 0 ? 0 : (_totalBackstopProvided * MathLib.BPS_DENOMINATOR) / t; }
     
     // ============================================
     // Senior Vault Functions (Restricted)
     // ============================================
     
-    /**
-     * @notice Receive profit spillover from Senior
-     * @dev Reference: Three-Zone System - Zone 1
-     * Formula: E_r = E × 0.20
-     */
+    /// @notice Receive profit spillover from Senior
     function receiveSpillover(uint256 amount) public virtual onlySeniorVault nonReentrant {
         if (amount == 0) return;
-        
-        // Increase vault value
         _vaultValue += amount;
         _totalSpilloverReceived += amount;
-        
         emit SpilloverReceived(amount, msg.sender);
-        
-        // Emit deposit cap update
-        uint256 newCap = currentDepositCap();
-        emit DepositCapUpdated(0, newCap);
+        emit DepositCapUpdated(0, currentDepositCap());
     }
     
-    /**
-     * @notice Provide backstop to Senior via LP tokens (primary, no cap!)
-     * @dev Reference: Three-Zone System - Zone 3
-     * Formula: X_r = min(V_r, D)
-     * @param amountUSD Amount requested (in USD)
-     * @param lpPrice Current LP token price in USD (18 decimals)
-     * @return actualAmount Actual USD amount provided (entire reserve if needed!)
-     */
+    /// @notice Provide backstop to Senior via LP tokens (no cap - can use entire reserve)
     function provideBackstop(uint256 amountUSD, uint256 lpPrice) public virtual onlySeniorVault nonReentrant returns (uint256 actualAmount) {
-        if (amountUSD == 0) return 0;
-        if (lpPrice == 0) return 0;
+        if (amountUSD == 0 || lpPrice == 0) return 0;
         if (address(kodiakHook) == address(0)) revert ReserveDepleted();
         
-        // LP DECIMALS FIX: Get LP token and its decimals
         address lpToken = address(kodiakHook.island());
-        uint8 lpDecimals = IERC20Metadata(lpToken).decimals();
+        uint8 lpDec = IERC20Metadata(lpToken).decimals();
+        uint256 lpNeeded = Math.mulDiv(amountUSD, 10 ** lpDec, lpPrice);
+        uint256 lpBal = kodiakHook.getIslandLPBalance();
         
-        // SECURITY FIX: Use Math.mulDiv() to avoid divide-before-multiply precision loss
-        // Calculate LP amount needed (accounting for LP decimals)
-        // lpPrice is in 18 decimals (USD per LP token)
-        uint256 lpAmountNeeded = Math.mulDiv(amountUSD, 10 ** lpDecimals, lpPrice);
+        // Withdraw from reward vault if needed
+        IRewardVault rv = _getRewardVault();
+        if (lpBal < lpNeeded && address(rv) != address(0)) {
+            uint256 deficit = lpNeeded - lpBal;
+            uint256 staked = rv.getTotalDelegateStaked(admin());
+            uint256 toWithdraw = deficit > staked ? staked : deficit;
+            if (toWithdraw > 0) { rv.delegateWithdraw(admin(), toWithdraw); IERC20(lpToken).transfer(address(kodiakHook), toWithdraw); lpBal = kodiakHook.getIslandLPBalance(); }
+        }
         
-        // Check Reserve Hook's actual LP token balance
-        uint256 lpBalance = kodiakHook.getIslandLPBalance();
+        uint256 actualLP = lpNeeded > lpBal ? lpBal : lpNeeded;
+        if (actualLP == 0) revert ReserveDepleted();
         
-        // Provide up to available LP tokens
-        uint256 actualLPAmount = lpAmountNeeded > lpBalance ? lpBalance : lpAmountNeeded;
-        
-        if (actualLPAmount == 0) revert ReserveDepleted();
-        
-        // SECURITY FIX: Use Math.mulDiv() for precise USD conversion
-        // Calculate actual USD amount based on LP tokens available (accounting for decimals)
-        actualAmount = Math.mulDiv(actualLPAmount, lpPrice, 10 ** lpDecimals);
-        
-        // Decrease vault value (can go to zero!)
+        actualAmount = Math.mulDiv(actualLP, lpPrice, 10 ** lpDec);
         uint256 oldCap = currentDepositCap();
         _vaultValue -= actualAmount;
         _totalBackstopProvided += actualAmount;
-        uint256 newCap = currentDepositCap();
         
-        // Get Senior's hook address and transfer LP from Reserve Hook to Senior Hook
         address seniorHook = address(IVault(_seniorVault).kodiakHook());
         if (seniorHook == address(0)) revert KodiakHookNotSet();
-        kodiakHook.transferIslandLP(seniorHook, actualLPAmount);
+        kodiakHook.transferIslandLP(seniorHook, actualLP);
         
         emit BackstopProvided(actualAmount, msg.sender);
-        emit DepositCapUpdated(oldCap, newCap);
-        
-        // Check if depleted
-        if (isDepleted()) {
-            emit ReserveBelowThreshold();
-        }
-        
-        return actualAmount;
+        emit DepositCapUpdated(oldCap, currentDepositCap());
+        if (isDepleted()) emit ReserveBelowThreshold();
     }
     
     // ============================================
     // Reserve-Specific Token Management Functions
     // ============================================
     
-    /**
-     * @notice Seed Reserve vault with non-stablecoin token (e.g., WBTC)
-     * @dev ONLY for Reserve vault - token stays in vault, not transferred to hook
-     * @dev Caller must have seeder role and approve this vault to transfer tokens first
-     * @dev Use investInKodiak() after seeding to convert token to LP
-     * @param token Non-stablecoin token address (e.g., WBTC)
-     * @param amount Amount of tokens to seed
-     * @param tokenPrice Price of token in stablecoin terms (18 decimals)
-     */
-    function seedReserveWithToken(
-        address token,
-        uint256 amount,
-        uint256 tokenPrice
-    ) external onlySeeder nonReentrant {
-        // Validation
+    /// @notice Seed Reserve with non-stablecoin token (e.g., WBTC)
+    function seedReserveWithToken(address token, uint256 amount, uint256 tokenPrice) external onlySeeder nonReentrant {
         if (token == address(0)) revert ZeroAddress();
         if (amount == 0) revert InvalidAmount();
         if (tokenPrice == 0) revert InvalidTokenPrice();
-        
-        // Step 1: Transfer tokens from caller (seeder) to vault
-        // Token STAYS in vault (not transferred to hook like seedVault)
         IERC20(token).safeTransferFrom(msg.sender, address(this), amount);
-        
-        // Step 2: Calculate value = amount * tokenPrice / 1e18
-        // Q5 FIX: Account for token decimals (WBTC=8, USDC=6, etc.)
-        // tokenPrice is in 18 decimals, representing stablecoin value per token
-        uint8 tokenDecimals = IERC20Metadata(token).decimals();
-        uint256 normalizedAmount = _normalizeToDecimals(amount, tokenDecimals, 18);
-        uint256 valueAdded = (normalizedAmount * tokenPrice) / 1e18;
-        
-        // Step 3: Mint shares to caller (seeder)
-        // N1-1 FIX: Use previewDeposit() for standardized ERC4626 share calculation
-        uint256 sharesToMint = previewDeposit(valueAdded);
-        _mint(msg.sender, sharesToMint);
-        
-        // Step 4: Update vault value to include new token value
+        uint256 valueAdded = (MathLib.normalizeDecimals(amount, IERC20Metadata(token).decimals(), 18) * tokenPrice) / 1e18;
+        uint256 shares = previewDeposit(valueAdded);
+        _mint(msg.sender, shares);
         _vaultValue += valueAdded;
         _lastUpdateTime = block.timestamp;
-        
-        // Step 5: Emit event
-        emit ReserveSeededWithToken(token, msg.sender, amount, tokenPrice, valueAdded, sharesToMint);
+        emit ReserveSeededWithToken(token, msg.sender, amount, tokenPrice, valueAdded, shares);
     }
     
-    /**
-     * @notice Invest non-stablecoin token into Kodiak Island (Reserve vault only)
-     * @dev Takes token from vault, swaps to pool tokens, adds liquidity
-     * @dev Same pattern as deployToKodiak() but for non-stablecoin tokens
-     * @param island Kodiak Island (pool) address
-     * @param token Token to invest (e.g., WBTC)
-     * @param amount Amount of tokens to invest
-     * @param minLPTokens Minimum LP tokens to receive (slippage protection)
-     * @param swapToToken0Aggregator DEX aggregator for token0 swap
-     * @param swapToToken0Data Swap calldata for token0
-     * @param swapToToken1Aggregator DEX aggregator for token1 swap
-     * @param swapToToken1Data Swap calldata for token1
-     */
-    function investInKodiak(
-        address island,
-        address token,
-        uint256 amount,
-        uint256 minLPTokens,
-        address swapToToken0Aggregator,
-        bytes calldata swapToToken0Data,
-        address swapToToken1Aggregator,
-        bytes calldata swapToToken1Data
-    ) external onlyLiquidityManager nonReentrant {
-        if (amount == 0) revert InvalidAmount();
-        if (address(kodiakHook) == address(0)) revert KodiakHookNotSet();
-        
-        // Check vault has enough of the token
-        uint256 vaultBalance = IERC20(token).balanceOf(address(this));
-        if (vaultBalance < amount) revert InsufficientBalance();
-        
-        // Record LP balance before
-        uint256 lpBefore = kodiakHook.getIslandLPBalance();
-        
-        // Transfer token to hook
-        IERC20(token).safeTransfer(address(kodiakHook), amount);
-        
-        // Call hook to deploy with swap parameters (same as deployToKodiak)
-        kodiakHook.onAfterDepositWithSwaps(
-            amount,
-            swapToToken0Aggregator,
-            swapToToken0Data,
-            swapToToken1Aggregator,
-            swapToToken1Data
-        );
-        
-        // Calculate LP received
-        uint256 lpAfter = kodiakHook.getIslandLPBalance();
-        uint256 lpReceived = lpAfter - lpBefore;
-        
-        // Check slippage
-        if (lpReceived < minLPTokens) revert SlippageTooHigh();
-        
-        // Emit event
-        emit KodiakInvestment(island, token, amount, lpReceived, block.timestamp);
-    }
+    /// @notice Consolidated Reserve actions - use enum to select action, logic 100% same
+    /// @param action: 0=InvestKodiak, 1=SwapStable, 2=RescueAndSwap, 3=RescueToken, 4=ExitLP
+    /// @param tokenA: island(0) or tokenOut(1,4) or tokenIn(2,3)
+    /// @param tokenB: token to invest(0) - unused for others
+    /// @param amount: amount to use
+    /// @param minOut: minimum output (LP or tokens)
+    /// @param agg0: aggregator 0
+    /// @param data0: swap data 0
+    /// @param agg1: aggregator 1 (only for InvestKodiak)
+    /// @param data1: swap data 1 (only for InvestKodiak)
+    enum ReserveAction { InvestKodiak, SwapStable, RescueAndSwap, RescueToken, ExitLP }
     
-    /**
-     * @notice Swap stablecoin (HONEY) to non-stablecoin token (WBTC) in Reserve vault
-     * @dev ONLY for Reserve vault - converts HONEY held in vault to WBTC
-     * @param amount Amount of stablecoin to swap
-     * @param minTokenOut Minimum non-stablecoin to receive (slippage protection)
-     * @param tokenOut Non-stablecoin address (e.g., WBTC)
-     * @param swapAggregator DEX aggregator address
-     * @param swapData Swap calldata from aggregator
-     */
-    function swapStablecoinToToken(
-        uint256 amount,
-        uint256 minTokenOut,
-        address tokenOut,
-        address swapAggregator,
-        bytes calldata swapData
-    ) external onlyLiquidityManager nonReentrant {
-        if (amount == 0) revert InvalidAmount();
-        if (tokenOut == address(0) || swapAggregator == address(0)) revert ZeroAddress();
-        
-        // Check vault has enough stablecoin
-        uint256 vaultBalance = _stablecoin.balanceOf(address(this));
-        if (vaultBalance < amount) revert InsufficientBalance();
-        
-        // Check token balance before
-        uint256 tokenBefore = IERC20(tokenOut).balanceOf(address(this));
-        
-        // Approve aggregator
-        _stablecoin.forceApprove(swapAggregator, amount);
-        
-        // Execute swap
-        (bool success,) = swapAggregator.call(swapData);
-        if (!success) revert SlippageTooHigh();
-        
-        // Check tokens received
-        uint256 tokenAfter = IERC20(tokenOut).balanceOf(address(this));
-        uint256 tokenReceived = tokenAfter - tokenBefore;
-        
-        // Slippage check
-        if (tokenReceived < minTokenOut) revert SlippageTooHigh();
-        
-        // Clean up approval
-        _stablecoin.forceApprove(swapAggregator, 0);
-        
-        emit StablecoinSwappedToToken(address(_stablecoin), tokenOut, amount, tokenReceived, block.timestamp);
-    }
-    
-    /**
-     * @notice Rescue stablecoin from hook to vault (Reserve only)
-     * @dev Swaps non-stablecoin token (e.g., WBTC) in hook to stablecoin and sends to vault
-     * @param tokenIn Non-stablecoin token address in hook (e.g., WBTC dust)
-     * @param amount Amount of token to swap
-     * @param minStablecoinOut Minimum stablecoin to receive
-     * @param swapAggregator DEX aggregator address
-     * @param swapData Swap calldata from aggregator
-     */
-    function rescueAndSwapHookTokenToStablecoin(
-        address tokenIn,
-        uint256 amount,
-        uint256 minStablecoinOut,
-        address swapAggregator,
-        bytes calldata swapData
-    ) external onlyLiquidityManager nonReentrant {
-        if (amount == 0) revert InvalidAmount();
-        if (address(kodiakHook) == address(0)) revert KodiakHookNotSet();
-        if (tokenIn == address(0) || swapAggregator == address(0)) revert ZeroAddress();
-        
-        // Check stablecoin balance before
-        uint256 stablecoinBefore = _stablecoin.balanceOf(address(this));
-        
-        // Call hook to swap token to stablecoin and send to vault
-        kodiakHook.adminSwapAndReturnToVault(
-            tokenIn,
-            amount,
-            swapData,
-            swapAggregator
-        );
-        
-        // Check stablecoin received in vault
-        uint256 stablecoinAfter = _stablecoin.balanceOf(address(this));
-        uint256 stablecoinReceived = stablecoinAfter - stablecoinBefore;
-        
-        // Slippage check
-        if (stablecoinReceived < minStablecoinOut) revert SlippageTooHigh();
-        
-        emit HookTokenSwappedToStablecoin(tokenIn, amount, stablecoinReceived, block.timestamp);
-    }
-    
-    /**
-     * @notice Rescue non-stablecoin token from hook to vault (Reserve only)
-     * @dev Transfers WBTC from Reserve hook back to Reserve vault
-     * @param token Non-stablecoin token address (e.g., WBTC)
-     * @param amount Amount to rescue (0 = all)
-     */
-    function rescueTokenFromHook(
-        address token,
-        uint256 amount
-    ) external onlyLiquidityManager nonReentrant {
-        if (token == address(0)) revert ZeroAddress();
-        if (address(kodiakHook) == address(0)) revert KodiakHookNotSet();
-        
-        // Get token balance in hook
-        uint256 hookBalance = IERC20(token).balanceOf(address(kodiakHook));
-        
-        // If amount is 0, rescue all
-        uint256 rescueAmount = amount == 0 ? hookBalance : amount;
-        
-        if (rescueAmount == 0) revert InvalidAmount();
-        if (hookBalance < rescueAmount) revert InsufficientBalance();
-        
-        // Use hook's rescue function
-        kodiakHook.adminRescueTokens(token, address(this), rescueAmount);
-        
-        emit TokenRescuedFromHook(token, rescueAmount, block.timestamp);
-    }
-    
-    /**
-     * @notice Exit LP position to stablecoin or non-stablecoin (Reserve only)
-     * @dev Liquidates LP from hook and swaps to desired token
-     * @param lpAmount Amount of LP to exit (0 = all)
-     * @param tokenOut Desired output token (HONEY or WBTC)
-     * @param minTokenOut Minimum tokens to receive
-     * @param swapAggregator DEX aggregator address  
-     * @param swapData Swap calldata from aggregator
-     */
-     
-    function exitLPToToken(
-        uint256 lpAmount,
-        address tokenOut,
-        uint256 minTokenOut,
-        address swapAggregator,
-        bytes calldata swapData
-    ) external onlyLiquidityManager nonReentrant {
-        if (tokenOut == address(0)) revert ZeroAddress();
-        if (address(kodiakHook) == address(0)) revert KodiakHookNotSet();
-        
-        // Get LP balance if amount is 0
-        if (lpAmount == 0) {
-            lpAmount = kodiakHook.getIslandLPBalance();
+    function executeReserveAction(ReserveAction action, address tokenA, address tokenB, uint256 amount, uint256 minOut, address agg0, bytes calldata data0, address agg1, bytes calldata data1) external onlyLiquidityManager nonReentrant {
+        if (action == ReserveAction.InvestKodiak) {
+            // investInKodiak: tokenA=island, tokenB=token
+            if (amount == 0) revert InvalidAmount();
+            if (address(kodiakHook) == address(0)) revert KodiakHookNotSet();
+            if (IERC20(tokenB).balanceOf(address(this)) < amount) revert InsufficientBalance();
+            uint256 lpBefore = kodiakHook.getIslandLPBalance();
+            IERC20(tokenB).safeTransfer(address(kodiakHook), amount);
+            kodiakHook.onAfterDepositWithSwaps(amount, agg0, data0, agg1, data1);
+            uint256 lpReceived = kodiakHook.getIslandLPBalance() - lpBefore;
+            if (lpReceived < minOut) revert SlippageTooHigh();
+            emit KodiakInvestment(tokenA, tokenB, amount, lpReceived, block.timestamp);
+        } else if (action == ReserveAction.SwapStable) {
+            // swapStablecoinToToken: tokenA=tokenOut
+            if (amount == 0) revert InvalidAmount();
+            if (tokenA == address(0) || agg0 == address(0)) revert ZeroAddress();
+            if (_stablecoin.balanceOf(address(this)) < amount) revert InsufficientBalance();
+            uint256 before = IERC20(tokenA).balanceOf(address(this));
+            _stablecoin.forceApprove(agg0, amount);
+            (bool ok,) = agg0.call(data0);
+            if (!ok) revert SlippageTooHigh();
+            uint256 received = IERC20(tokenA).balanceOf(address(this)) - before;
+            if (received < minOut) revert SlippageTooHigh();
+            _stablecoin.forceApprove(agg0, 0);
+            emit StablecoinSwappedToToken(address(_stablecoin), tokenA, amount, received, block.timestamp);
+        } else if (action == ReserveAction.RescueAndSwap) {
+            // rescueAndSwapHookTokenToStablecoin: tokenA=tokenIn
+            if (amount == 0) revert InvalidAmount();
+            if (address(kodiakHook) == address(0)) revert KodiakHookNotSet();
+            if (tokenA == address(0) || agg0 == address(0)) revert ZeroAddress();
+            uint256 before = _stablecoin.balanceOf(address(this));
+            kodiakHook.adminSwapAndReturnToVault(tokenA, amount, data0, agg0);
+            uint256 received = _stablecoin.balanceOf(address(this)) - before;
+            if (received < minOut) revert SlippageTooHigh();
+            emit HookTokenSwappedToStablecoin(tokenA, amount, received, block.timestamp);
+        } else if (action == ReserveAction.RescueToken) {
+            // rescueTokenFromHook: tokenA=token, amount=0 means all
+            if (tokenA == address(0)) revert ZeroAddress();
+            if (address(kodiakHook) == address(0)) revert KodiakHookNotSet();
+            uint256 hookBal = IERC20(tokenA).balanceOf(address(kodiakHook));
+            uint256 amt = amount == 0 ? hookBal : amount;
+            if (amt == 0 || hookBal < amt) revert InsufficientBalance();
+            kodiakHook.adminRescueTokens(tokenA, address(this), amt);
+            emit TokenRescuedFromHook(tokenA, amt, block.timestamp);
+        } else if (action == ReserveAction.ExitLP) {
+            // exitLPToToken: tokenA=tokenOut, amount=lpAmount (0 means all)
+            if (tokenA == address(0)) revert ZeroAddress();
+            if (address(kodiakHook) == address(0)) revert KodiakHookNotSet();
+            uint256 lp = amount == 0 ? kodiakHook.getIslandLPBalance() : amount;
+            if (lp == 0) revert InvalidAmount();
+            uint256 before = IERC20(tokenA).balanceOf(address(this));
+            kodiakHook.adminLiquidateAll(data0, agg0);
+            uint256 received = IERC20(tokenA).balanceOf(address(this)) - before;
+            if (received < minOut) revert SlippageTooHigh();
+            emit LPExitedToToken(lp, tokenA, received, block.timestamp);
         }
-        
-        if (lpAmount == 0) revert InvalidAmount();
-        
-        // Check token balance before
-        uint256 tokenBefore = IERC20(tokenOut).balanceOf(address(this));
-        
-        // Use hook's adminLiquidateAll to exit LP and swap
-        kodiakHook.adminLiquidateAll(swapData, swapAggregator);
-        
-        // Check tokens received
-        uint256 tokenAfter = IERC20(tokenOut).balanceOf(address(this));
-        uint256 tokenReceived = tokenAfter - tokenBefore;
-        
-        // Slippage check
-        if (tokenReceived < minTokenOut) revert SlippageTooHigh();
-        
-        emit LPExitedToToken(lpAmount, tokenOut, tokenReceived, block.timestamp);
     }
  
 
     
     
-    /**
-     * @notice Hook after value update to track monthly returns
-     */
     function _afterValueUpdate(uint256 oldValue, uint256 newValue) internal virtual override {
         _lastMonthValue = oldValue;
-        emit ReserveRebaseExecuted(newValue, effectiveMonthlyReturn());
+        int256 ret = oldValue == 0 ? int256(0) : (int256(newValue) - int256(oldValue)) * int256(MathLib.PRECISION) / int256(oldValue);
+        emit ReserveRebaseExecuted(newValue, ret);
     }
 }

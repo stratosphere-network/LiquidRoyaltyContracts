@@ -289,6 +289,10 @@ contract ConcreteJuniorVault is JuniorVault {
         _status = status;
     }
     
+    function _getRewardVault() internal view override returns (IRewardVault) {
+        return _rewardVault;
+    }
+    
     /// @dev Error for reward vault not set
     error RewardVaultNotSet();
     error InvalidAction();

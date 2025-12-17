@@ -14,6 +14,8 @@ import {AdminControlled} from "./AdminControlled.sol";
 import {IKodiakVaultHook} from "../integrations/IKodiakVaultHook.sol";
 import {IKodiakIslandRouter} from "../integrations/IKodiakIslandRouter.sol";
 import {IKodiakIsland} from "../integrations/IKodiakIsland.sol";
+import {IRewardVault} from "../integrations/IRewardVault.sol";
+import {Math} from "@openzeppelin/contracts/utils/math/Math.sol";
 
 /**
  * @title BaseVault
@@ -45,6 +47,9 @@ abstract contract BaseVault is ERC4626Upgradeable, IVault, AdminControlled, UUPS
     /// @dev Virtual functions for reentrancy guard (implemented in concrete contracts)
     function _getReentrancyStatus() internal view virtual returns (uint256);
     function _setReentrancyStatus(uint256 status) internal virtual;
+    
+    /// @dev Virtual function to get reward vault (implemented in concrete contracts)
+    function _getRewardVault() internal view virtual returns (IRewardVault);
     
     /// @dev Struct for LP holdings data
     struct LPHolding {
@@ -211,99 +216,40 @@ abstract contract BaseVault is ERC4626Upgradeable, IVault, AdminControlled, UUPS
     }
     
 
-    /**
-     * @notice Add LP pool/protocol/Kodiak Island to whitelist
-     * @dev Only admin can whitelist Liquidity Pools/Protocols/Kodiak Islands
-     * @param lp Address of Liquidity Pool/Protocol/Kodiak Island to whitelist
-     */
-    function addWhitelistedLP(address lp) external onlyAdmin {
-        if (lp == address(0)) revert AdminControlled.ZeroAddress();
-        if (_isWhitelistedLP[lp]) revert LPAlreadyWhitelisted();
-         
-        _whitelistedLPs.push(lp);
-        _isWhitelistedLP[lp] = true;
-        
-        emit WhitelistedLPAdded(lp);
-    }
-
-    /**
-     * @notice Remove LP pool/protocol/Kodiak Island from whitelist
-     * @dev Only admin can remove Liquidity Pools/Protocols/Kodiak Islands
-     * @param lp Address of Liquidity Pool/Protocol/Kodiak Island to remove
-     */
-    function removeWhitelistedLP(address lp) external onlyAdmin {
-        if (lp == address(0)) revert AdminControlled.ZeroAddress();
-        if (!_isWhitelistedLP[lp]) revert WhitelistedLPNotFound();
-        
-        _removeWhitelistedLPInternal(lp);
-        
-        emit WhitelistedLPRemoved(lp);
+    /// @dev Whitelist actions
+    enum WhitelistAction { ADD_LP, REMOVE_LP, ADD_LP_TOKEN, REMOVE_LP_TOKEN }
+    
+    /// @notice Consolidated whitelist management
+    function executeWhitelistAction(WhitelistAction action, address target) external onlyAdmin {
+        if (target == address(0)) revert AdminControlled.ZeroAddress();
+        if (action == WhitelistAction.ADD_LP) {
+            if (_isWhitelistedLP[target]) revert LPAlreadyWhitelisted();
+            _whitelistedLPs.push(target); _isWhitelistedLP[target] = true; emit WhitelistedLPAdded(target);
+        } else if (action == WhitelistAction.REMOVE_LP) {
+            if (!_isWhitelistedLP[target]) revert WhitelistedLPNotFound();
+            _removeFromWhitelist(target, false); emit WhitelistedLPRemoved(target);
+        } else if (action == WhitelistAction.ADD_LP_TOKEN) {
+            if (_isWhitelistedLPToken[target]) revert LPAlreadyWhitelisted();
+            _whitelistedLPTokens.push(target); _isWhitelistedLPToken[target] = true; emit WhitelistedLPTokenAdded(target);
+        } else if (action == WhitelistAction.REMOVE_LP_TOKEN) {
+            if (!_isWhitelistedLPToken[target]) revert WhitelistedLPNotFound();
+            _removeFromWhitelist(target, true); emit WhitelistedLPTokenRemoved(target);
+        }
     }
     
-    /**
-     * @dev Internal helper to remove LP from whitelist
-     * @param lp Address to remove
-     */
-    function _removeWhitelistedLPInternal(address lp) internal {
-        // Find and remove from array using swap-and-pop
-        for (uint256 i = 0; i < _whitelistedLPs.length; i++) {
-            if (_whitelistedLPs[i] == lp) {
-                _whitelistedLPs[i] = _whitelistedLPs[_whitelistedLPs.length - 1];
-                _whitelistedLPs.pop();
-                break;
+    /// @dev Remove from whitelist (isToken=false for LP, true for LPToken)
+    function _removeFromWhitelist(address addr, bool isToken) internal {
+        if (isToken) {
+            for (uint256 i = 0; i < _whitelistedLPTokens.length; i++) {
+                if (_whitelistedLPTokens[i] == addr) { _whitelistedLPTokens[i] = _whitelistedLPTokens[_whitelistedLPTokens.length - 1]; _whitelistedLPTokens.pop(); break; }
             }
-        }
-        
-        // Remove from mapping
-        _isWhitelistedLP[lp] = false;
-    }
-
-
-    /**
-     * @notice Add LP token to whitelist
-     * @dev Only admin can whitelist LPs
-     * @param lpToken Address to whitelist
-     */
-    function addWhitelistedLPToken(address lpToken) external onlyAdmin {
-        if (lpToken == address(0)) revert AdminControlled.ZeroAddress();
-        if (_isWhitelistedLPToken[lpToken]) revert LPAlreadyWhitelisted();
-        
-        _whitelistedLPTokens.push(lpToken);
-        _isWhitelistedLPToken[lpToken] = true;
-        
-        emit WhitelistedLPTokenAdded(lpToken);
-    }
-
-    /**
-     * @notice Remove LPToken from whitelist
-     * @dev Only admin can remove LPs
-     * @param lpToken Address to remove
-     */
-    function removeWhitelistedLPToken(address lpToken) external onlyAdmin {
-        if (lpToken == address(0)) revert AdminControlled.ZeroAddress();
-        if (!_isWhitelistedLPToken[lpToken]) revert WhitelistedLPNotFound();
-        
-        _removeWhitelistedLPTokenInternal(lpToken);
-        
-        emit WhitelistedLPTokenRemoved(lpToken);
-    }
-    
-    /**
-     * @dev Internal helper to remove LP token from whitelist
-     * @param lpToken Address to remove
-     */
-    function _removeWhitelistedLPTokenInternal(address lpToken) internal {
-        // Find and remove from array using swap-and-pop
-        for (uint256 i = 0; i < _whitelistedLPTokens.length; i++) {
-            if (_whitelistedLPTokens[i] == lpToken) {
-                _whitelistedLPTokens[i] = _whitelistedLPTokens[_whitelistedLPTokens.length - 1];
-                _whitelistedLPTokens.pop();
-                break;
+            _isWhitelistedLPToken[addr] = false;
+        } else {
+            for (uint256 i = 0; i < _whitelistedLPs.length; i++) {
+                if (_whitelistedLPs[i] == addr) { _whitelistedLPs[i] = _whitelistedLPs[_whitelistedLPs.length - 1]; _whitelistedLPs.pop(); break; }
             }
+            _isWhitelistedLP[addr] = false;
         }
-        
-        // Remove from mapping
-        _isWhitelistedLPToken[lpToken] = false;
     }
     
     /**
@@ -370,7 +316,7 @@ abstract contract BaseVault is ERC4626Upgradeable, IVault, AdminControlled, UUPS
         if (address(kodiakHook) != address(0)) {
             // Remove from whitelist
             if (_isWhitelistedLP[address(kodiakHook)]) {
-                _removeWhitelistedLPInternal(address(kodiakHook));
+                _removeFromWhitelist(address(kodiakHook), false);
             }
         }
         
@@ -392,112 +338,29 @@ abstract contract BaseVault is ERC4626Upgradeable, IVault, AdminControlled, UUPS
         emit KodiakHookUpdated(hook);
     }
     
-    /**
-     * @notice Deploy funds to Kodiak with verified swap parameters
-     * @dev Admin-only, secure deployment with slippage protection
-     * @param amount Amount of stablecoins to deploy
-     * @param minLPTokens Minimum LP tokens to receive (slippage protection)
-     * @param swapToToken0Aggregator DEX aggregator for token0 swap
-     * @param swapToToken0Data Swap calldata for token0
-     * @param swapToToken1Aggregator DEX aggregator for token1 swap
-     * @param swapToToken1Data Swap calldata for token1
-     */
+    /// @notice Consolidated deploy to Kodiak (amount=0 means sweep all)
     function deployToKodiak(
-        uint256 amount,
-        uint256 minLPTokens,
-        address swapToToken0Aggregator,
-        bytes calldata swapToToken0Data,
-        address swapToToken1Aggregator,
-        bytes calldata swapToToken1Data
-    ) external onlyLiquidityManager nonReentrant {
-        if (amount == 0) revert InvalidAmount();
-        if (address(kodiakHook) == address(0)) revert KodiakHookNotSet();
-        
-        // Check vault has enough idle stablecoin
-        uint256 vaultBalance = _stablecoin.balanceOf(address(this));
-        if (vaultBalance < amount) revert InsufficientBalance();
-        
-        // Record LP balance before deployment
-        uint256 lpBefore = kodiakHook.getIslandLPBalance();
-        
-        // Transfer stablecoins to hook
-        _stablecoin.safeTransfer(address(kodiakHook), amount);
-        
-        // Deploy to Kodiak with verified swap params
-        kodiakHook.onAfterDepositWithSwaps(
-            amount,
-            swapToToken0Aggregator,
-            swapToToken0Data,
-            swapToToken1Aggregator,
-            swapToToken1Data
-        );
-        
-        // Verify slippage protection
-        uint256 lpAfter = kodiakHook.getIslandLPBalance();
-        uint256 lpReceived = lpAfter - lpBefore;
-        if (lpReceived < minLPTokens) revert SlippageTooHigh();
-        
-        emit KodiakDeployment(amount, lpReceived, block.timestamp);
-    }
-    
-    /**
-     * @notice Deploy all idle stablecoins to Kodiak (sweep dust)
-     * @dev Convenience function to deploy entire vault balance without specifying amount
-     * @dev N10 FIX: Protects against stale slippage params when deposits happen in same block
-     * @param expectedIdle Expected idle balance when tx was prepared (prevents stale minLPTokens)
-     * @param maxDeviation Maximum allowed deviation from expectedIdle in basis points (e.g., 100 = 1%)
-     * @param minLPTokens Minimum LP tokens to receive (slippage protection)
-     * @param swapToToken0Aggregator DEX aggregator for token0 swap
-     * @param swapToToken0Data Swap calldata for token0
-     * @param swapToToken1Aggregator DEX aggregator for token1 swap
-     * @param swapToToken1Data Swap calldata for token1
-     */
-    function sweepToKodiak(
-        uint256 expectedIdle,
-        uint256 maxDeviation,
-        uint256 minLPTokens,
-        address swapToToken0Aggregator,
-        bytes calldata swapToToken0Data,
-        address swapToToken1Aggregator,
-        bytes calldata swapToToken1Data
+        uint256 amount, uint256 minLPTokens, uint256 expectedIdle, uint256 maxDeviation,
+        address agg0, bytes calldata data0, address agg1, bytes calldata data1
     ) external onlyLiquidityManager nonReentrant {
         if (address(kodiakHook) == address(0)) revert KodiakHookNotSet();
-        
-        // Get all idle stablecoin balance
-        uint256 idle = _stablecoin.balanceOf(address(this));
-        if (idle == 0) revert InvalidAmount();
-        
-        // N10 FIX: Ensure idle balance hasn't changed significantly since tx preparation
-        // This prevents stale minLPTokens from being used when deposits happen in same block
-        if (idle != expectedIdle) {
-            uint256 deviation = idle > expectedIdle ? idle - expectedIdle : expectedIdle - idle;
-            uint256 maxAllowedDeviation = (expectedIdle * maxDeviation) / 10000;
-            if (deviation > maxAllowedDeviation) {
-                revert IdleBalanceDeviation();
+        uint256 deployAmt = amount;
+        if (amount == 0) {
+            deployAmt = _stablecoin.balanceOf(address(this));
+            if (deployAmt == 0) revert InvalidAmount();
+            if (deployAmt != expectedIdle) {
+                uint256 dev = deployAmt > expectedIdle ? deployAmt - expectedIdle : expectedIdle - deployAmt;
+                if (dev > (expectedIdle * maxDeviation) / 10000) revert IdleBalanceDeviation();
             }
+        } else {
+            if (_stablecoin.balanceOf(address(this)) < amount) revert InsufficientBalance();
         }
-        
-        // Deploy all idle funds
         uint256 lpBefore = kodiakHook.getIslandLPBalance();
-        
-        // Transfer all idle stablecoins to hook
-        _stablecoin.safeTransfer(address(kodiakHook), idle);
-        
-        // Deploy to Kodiak with verified swap params
-        kodiakHook.onAfterDepositWithSwaps(
-            idle,
-            swapToToken0Aggregator,
-            swapToToken0Data,
-            swapToToken1Aggregator,
-            swapToToken1Data
-        );
-        
-        // Verify slippage protection
-        uint256 lpAfter = kodiakHook.getIslandLPBalance();
-        uint256 lpReceived = lpAfter - lpBefore;
+        _stablecoin.safeTransfer(address(kodiakHook), deployAmt);
+        kodiakHook.onAfterDepositWithSwaps(deployAmt, agg0, data0, agg1, data1);
+        uint256 lpReceived = kodiakHook.getIslandLPBalance() - lpBefore;
         if (lpReceived < minLPTokens) revert SlippageTooHigh();
-        
-        emit KodiakDeployment(idle, lpReceived, block.timestamp);
+        emit KodiakDeployment(deployAmt, lpReceived, block.timestamp);
     }
 
     /**
@@ -688,50 +551,25 @@ abstract contract BaseVault is ERC4626Upgradeable, IVault, AdminControlled, UUPS
     // Keeper Functions
     // ============================================
     
-    /**
-     * @notice Update vault value based on off-chain profit calculation
-     * @dev Reference: Instructions - Monthly Rebase Flow (Step 2)
-     * Formula: V_new = V_old × (1 + profitBps / 10000)
-     * @param profitBps Profit/loss in basis points
-     */
-    function updateVaultValue(int256 profitBps) public virtual onlyPriceFeedManager {
-        // Validate reasonable range
-        if (profitBps < MIN_PROFIT_BPS || profitBps > MAX_PROFIT_BPS) {
-            revert InvalidProfitRange();
-        }
-        
+    /// @dev Actions for vault value updates
+    enum VaultValueAction { UPDATE_BY_BPS, SET_ABSOLUTE }
+    
+    /// @notice Consolidated vault value update (by BPS or absolute)
+    function executeVaultValueAction(VaultValueAction action, int256 value) public virtual onlyPriceFeedManager {
         uint256 oldValue = _vaultValue;
-        
-        // Apply profit/loss: V_new = V_old × (1 + profitBps / 10000)
-        _vaultValue = MathLib.applyPercentage(oldValue, profitBps);
-        _lastUpdateTime = block.timestamp;
-        // Hook for derived contracts to execute post-update logic
-        _afterValueUpdate(oldValue, _vaultValue);
-         emit VaultValueUpdated(oldValue, _vaultValue, profitBps);
-    }
-
-    /**
-     * @notice Directly set vault value (no BPS calculation)
-     * @dev Simple admin function to set exact vault value
-     * @param newValue New vault value in wei
-     */
-    function setVaultValue(uint256 newValue) public virtual onlyPriceFeedManager {
-        // Allow 0 to enable truly empty vault state for first deposit
-        uint256 oldValue = _vaultValue;
-        _vaultValue = newValue;
-        _lastUpdateTime = block.timestamp;
-        
-        // Calculate BPS for event logging
         int256 bps = 0;
-        if (oldValue > 0) {
-            // PRECISION FIX: Avoid potential overflow/underflow by careful ordering
-            bps = int256((newValue * 10000) / oldValue) - 10000;
+        if (action == VaultValueAction.UPDATE_BY_BPS) {
+            if (value < MIN_PROFIT_BPS || value > MAX_PROFIT_BPS) revert InvalidProfitRange();
+            _vaultValue = MathLib.applyPercentage(oldValue, value);
+            bps = value;
+        } else {
+            if (value < 0) revert InvalidAmount();
+            _vaultValue = uint256(value);
+            if (oldValue > 0) bps = int256((_vaultValue * 10000) / oldValue) - 10000;
         }
-        
-        // Hook for derived contracts to execute post-update logic
+        _lastUpdateTime = block.timestamp;
         _afterValueUpdate(oldValue, _vaultValue);
-
-          emit VaultValueUpdated(oldValue, _vaultValue, bps);
+        emit VaultValueUpdated(oldValue, _vaultValue, bps);
     }
     
     /**
@@ -769,7 +607,7 @@ abstract contract BaseVault is ERC4626Upgradeable, IVault, AdminControlled, UUPS
         // Q5 FIX: Account for LP token decimals
         // lpPrice is in 18 decimals, representing how much stablecoin per LP token
         uint8 lpDecimals = IERC20Metadata(lpToken).decimals();
-        uint256 normalizedAmount = _normalizeToDecimals(amount, lpDecimals, 18);
+        uint256 normalizedAmount = MathLib.normalizeDecimals(amount, lpDecimals, 18);
         uint256 valueAdded = (normalizedAmount * lpPrice) / 1e18;
         
         // Step 4: Mint shares to caller (seeder)
@@ -857,70 +695,50 @@ abstract contract BaseVault is ERC4626Upgradeable, IVault, AdminControlled, UUPS
         }
     }
     
-    /**
-     * @notice Ensures sufficient liquidity by freeing LP tokens if needed
-     * @dev DRY Refactor: Extracted from multiple withdraw functions to eliminate code duplication
-     * @dev Iteratively liquidates LP tokens up to 3 times with slippage protection
-     * @param amountNeeded Amount of stablecoin needed
-     * @return totalFreed Total amount of stablecoin freed from LP liquidation
-     */
+    /// @dev Get LP conversion data for USD amount
+    function _getLpConversionData(uint256 usdAmt) internal view returns (uint256 lpTokens, uint256 lpValUsd, uint256 stableInPool, uint256 lpSupply) {
+        if (address(kodiakHook) == address(0)) return (0, 0, 0, 0);
+        try kodiakHook.island() returns (IKodiakIsland island) {
+            if (address(island) == address(0)) return (0, 0, 0, 0);
+            (, stableInPool) = island.getUnderlyingBalances();
+            lpSupply = island.totalSupply();
+            if (lpSupply == 0 || stableInPool == 0) return (0, 0, 0, 0);
+            lpValUsd = Math.mulDiv(kodiakHook.getIslandLPBalance(), stableInPool, lpSupply);
+            lpTokens = Math.mulDiv(usdAmt, lpSupply, stableInPool) * 102 / 100;
+        } catch { return (0, 0, 0, 0); }
+    }
+    
+    /// @notice Ensures liquidity by freeing LP if needed (up to 3 attempts)
     function _ensureLiquidityAvailable(uint256 amountNeeded) internal returns (uint256 totalFreed) {
-        uint256 maxAttempts = 3;
-        totalFreed = 0;
-        
-        for (uint256 i = 0; i < maxAttempts; i++) {
-            uint256 vaultBalance = _stablecoin.balanceOf(address(this));
+        for (uint256 i = 0; i < 3; i++) {
+            uint256 bal = _stablecoin.balanceOf(address(this));
+            if (bal >= amountNeeded) break;
+            if (address(kodiakHook) == address(0)) revert KodiakHookNotSet();
             
-            // Check if we have enough liquidity
-            if (vaultBalance >= amountNeeded) {
-                break;
+            uint256 needed = amountNeeded - bal;
+            uint256 minExp = _calculateMinExpectedFromLP(needed);
+            
+            (uint256 lpNeeded, uint256 lpVal, uint256 stablePool, uint256 lpSupply) = _getLpConversionData(needed);
+            if (lpVal < needed && lpNeeded > 0 && stablePool > 0 && lpSupply > 0) {
+                uint256 lpToGet = Math.mulDiv(needed - lpVal, lpSupply, stablePool) * 102 / 100;
+                IRewardVault rv = _getRewardVault();
+                if (address(rv) != address(0)) {
+                    uint256 staked = rv.getTotalDelegateStaked(admin());
+                    uint256 toWithdraw = lpToGet > staked ? staked : lpToGet;
+                    if (toWithdraw > 0) { rv.delegateWithdraw(admin(), toWithdraw); IERC20(address(kodiakHook.island())).transfer(address(kodiakHook), toWithdraw); }
+                }
             }
             
-            // Ensure hook is set
-            if (address(kodiakHook) == address(0)) {
-                revert KodiakHookNotSet();
-            }
-            
-            // Calculate deficit
-            uint256 needed = amountNeeded - vaultBalance;
-            uint256 balanceBefore = vaultBalance;
-            
-            // VN003 FIX: Calculate minimum expected amount with slippage tolerance
-            uint256 minExpected = _calculateMinExpectedFromLP(needed);
-            
-            // Attempt to liquidate LP tokens
             try kodiakHook.liquidateLPForAmount(needed) {
-                uint256 balanceAfter = _stablecoin.balanceOf(address(this));
-                uint256 freedThisRound = balanceAfter > balanceBefore ? balanceAfter - balanceBefore : 0;
-                totalFreed += freedThisRound;
-                
-                // VN003 FIX: Slippage protection
-                if (minExpected > 0 && freedThisRound < minExpected) {
-                    revert SlippageTooHigh();
-                }
-                
-                emit LPLiquidationExecuted(needed, freedThisRound, minExpected);
-                
-                // Stop if no progress
-                if (freedThisRound == 0) {
-                    break;
-                }
-            } catch {
-                // Stop on liquidation failure
-                break;
-            }
+                uint256 freed = _stablecoin.balanceOf(address(this)) - bal;
+                totalFreed += freed;
+                if (minExp > 0 && freed < minExp) revert SlippageTooHigh();
+                emit LPLiquidationExecuted(needed, freed, minExp);
+                if (freed == 0) break;
+            } catch { break; }
         }
-        
-        // Final liquidity check
-        uint256 finalBalance = _stablecoin.balanceOf(address(this));
-        if (finalBalance < amountNeeded) {
-            revert InsufficientLiquidity();
-        }
-        
-        // Emit summary event if liquidity was freed
-        if (totalFreed > 0) {
-            emit LiquidityFreedForWithdrawal(amountNeeded, totalFreed);
-        }
+        if (_stablecoin.balanceOf(address(this)) < amountNeeded) revert InsufficientLiquidity();
+        if (totalFreed > 0) emit LiquidityFreedForWithdrawal(amountNeeded, totalFreed);
     }
     
     /**
@@ -974,36 +792,5 @@ abstract contract BaseVault is ERC4626Upgradeable, IVault, AdminControlled, UUPS
     // Internal Hooks
     // ============================================
     
-    /**
-     * @notice Hook called after vault value update
-     * @dev Override in derived contracts for custom logic
-     */
-    function _afterValueUpdate(uint256 oldValue, uint256 newValue) internal virtual {
-        // Default: do nothing
-        // Override in Senior vault to trigger rebase
-    }
-    
-    /**
-     * @notice Normalize token amount to target decimals (Q5 FIX)
-     * @dev Handles tokens with different decimals (WBTC=8, USDC=6, LP=18, etc.)
-     * @param amount Amount in source decimals
-     * @param fromDecimals Source token decimals
-     * @param toDecimals Target decimals
-     * @return Normalized amount in target decimals
-     */
-    function _normalizeToDecimals(
-        uint256 amount,
-        uint8 fromDecimals,
-        uint8 toDecimals
-    ) internal pure virtual returns (uint256) {
-        if (fromDecimals == toDecimals) {
-            return amount;
-        } else if (fromDecimals < toDecimals) {
-            // Scale up: amount * 10^(toDecimals - fromDecimals)
-            return amount * (10 ** (toDecimals - fromDecimals));
-        } else {
-            // Scale down: amount / 10^(fromDecimals - toDecimals)
-            return amount / (10 ** (fromDecimals - toDecimals));
-        }
-    }
+    function _afterValueUpdate(uint256 oldValue, uint256 newValue) internal virtual { }
 }
