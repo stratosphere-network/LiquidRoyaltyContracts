@@ -1,7 +1,1 @@
-=================================================
-  DEPLOYMENT COMPLETE
-  =================================================
-  Senior:   0xc475E6804917e4e6eb39f264B99E020d28F7FDd4
-  Junior:   0x5Bdf9c1D0FddE9f43820EaA2B8E33E80A2aCF5Ae
-  Reserve:  0x4c8cD81E5DE8D63e9E48155324f8dAb383576dc0
-  =================================================
+## Contracts for: https://liquidroyalty.com
