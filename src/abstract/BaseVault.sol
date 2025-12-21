@@ -93,6 +93,10 @@ abstract contract BaseVault is ERC4626Upgradeable, IVault, AdminControlled, UUPS
     /// @dev Slippage protection (hardcoded to avoid storage changes)
     uint256 internal constant LP_LIQUIDATION_SLIPPAGE_BPS = 200;  // 2% slippage tolerance
     
+    /// @dev Timelock thresholds - large changes require timelock
+    uint256 internal constant LARGE_VALUE_CHANGE_BPS = 500;  // 5% - value changes above this require timelock
+    uint256 internal constant LARGE_SEED_BPS = 1000;         // 10% - seeds above this % of vault value require timelock
+    
     /// @dev Events
     event WhitelistedLPAdded(address indexed lp);
     event WhitelistedLPRemoved(address indexed lp);
@@ -555,18 +559,39 @@ abstract contract BaseVault is ERC4626Upgradeable, IVault, AdminControlled, UUPS
     enum VaultValueAction { UPDATE_BY_BPS, SET_ABSOLUTE }
     
     /// @notice Consolidated vault value update (by BPS or absolute)
-    function executeVaultValueAction(VaultValueAction action, int256 value) public virtual onlyPriceFeedManager {
+    /// @dev Large changes (> LARGE_VALUE_CHANGE_BPS) require timelock if set
+    function executeVaultValueAction(VaultValueAction action, int256 value) public virtual {
         uint256 oldValue = _vaultValue;
         int256 bps = 0;
+        
+        // Calculate the effective BPS change
         if (action == VaultValueAction.UPDATE_BY_BPS) {
             if (value < MIN_PROFIT_BPS || value > MAX_PROFIT_BPS) revert InvalidProfitRange();
-            _vaultValue = MathLib.applyPercentage(oldValue, value);
             bps = value;
         } else {
             if (value < 0) revert InvalidAmount();
-            _vaultValue = uint256(value);
-            if (oldValue > 0) bps = int256((_vaultValue * 10000) / oldValue) - 10000;
+            if (oldValue > 0) {
+                bps = int256((uint256(value) * 10000) / oldValue) - 10000;
+            }
         }
+        
+        // Check authorization based on change size
+        uint256 absBps = bps >= 0 ? uint256(bps) : uint256(-bps);
+        if (absBps > LARGE_VALUE_CHANGE_BPS && timelock() != address(0)) {
+            // Large change with timelock set - must come from timelock
+            _requireTimelock();
+        } else {
+            // Small change or no timelock - priceFeedManager can execute directly
+            if (msg.sender != priceFeedManager()) revert OnlyPriceFeedManager();
+        }
+        
+        // Apply the change
+        if (action == VaultValueAction.UPDATE_BY_BPS) {
+            _vaultValue = MathLib.applyPercentage(oldValue, value);
+        } else {
+            _vaultValue = uint256(value);
+        }
+        
         _lastUpdateTime = block.timestamp;
         _afterValueUpdate(oldValue, _vaultValue);
         emit VaultValueUpdated(oldValue, _vaultValue, bps);
@@ -588,42 +613,50 @@ abstract contract BaseVault is ERC4626Upgradeable, IVault, AdminControlled, UUPS
      * 6. Emit VaultSeeded event
      */
 
+    /// @dev Large seeds (> LARGE_SEED_BPS of vault value) require timelock if set
     function seedVault(
         address lpToken,
         uint256 amount,
         uint256 lpPrice
-    ) external onlySeeder nonReentrant {
+    ) external nonReentrant {
         // Validation
         if (lpToken == address(0)) revert AdminControlled.ZeroAddress();
         if (amount == 0) revert InvalidAmount();
         if (lpPrice == 0) revert InvalidLPPrice();
         if (address(kodiakHook) == address(0)) revert KodiakHookNotSet();
-          if (lpToken != address(kodiakHook.island())) revert InvalidLPToken();
+        if (lpToken != address(kodiakHook.island())) revert InvalidLPToken();
         
-        // Step 1: Transfer LP tokens from caller (seeder) to vault
-        IERC20(lpToken).safeTransferFrom(msg.sender, address(kodiakHook), amount);
-        
-        // Step 3: Calculate value = amount * lpPrice / 1e18
-        // Q5 FIX: Account for LP token decimals
-        // lpPrice is in 18 decimals, representing how much stablecoin per LP token
+        // Calculate seed value to check if it's a "large" seed
         uint8 lpDecimals = IERC20Metadata(lpToken).decimals();
         uint256 normalizedAmount = MathLib.normalizeDecimals(amount, lpDecimals, 18);
-        uint256 valueAdded = (normalizedAmount * lpPrice) / 1e18;
+        uint256 valueToAdd = (normalizedAmount * lpPrice) / 1e18;
         
-        // Step 4: Mint shares to caller (seeder)
-        // N1-1 FIX: Use ERC4626 standard previewDeposit() for share calculation
-        // This ensures consistency with normal deposit flow and reduces code duplication
-        uint256 sharesToMint = previewDeposit(valueAdded);
+        // Check authorization based on seed size relative to vault value
+        bool isLargeSeed = _vaultValue > 0 && (valueToAdd * 10000) / _vaultValue > LARGE_SEED_BPS;
+        if (isLargeSeed && timelock() != address(0)) {
+            // Large seed with timelock set - must come from timelock
+            _requireTimelock();
+        } else {
+            // Small seed or no timelock - seeder can execute directly
+            if (!isSeeder(msg.sender)) revert OnlySeeder();
+        }
+        
+        // Step 1: Transfer LP tokens from caller to hook
+        IERC20(lpToken).safeTransferFrom(msg.sender, address(kodiakHook), amount);
+        
+        // Step 2: Mint shares to caller
+        // valueToAdd already calculated above for timelock check
+        uint256 sharesToMint = previewDeposit(valueToAdd);
         
         // Mint shares directly (bypass normal deposit flow)
         _mint(msg.sender, sharesToMint);
         
-        // Step 5: Update vault value to include new LP value
-        _vaultValue += valueAdded;
+        // Step 3: Update vault value to include new LP value
+        _vaultValue += valueToAdd;
         _lastUpdateTime = block.timestamp;
         
-        // Step 6: Emit event
-        emit VaultSeeded(lpToken, msg.sender, amount, lpPrice, valueAdded, sharesToMint);
+        // Step 4: Emit event
+        emit VaultSeeded(lpToken, msg.sender, amount, lpPrice, valueToAdd, sharesToMint);
     }
     
  

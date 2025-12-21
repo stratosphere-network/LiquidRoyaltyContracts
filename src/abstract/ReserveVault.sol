@@ -127,17 +127,31 @@ abstract contract ReserveVault is BaseVault, IReserveVault {
     // ============================================
     
     /// @notice Seed Reserve with non-stablecoin token (e.g., WBTC)
-    function seedReserveWithToken(address token, uint256 amount, uint256 tokenPrice) external onlySeeder nonReentrant {
+    /// @dev Large seeds (> LARGE_SEED_BPS of vault value) require timelock if set
+    function seedReserveWithToken(address token, uint256 amount, uint256 tokenPrice) external nonReentrant {
         if (token == address(0)) revert ZeroAddress();
         if (amount == 0) revert InvalidAmount();
         if (tokenPrice == 0) revert InvalidTokenPrice();
+        
+        // Calculate seed value to check if it's a "large" seed
+        uint256 valueToAdd = (MathLib.normalizeDecimals(amount, IERC20Metadata(token).decimals(), 18) * tokenPrice) / 1e18;
+        
+        // Check authorization based on seed size relative to vault value
+        bool isLargeSeed = _vaultValue > 0 && (valueToAdd * 10000) / _vaultValue > LARGE_SEED_BPS;
+        if (isLargeSeed && timelock() != address(0)) {
+            // Large seed with timelock set - must come from timelock
+            _requireTimelock();
+        } else {
+            // Small seed or no timelock - seeder can execute directly
+            if (!isSeeder(msg.sender)) revert OnlySeeder();
+        }
+        
         IERC20(token).safeTransferFrom(msg.sender, address(this), amount);
-        uint256 valueAdded = (MathLib.normalizeDecimals(amount, IERC20Metadata(token).decimals(), 18) * tokenPrice) / 1e18;
-        uint256 shares = previewDeposit(valueAdded);
+        uint256 shares = previewDeposit(valueToAdd);
         _mint(msg.sender, shares);
-        _vaultValue += valueAdded;
+        _vaultValue += valueToAdd;
         _lastUpdateTime = block.timestamp;
-        emit ReserveSeededWithToken(token, msg.sender, amount, tokenPrice, valueAdded, shares);
+        emit ReserveSeededWithToken(token, msg.sender, amount, tokenPrice, valueToAdd, shares);
     }
     
     /// @notice Consolidated Reserve actions - use enum to select action, logic 100% same

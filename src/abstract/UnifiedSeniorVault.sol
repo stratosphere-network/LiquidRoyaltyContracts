@@ -145,6 +145,10 @@ abstract contract UnifiedSeniorVault is ISeniorVault, IERC20, AdminControlled, P
     int256 internal constant MIN_PROFIT_BPS = -5000;
     int256 internal constant MAX_PROFIT_BPS = 10000;
     
+    /// @dev Timelock thresholds - large changes require timelock
+    uint256 internal constant LARGE_VALUE_CHANGE_BPS = 500;  // 5% - value changes above this require timelock
+    uint256 internal constant LARGE_SEED_BPS = 1000;         // 10% - seeds above this % of vault value require timelock
+    
     /// @dev Events (ERC20 Transfer and Approval inherited from IERC20)
     event Rebase(uint256 indexed epoch, uint256 oldIndex, uint256 newIndex, uint256 newTotalSupply);
     event EmergencyWithdraw(address indexed to, uint256 amount);
@@ -367,43 +371,51 @@ abstract contract UnifiedSeniorVault is ISeniorVault, IERC20, AdminControlled, P
     
     /**
      * @notice Seed vault with LP tokens from caller
+     * @dev Large seeds (> LARGE_SEED_BPS of vault value) require timelock if set
      * @param lpToken Address of the LP token
      * @param amount Amount of LP tokens to seed
      * @param lpPrice Current LP token price (18 decimals)
-     * @dev Caller must have seeder role and approve this vault to transfer LP tokens first
-     * @dev Transfers LP to hook, calculates value, mints shares to caller
      */
     function seedVault(
         address lpToken,
         uint256 amount,
         uint256 lpPrice
-    ) external onlySeeder nonReentrant {
+    ) external nonReentrant {
         if (lpToken == address(0)) revert AdminControlled.ZeroAddress();
         if (amount == 0) revert InvalidAmount();
         if (lpPrice == 0) revert InvalidLPPrice();
         if (address(kodiakHook) == address(0)) revert KodiakHookNotSet();
         if (lpToken != address(kodiakHook.island())) revert InvalidLPToken();
         
-        // Transfer LP tokens from caller (seeder) to hook
-        IERC20(lpToken).safeTransferFrom(msg.sender, address(kodiakHook), amount);
-        
-        // Calculate value = amount * lpPrice / 1e18
-        // Account for LP token decimals
+        // Calculate seed value to check if it's a "large" seed
         uint8 lpDecimals = IERC20Metadata(lpToken).decimals();
         uint256 normalizedAmount = MathLib.normalizeDecimals(amount, lpDecimals, 18);
-        uint256 valueAdded = (normalizedAmount * lpPrice) / 1e18;
+        uint256 valueToAdd = (normalizedAmount * lpPrice) / 1e18;
         
-        // Mint tokens to caller (seeder) - use _mint which handles shares internally
-        _mint(msg.sender, valueAdded);
+        // Check authorization based on seed size relative to vault value
+        bool isLargeSeed = _vaultValue > 0 && (valueToAdd * 10000) / _vaultValue > LARGE_SEED_BPS;
+        if (isLargeSeed && timelock() != address(0)) {
+            // Large seed with timelock set - must come from timelock
+            _requireTimelock();
+        } else {
+            // Small seed or no timelock - seeder can execute directly
+            if (!isSeeder(msg.sender)) revert OnlySeeder();
+        }
+        
+        // Transfer LP tokens from caller to hook
+        IERC20(lpToken).safeTransferFrom(msg.sender, address(kodiakHook), amount);
+        
+        // Mint tokens to caller - use _mint which handles shares internally
+        _mint(msg.sender, valueToAdd);
         
         // Update vault value
-        _vaultValue += valueAdded;
+        _vaultValue += valueToAdd;
         _lastUpdateTime = block.timestamp;
         
         // Calculate shares for event
-        uint256 sharesToMint = MathLib.calculateSharesFromBalance(valueAdded, _rebaseIndex);
+        uint256 sharesToMint = MathLib.calculateSharesFromBalance(valueToAdd, _rebaseIndex);
         
-        emit VaultSeeded(lpToken, msg.sender, amount, lpPrice, valueAdded, sharesToMint);
+        emit VaultSeeded(lpToken, msg.sender, amount, lpPrice, valueToAdd, sharesToMint);
     }
     
     
@@ -590,42 +602,47 @@ abstract contract UnifiedSeniorVault is ISeniorVault, IERC20, AdminControlled, P
     
     /**
      * @notice Update vault value (consolidated: by BPS or absolute)
-     * @dev Consolidates updateVaultValue and setVaultValue to reduce contract size
+     * @dev Large changes (> LARGE_VALUE_CHANGE_BPS) require timelock if set
      * @param action UPDATE_BY_BPS (apply percentage) or SET_ABSOLUTE (set exact value)
      * @param value For UPDATE_BY_BPS: profitBps (int256, can be negative)
      *              For SET_ABSOLUTE: new absolute value (must be positive, cast to uint256)
      */
-    function executeVaultValueAction(VaultValueAction action, int256 value) public virtual onlyPriceFeedManager {
+    function executeVaultValueAction(VaultValueAction action, int256 value) public virtual {
         uint256 oldValue = _vaultValue;
+        int256 bps = 0;
         
+        // Calculate the effective BPS change
         if (action == VaultValueAction.UPDATE_BY_BPS) {
-            // value is profitBps (can be negative for losses)
             if (value < MIN_PROFIT_BPS || value > MAX_PROFIT_BPS) {
                 revert InvalidProfitRange();
             }
-            
-            uint256 newValue = MathLib.applyPercentage(oldValue, value);
-            _vaultValue = newValue;
-            _lastUpdateTime = block.timestamp;
-            
-            emit VaultValueUpdated(oldValue, _vaultValue, value);
-            
+            bps = value;
         } else if (action == VaultValueAction.SET_ABSOLUTE) {
-            // value is absolute value (must be positive)
             if (value < 0) revert InvalidAmount();
-            
-            uint256 newValue = uint256(value);
-            _vaultValue = newValue;
-            _lastUpdateTime = block.timestamp;
-            
-            // Calculate BPS for event logging
-            int256 bps = 0;
             if (oldValue > 0) {
-                bps = int256((newValue * 10000 / oldValue)) - 10000;
+                bps = int256((uint256(value) * 10000) / oldValue) - 10000;
             }
-            
-            emit VaultValueUpdated(oldValue, _vaultValue, bps);
         }
+        
+        // Check authorization based on change size
+        uint256 absBps = bps >= 0 ? uint256(bps) : uint256(-bps);
+        if (absBps > LARGE_VALUE_CHANGE_BPS && timelock() != address(0)) {
+            // Large change with timelock set - must come from timelock
+            _requireTimelock();
+        } else {
+            // Small change or no timelock - priceFeedManager can execute directly
+            if (msg.sender != priceFeedManager()) revert OnlyPriceFeedManager();
+        }
+        
+        // Apply the change
+        if (action == VaultValueAction.UPDATE_BY_BPS) {
+            _vaultValue = MathLib.applyPercentage(oldValue, value);
+        } else {
+            _vaultValue = uint256(value);
+        }
+        
+        _lastUpdateTime = block.timestamp;
+        emit VaultValueUpdated(oldValue, _vaultValue, bps);
     }
     
     /**
