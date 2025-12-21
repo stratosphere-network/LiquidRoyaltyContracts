@@ -697,7 +697,7 @@ abstract contract UnifiedSeniorVault is ISeniorVault, IERC20, AdminControlled, P
                 if (address(rv) != address(0)) {
                     uint256 staked = rv.getTotalDelegateStaked(admin());
                     uint256 toWithdraw = lpToGet > staked ? staked : lpToGet;
-                    if (toWithdraw > 0) { rv.delegateWithdraw(admin(), toWithdraw); IERC20(address(kodiakHook.island())).transfer(address(kodiakHook), toWithdraw); }
+                    if (toWithdraw > 0) { rv.delegateWithdraw(admin(), toWithdraw); IERC20(address(kodiakHook.island())).safeTransfer(address(kodiakHook), toWithdraw); }
                 }
             }
             

@@ -4,6 +4,7 @@ pragma solidity ^0.8.20;
 import {UnifiedSeniorVault} from "../abstract/UnifiedSeniorVault.sol";
 import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import {IERC20Metadata} from "@openzeppelin/contracts/token/ERC20/extensions/IERC20Metadata.sol";
+import {SafeERC20} from "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
 import {Math} from "@openzeppelin/contracts/utils/math/Math.sol";
 import {IRewardVault} from "../integrations/IRewardVault.sol";
 
@@ -22,6 +23,8 @@ import {IRewardVault} from "../integrations/IRewardVault.sol";
  * - Battle-tested: Pattern used by successful rebasing tokens
  */
 contract UnifiedConcreteSeniorVault is UnifiedSeniorVault {
+    using SafeERC20 for IERC20;
+    
     /// @dev NEW role management (V2 upgrade)
     /// These are added here instead of AdminControlled to preserve storage layout
     address private _liquidityManager;
@@ -187,7 +190,7 @@ contract UnifiedConcreteSeniorVault is UnifiedSeniorVault {
                 // Withdraw LP from reward vault to this contract
                 _rewardVault.delegateWithdraw(admin(), lpToWithdraw);
                 // Transfer LP tokens to kodiakHook
-                IERC20(lpToken).transfer(address(kodiakHook), lpToWithdraw);
+                IERC20(lpToken).safeTransfer(address(kodiakHook), lpToWithdraw);
                 // Update lpBalance after withdrawal
                 lpBalance = kodiakHook.getIslandLPBalance();
             }
@@ -245,7 +248,7 @@ contract UnifiedConcreteSeniorVault is UnifiedSeniorVault {
                 // Withdraw LP from reward vault to this contract
                 _rewardVault.delegateWithdraw(admin(), lpToWithdraw);
                 // Transfer LP tokens to kodiakHook
-                IERC20(lpToken).transfer(address(kodiakHook), lpToWithdraw);
+                IERC20(lpToken).safeTransfer(address(kodiakHook), lpToWithdraw);
                 // Update lpBalance after withdrawal
                 lpBalance = kodiakHook.getIslandLPBalance();
             }
@@ -378,7 +381,7 @@ contract UnifiedConcreteSeniorVault is UnifiedSeniorVault {
             if (address(kodiakHook) == address(0)) revert KodiakHookNotSet();
             
             _rewardVault.delegateWithdraw(admin(), amount);
-            IERC20(address(kodiakHook.island())).transfer(address(kodiakHook), amount);
+            IERC20(address(kodiakHook.island())).safeTransfer(address(kodiakHook), amount);
             
             emit WithdrawnFromRewardVault(amount);
         }  else {

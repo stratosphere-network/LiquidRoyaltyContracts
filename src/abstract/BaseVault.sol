@@ -461,8 +461,8 @@ abstract contract BaseVault is ERC4626Upgradeable, IVault, AdminControlled, UUPS
         uint256 currentSupply = totalSupply();
         if (currentSupply == 0) revert InvalidAmount();
         
-        // Calculate 1% of total supply
-        uint256 feeAmount = (currentSupply * 1e16) / 1e18; // 1% = 0.01 = 1e16/1e18
+        // Calculate 1%/12 of total supply (monthly portion of 1% annual fee)
+        uint256 feeAmount = (currentSupply * 1e16) / (12 * 1e18); // 1%/12 ≈ 0.0833% per month
         
         // Mint to treasury
         _mint(_treasury, feeAmount);

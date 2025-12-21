@@ -1,5 +1,8 @@
 {
   "dependencies": {
     "puppeteer": "^24.32.1"
+  },
+  "devDependencies": {
+    "ethers": "^6.16.0"
   }
 }
