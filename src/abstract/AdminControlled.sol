@@ -43,8 +43,6 @@ abstract contract AdminControlled is Initializable {
     error OnlyLiquidityManager();
     error OnlyPriceFeedManager();
     error OnlyContractUpdater();
-    error OnlyTimelock();
-    error RequiresTimelock();
     
     /// @dev Modifiers
     modifier onlyDeployer() {
@@ -192,25 +190,6 @@ abstract contract AdminControlled is Initializable {
      */
     function contractUpdater() public view virtual returns (address) {
         return address(0);
-    }
-    
-    /**
-     * @notice Get timelock address for large operations
-     * @dev Must be overridden in concrete contracts
-     * @dev Returns address(0) if timelock is not set (all operations instant)
-     */
-    function timelock() public view virtual returns (address) {
-        return address(0);
-    }
-    
-    /**
-     * @notice Check if caller is the timelock contract
-     * @dev Used for large value changes that require delay
-     */
-    function _requireTimelock() internal view {
-        address tl = timelock();
-        if (tl == address(0)) revert RequiresTimelock();
-        if (msg.sender != tl) revert OnlyTimelock();
     }
 }
 

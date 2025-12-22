@@ -139,33 +139,8 @@ contract ConcreteReserveVault is ReserveVault {
     error RewardVaultNotSet();
     event WithdrawalPenaltyCharged(address indexed user, uint256 penalty);
 
-    // ============================================
-    // Timelock Management (V4 upgrade - storage at END)
-    // ============================================
+   
     
-    /// @dev Timelock address for large operations
-    address private _timelock;
-    
-    /// @dev Event for timelock changes
-    event TimelockSet(address indexed oldTimelock, address indexed newTimelock);
-    
-    /**
-     * @notice Get timelock address
-     * @return Timelock contract address (address(0) if not set)
-     */
-    function timelock() public view override returns (address) {
-        return _timelock;
-    }
-    
-    /**
-     * @notice Set timelock address
-     * @dev Only admin can set the timelock
-     * @param timelock_ Address of the timelock contract (address(0) to disable)
-     */
-    function setTimelock(address timelock_) external onlyAdmin {
-        address oldTimelock = _timelock;
-        _timelock = timelock_;
-        emit TimelockSet(oldTimelock, timelock_);
-    }
+
 }
 
