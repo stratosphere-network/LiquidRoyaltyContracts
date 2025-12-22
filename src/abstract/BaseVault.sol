@@ -113,6 +113,7 @@ abstract contract BaseVault is ERC4626Upgradeable, IVault, AdminControlled, UUPS
     event WithdrawalFeeCharged(address indexed user, uint256 fee, uint256 netAmount);
     event ManagementFeeMinted(address indexed treasury, uint256 amount, uint256 timestamp);
     event MgmtFeeScheduleUpdated(uint256 oldSchedule, uint256 newSchedule);
+    event LastMintTimeReset(uint256 oldTime, uint256 newTime);
     event SeniorVaultUpdated(address indexed newSeniorVault);
     event KodiakHookUpdated(address indexed newHook);
     event ReserveSeededWithToken(
@@ -488,6 +489,19 @@ abstract contract BaseVault is ERC4626Upgradeable, IVault, AdminControlled, UUPS
         _mgmtFeeSchedule = newSchedule;
         
         emit MgmtFeeScheduleUpdated(oldSchedule, newSchedule);
+    }
+    
+    /**
+     * @notice Reset last mint time to allow immediate fee minting
+     * @dev Only admin can call. Use for upgrades or initialization edge cases.
+     *      Sets _lastMintTime to (current time - schedule) so next mint is immediately available.
+     */
+    function resetLastMintTime() external onlyAdmin {
+        uint256 oldTime = _lastMintTime;
+        // Set to past so mintManagementFee() can be called immediately
+        _lastMintTime = block.timestamp - _mgmtFeeSchedule;
+        
+        emit LastMintTimeReset(oldTime, _lastMintTime);
     }
     
     // ============================================
