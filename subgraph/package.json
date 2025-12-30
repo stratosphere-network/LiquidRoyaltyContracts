@@ -1,0 +1,16 @@
+{
+  "name": "liquid-royalty-subgraph",
+  "version": "1.0.0",
+  "scripts": {
+    "codegen": "graph codegen",
+    "build": "graph build",
+    "deploy:senior": "graph deploy --studio liquid-royalty-senior",
+    "deploy:junior": "graph deploy --studio liquid-royalty-junior",
+    "deploy:reserve": "graph deploy --studio liquid-royalty-reserve"
+  },
+  "devDependencies": {
+    "@graphprotocol/graph-cli": "^0.69.0",
+    "@graphprotocol/graph-ts": "^0.35.1"
+  }
+}
+
