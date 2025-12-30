@@ -16,7 +16,7 @@ echo "---------------"
 curl -s -X POST \
   -H "Content-Type: application/json" \
   -d "{\"query\":\"{ user(id: \\\"$USER_ADDRESS\\\") { id totalDeposited totalWithdrawn deposits(first: 5, orderBy: timestamp, orderDirection: desc) { assets shares timestamp transactionHash } } }\"}" \
-  https://api.goldsky.com/api/public/project_cmjgbb5x4ix5j0104hdx03a5u/subgraphs/liquid-royalty-senior/v2.0.0/gn | jq '.'
+  https://api.goldsky.com/api/public/project_cmjh1lmjigfeb010c2rvw26vw/subgraphs/liquid-royalty-senior/v2.0.1/gn | jq '.'
 echo ""
 echo ""
 
@@ -26,7 +26,7 @@ echo "------------------------------"
 curl -s -X POST \
   -H "Content-Type: application/json" \
   -d '{"query":"{ deposits(first: 10, orderBy: timestamp, orderDirection: desc) { user { id } assets shares timestamp blockNumber } }"}' \
-  https://api.goldsky.com/api/public/project_cmjgbb5x4ix5j0104hdx03a5u/subgraphs/liquid-royalty-senior/v2.0.0/gn | jq '.'
+  https://api.goldsky.com/api/public/project_cmjh1lmjigfeb010c2rvw26vw/subgraphs/liquid-royalty-senior/v2.0.1/gn | jq '.'
 echo ""
 echo ""
 
@@ -36,7 +36,7 @@ echo "-----------------"
 curl -s -X POST \
   -H "Content-Type: application/json" \
   -d '{"query":"{ protocolStats(id: \"protocol\") { totalDeposits totalWithdrawals totalUsers totalSpillovers totalBackstops } }"}' \
-  https://api.goldsky.com/api/public/project_cmjgbb5x4ix5j0104hdx03a5u/subgraphs/liquid-royalty-senior/v2.0.0/gn | jq '.'
+  https://api.goldsky.com/api/public/project_cmjh1lmjigfeb010c2rvw26vw/subgraphs/liquid-royalty-senior/v2.0.1/gn | jq '.'
 echo ""
 echo ""
 
@@ -46,7 +46,7 @@ echo "---------------"
 curl -s -X POST \
   -H "Content-Type: application/json" \
   -d "{\"query\":\"{ user(id: \\\"$USER_ADDRESS\\\") { id totalDeposited totalWithdrawn } }\"}" \
-  https://api.goldsky.com/api/public/project_cmjgbb5x4ix5j0104hdx03a5u/subgraphs/liquid-royalty-junior/v2.0.0/gn | jq '.'
+  https://api.goldsky.com/api/public/project_cmjh1lmjigfeb010c2rvw26vw/subgraphs/liquid-royalty-junior/v2.0.1/gn | jq '.'
 echo ""
 echo ""
 
@@ -56,7 +56,7 @@ echo "----------------"
 curl -s -X POST \
   -H "Content-Type: application/json" \
   -d "{\"query\":\"{ user(id: \\\"$USER_ADDRESS\\\") { id totalDeposited totalWithdrawn } }\"}" \
-  https://api.goldsky.com/api/public/project_cmjgbb5x4ix5j0104hdx03a5u/subgraphs/liquid-royalty-reserve/v2.0.0/gn | jq '.'
+  https://api.goldsky.com/api/public/project_cmjh1lmjigfeb010c2rvw26vw/subgraphs/liquid-royalty-alar/v2.0.1/gn | jq '.'
 echo ""
 
 echo "✅ Tests complete!"

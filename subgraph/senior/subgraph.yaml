@@ -6,7 +6,7 @@ schema:
 dataSources:
   - kind: ethereum
     name: SeniorVault
-    network: berachain-bartio
+    network: berachain-mainnet
     source:
       address: "0x49298F4314eb127041b814A2616c25687Db6b650"
       abi: SeniorVault
@@ -24,7 +24,7 @@ dataSources:
         - User
       abis:
         - name: SeniorVault
-          file: ../../abi/UnifiedConcreteSeniorVault.json
+          file: ./abi/UnifiedConcreteSeniorVault.json
       eventHandlers:
         - event: Deposit(indexed address,uint256,uint256)
           handler: handleDeposit

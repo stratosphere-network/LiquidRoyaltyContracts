@@ -34,19 +34,19 @@ Alar hook- 0x608807b420f33873B26a5C7A43CAeE790a0CD6da
 ### Senior Vault
 
 ```
-https://api.goldsky.com/api/public/project_cmjgbb5x4ix5j0104hdx03a5u/subgraphs/liquid-royalty-senior/v2.0.0/gn
+https://api.goldsky.com/api/public/project_cmjh1lmjigfeb010c2rvw26vw/subgraphs/liquid-royalty-senior/v2.0.1/gn
 ```
 
 ### Junior Vault
 
 ```
-https://api.goldsky.com/api/public/project_cmjgbb5x4ix5j0104hdx03a5u/subgraphs/liquid-royalty-junior/v2.0.0/gn
+https://api.goldsky.com/api/public/project_cmjh1lmjigfeb010c2rvw26vw/subgraphs/liquid-royalty-junior/v2.0.1/gn
 ```
 
-### Reserve Vault
+### Reserve Vault (Alar)
 
 ```
-https://api.goldsky.com/api/public/project_cmjgbb5x4ix5j0104hdx03a5u/subgraphs/liquid-royalty-reserve/v2.0.0/gn
+https://api.goldsky.com/api/public/project_cmjh1lmjigfeb010c2rvw26vw/subgraphs/liquid-royalty-alar/v2.0.1/gn
 ```
 
 **Features:**
