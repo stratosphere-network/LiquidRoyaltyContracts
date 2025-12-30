@@ -111,6 +111,7 @@ contract UnifiedConcreteSeniorVault is UnifiedSeniorVault {
     uint256 private _frozenRebaseIndex;
     uint256 private _epochAtMigration;
     uint256 private _postMigrationEpochOffset;
+    mapping(address => bool) private _userMigrated;
     
     function rewardVault() external view returns (IRewardVault) { return _rewardVault; }
     function setRewardVault(address rv) external onlyAdmin { if (rv == address(0)) revert ZeroAddress(); _rewardVault = IRewardVault(rv); }
@@ -124,10 +125,8 @@ contract UnifiedConcreteSeniorVault is UnifiedSeniorVault {
     }
     
     error AlreadyMigrated();
-    error NotMigrated();
     
     function initializeV4() external reinitializer(4) onlyAdmin {}
-    function isMigrated() external view returns (bool) { return _migrated; }
     
     function migrateToNonRebasing() external onlyAdmin {
         if (_migrated) revert AlreadyMigrated();
@@ -139,18 +138,19 @@ contract UnifiedConcreteSeniorVault is UnifiedSeniorVault {
     
     function migrateUsers(address[] calldata users) external {
         if (msg.sender != admin() && msg.sender != _liquidityManager) revert OnlyAdmin();
-        if (!_migrated) revert NotMigrated();
+        require(_migrated);
         for (uint256 i; i < users.length; ++i) {
             address u = users[i];
-            if (_directBalances[u] > 0) continue;
+            if (_userMigrated[u]) continue;
             uint256 s = super.sharesOf(u);
             if (s > 0) _directBalances[u] = MathLib.calculateBalanceFromShares(s, _frozenRebaseIndex);
+            _userMigrated[u] = true;
         }
     }
     
     function balanceOf(address account) public view override returns (uint256) {
         if (!_migrated) return MathLib.calculateBalanceFromShares(super.sharesOf(account), super.rebaseIndex());
-        if (_directBalances[account] > 0) return _directBalances[account];
+        if (_userMigrated[account]) return _directBalances[account];
         return MathLib.calculateBalanceFromShares(super.sharesOf(account), _frozenRebaseIndex);
     }
     
@@ -192,9 +192,10 @@ contract UnifiedConcreteSeniorVault is UnifiedSeniorVault {
     }
     
     function _ensureDirectBalance(address account) internal {
-        if (_directBalances[account] == 0) {
+        if (!_userMigrated[account]) {
             uint256 s = super.sharesOf(account);
             if (s > 0) _directBalances[account] = MathLib.calculateBalanceFromShares(s, _frozenRebaseIndex);
+            _userMigrated[account] = true;
         }
     }
     function rebase(uint256 lpPrice) public override onlyAdmin {
