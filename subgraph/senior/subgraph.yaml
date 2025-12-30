@@ -1,0 +1,50 @@
+specVersion: 1.0.0
+indexerHints:
+  prune: auto
+schema:
+  file: ./schema.graphql
+dataSources:
+  - kind: ethereum
+    name: SeniorVault
+    network: berachain-bartio
+    source:
+      address: "0x49298F4314eb127041b814A2616c25687Db6b650"
+      abi: SeniorVault
+      startBlock: 13403095
+    mapping:
+      kind: ethereum/events
+      apiVersion: 0.0.7
+      language: wasm/assemblyscript
+      entities:
+        - Deposit
+        - Withdrawal
+        - Rebase
+        - Spillover
+        - Backstop
+        - User
+      abis:
+        - name: SeniorVault
+          file: ../../abi/UnifiedConcreteSeniorVault.json
+      eventHandlers:
+        - event: Deposit(indexed address,uint256,uint256)
+          handler: handleDeposit
+        - event: Withdraw(indexed address,uint256,uint256)
+          handler: handleWithdraw
+        - event: Transfer(indexed address,indexed address,uint256)
+          handler: handleTransfer
+        - event: BackstopTriggered(uint256,uint256,uint256,bool)
+          handler: handleBackstopTriggered
+        - event: ProfitSpillover(uint256,uint256,uint256)
+          handler: handleProfitSpillover
+        - event: CooldownInitiated(indexed address,uint256)
+          handler: handleCooldownInitiated
+        - event: WithdrawalPenaltyCharged(indexed address,uint256)
+          handler: handleWithdrawalPenalty
+        - event: VaultValueUpdated(uint256,uint256,int256)
+          handler: handleVaultValueUpdated
+        - event: FeesCollected(uint256,uint256)
+          handler: handleFeesCollected
+        - event: BGTClaimed(indexed address,uint256)
+          handler: handleBGTClaimed
+      file: ./src/mapping.ts
+

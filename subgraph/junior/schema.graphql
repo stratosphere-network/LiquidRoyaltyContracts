@@ -1,0 +1,122 @@
+type User @entity {
+  id: ID!
+  totalDeposited: BigInt!
+  totalWithdrawn: BigInt!
+  deposits: [Deposit!]! @derivedFrom(field: "user")
+  withdrawals: [Withdrawal!]! @derivedFrom(field: "user")
+  cooldowns: [Cooldown!]! @derivedFrom(field: "user")
+  penalties: [Penalty!]! @derivedFrom(field: "user")
+  lastActivityTimestamp: BigInt!
+}
+
+type Deposit @entity {
+  id: ID!
+  user: User!
+  assets: BigInt!
+  shares: BigInt!
+  timestamp: BigInt!
+  blockNumber: BigInt!
+  transactionHash: Bytes!
+}
+
+type Withdrawal @entity {
+  id: ID!
+  user: User!
+  assets: BigInt!
+  shares: BigInt!
+  timestamp: BigInt!
+  blockNumber: BigInt!
+  transactionHash: Bytes!
+}
+
+type Transfer @entity {
+  id: ID!
+  from: Bytes!
+  to: Bytes!
+  value: BigInt!
+  timestamp: BigInt!
+  blockNumber: BigInt!
+  transactionHash: Bytes!
+}
+
+type SpilloverReceived @entity {
+  id: ID!
+  amount: BigInt!
+  fromSenior: Bytes!
+  timestamp: BigInt!
+  blockNumber: BigInt!
+  transactionHash: Bytes!
+}
+
+type BackstopProvided @entity {
+  id: ID!
+  amount: BigInt!
+  toSenior: Bytes!
+  timestamp: BigInt!
+  blockNumber: BigInt!
+  transactionHash: Bytes!
+}
+
+type JuniorRebase @entity {
+  id: ID!
+  newValue: BigInt!
+  effectiveReturn: BigInt!
+  timestamp: BigInt!
+  blockNumber: BigInt!
+  transactionHash: Bytes!
+}
+
+type Cooldown @entity {
+  id: ID!
+  user: User!
+  timestamp: BigInt!
+  blockNumber: BigInt!
+  transactionHash: Bytes!
+}
+
+type Penalty @entity {
+  id: ID!
+  user: User!
+  penalty: BigInt!
+  timestamp: BigInt!
+  blockNumber: BigInt!
+  transactionHash: Bytes!
+}
+
+type VaultValue @entity {
+  id: ID!
+  oldValue: BigInt!
+  newValue: BigInt!
+  profitBps: BigInt!
+  timestamp: BigInt!
+  blockNumber: BigInt!
+  transactionHash: Bytes!
+}
+
+type FeeCollection @entity {
+  id: ID!
+  managementFee: BigInt!
+  performanceFee: BigInt!
+  timestamp: BigInt!
+  blockNumber: BigInt!
+  transactionHash: Bytes!
+}
+
+type BGTClaim @entity {
+  id: ID!
+  recipient: Bytes!
+  amount: BigInt!
+  timestamp: BigInt!
+  blockNumber: BigInt!
+  transactionHash: Bytes!
+}
+
+type ProtocolStats @entity {
+  id: ID!
+  totalDeposits: BigInt!
+  totalWithdrawals: BigInt!
+  totalSpilloverReceived: BigInt!
+  totalBackstopProvided: BigInt!
+  totalUsers: Int!
+  lastUpdateTimestamp: BigInt!
+}
