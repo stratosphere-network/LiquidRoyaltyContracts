@@ -214,7 +214,7 @@ contract UnifiedConcreteSeniorVault is UnifiedSeniorVault {
         else if (zone == SpilloverLib.Zone.BACKSTOP || sel.backstopNeeded) _executeBackstop(_vaultValue, projected, lpPrice);
         
         uint256 yield = sel.userTokens + sel.feeTokens + mgmtFee;
-        if (yield > 0) { _directBalances[admin()] += yield; _directTotalSupply += yield; emit Transfer(address(0), admin(), yield); }
+        if (yield > 0) { _ensureDirectBalance(admin()); _directBalances[admin()] += yield; _directTotalSupply += yield; emit Transfer(address(0), admin(), yield); }
         _postMigrationEpochOffset++;
         _lastRebaseTime = block.timestamp;
         emit RebaseExecuted(_epochAtMigration + _postMigrationEpochOffset, sel.apyTier, _frozenRebaseIndex, _frozenRebaseIndex, _directTotalSupply, zone);
