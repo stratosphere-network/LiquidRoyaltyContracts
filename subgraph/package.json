@@ -2,11 +2,17 @@
   "name": "liquid-royalty-subgraph",
   "version": "1.0.0",
   "scripts": {
-    "codegen": "graph codegen",
-    "build": "graph build",
-    "deploy:senior": "graph deploy --studio liquid-royalty-senior",
-    "deploy:junior": "graph deploy --studio liquid-royalty-junior",
-    "deploy:reserve": "graph deploy --studio liquid-royalty-reserve"
+    "build": "bash build-all.sh",
+    "build:senior": "cd senior && npx graph codegen && npx graph build",
+    "build:junior": "cd junior && npx graph codegen && npx graph build",
+    "build:reserve": "cd reserve && npx graph codegen && npx graph build",
+    "codegen:senior": "cd senior && npx graph codegen",
+    "codegen:junior": "cd junior && npx graph codegen",
+    "codegen:reserve": "cd reserve && npx graph codegen",
+    "deploy:senior": "cd senior && goldsky subgraph deploy liquid-royalty-senior/v2.0.0 --path .",
+    "deploy:junior": "cd junior && goldsky subgraph deploy liquid-royalty-junior/v2.0.0 --path .",
+    "deploy:reserve": "cd reserve && goldsky subgraph deploy liquid-royalty-reserve/v2.0.0 --path .",
+    "test": "bash test-api.sh"
   },
   "devDependencies": {
     "@graphprotocol/graph-cli": "^0.69.0",
