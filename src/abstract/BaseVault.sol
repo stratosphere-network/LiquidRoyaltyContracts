@@ -156,6 +156,7 @@ abstract contract BaseVault is ERC4626Upgradeable, IVault, AdminControlled, UUPS
         uint256 timestamp
     );
     event LPLiquidationExecuted(uint256 requested, uint256 received, uint256 minExpected);
+    event TokenSwappedToStable(address indexed tokenIn, uint256 amountIn, uint256 stableOut);
     
     /// @dev Errors (ZeroAddress inherited from AdminControlled, InvalidAmount inherited from IVault)
     error InvalidProfitRange();
@@ -175,6 +176,7 @@ abstract contract BaseVault is ERC4626Upgradeable, IVault, AdminControlled, UUPS
     error IdleBalanceDeviation();
     error InvalidLPToken();
     error InvalidStablecoinDecimals();
+    error InvalidToken();
     
     /// @dev Modifiers
     modifier onlySeniorVault() {
@@ -489,6 +491,43 @@ abstract contract BaseVault is ERC4626Upgradeable, IVault, AdminControlled, UUPS
         _mgmtFeeSchedule = newSchedule;
         
         emit MgmtFeeScheduleUpdated(oldSchedule, newSchedule);
+    }
+    
+    /**
+     * @notice Swap non-stablecoin tokens stuck in vault to stablecoin
+     * @dev Use when tokens (e.g., SAIL) are stuck in vault and need to be converted
+     * @param tokenIn Address of token to swap (e.g., SAIL)
+     * @param amount Amount to swap (0 = swap all balance)
+     * @param minOut Minimum stablecoin output expected
+     * @param aggregator Aggregator address (e.g., Enso, Ooga Booga)
+     * @param swapData Calldata for swap (fromAddress must be this vault)
+     */
+    function swapTokenToStable(
+        address tokenIn,
+        uint256 amount,
+        uint256 minOut,
+        address aggregator,
+        bytes calldata swapData
+    ) external onlyLiquidityManager nonReentrant {
+        if (tokenIn == address(0) || aggregator == address(0)) revert AdminControlled.ZeroAddress();
+        if (tokenIn == address(_stablecoin)) revert InvalidToken();
+        
+        uint256 swapAmount = amount == 0 ? IERC20(tokenIn).balanceOf(address(this)) : amount;
+        if (swapAmount == 0) revert InvalidAmount();
+        if (IERC20(tokenIn).balanceOf(address(this)) < swapAmount) revert InsufficientBalance();
+        
+        uint256 stableBefore = _stablecoin.balanceOf(address(this));
+        
+        // Approve and execute swap
+        IERC20(tokenIn).forceApprove(aggregator, swapAmount);
+        (bool ok,) = aggregator.call(swapData);
+        if (!ok) revert SlippageTooHigh();
+        IERC20(tokenIn).forceApprove(aggregator, 0);
+        
+        uint256 received = _stablecoin.balanceOf(address(this)) - stableBefore;
+        if (received < minOut) revert SlippageTooHigh();
+        
+        emit TokenSwappedToStable(tokenIn, swapAmount, received);
     }
     
     /**

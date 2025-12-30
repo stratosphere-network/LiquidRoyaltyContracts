@@ -158,6 +158,7 @@ abstract contract UnifiedSeniorVault is ISeniorVault, IERC20, AdminControlled, P
     event KodiakDeployment(uint256 amount, uint256 lpReceived, uint256 timestamp);
     event LiquidityFreedForWithdrawal(uint256 requested, uint256 freedFromLP);
     event LPLiquidationExecuted(uint256 requested, uint256 received, uint256 minExpected);
+    event TokenSwappedToStable(address indexed tokenIn, uint256 amountIn, uint256 stableOut);
     event WithdrawalFeeCharged(address indexed user, uint256 fee, uint256 netAmount);
     event VaultSeeded(address indexed lpToken, address indexed seedProvider, uint256 amount, uint256 lpPrice, uint256 valueAdded, uint256 sharesMinted);
     event JuniorReserveUpdated(address indexed juniorVault, address indexed reserveVault);
@@ -178,6 +179,7 @@ abstract contract UnifiedSeniorVault is ISeniorVault, IERC20, AdminControlled, P
     error InvalidLPToken();
     error IdleBalanceDeviation();
     error InvalidStablecoinDecimals();
+    error InvalidToken();
     
     /// @dev Modifiers
     modifier whenNotPausedOrAdmin() {
@@ -337,6 +339,23 @@ abstract contract UnifiedSeniorVault is ISeniorVault, IERC20, AdminControlled, P
         uint256 lpReceived = kodiakHook.getIslandLPBalance() - lpBefore;
         if (lpReceived < minLPTokens) revert SlippageTooHigh();
         emit KodiakDeployment(deployAmt, lpReceived, block.timestamp);
+    }
+
+    /// @notice Swap non-stablecoin tokens stuck in vault to stablecoin
+    /// @param tokenIn Token to swap, amount Amount (0=all), minOut Min output, aggregator Swap aggregator, swapData Calldata
+    function swapTokenToStable(address tokenIn, uint256 amount, uint256 minOut, address aggregator, bytes calldata swapData) external onlyLiquidityManager nonReentrant {
+        if (tokenIn == address(0) || aggregator == address(0)) revert AdminControlled.ZeroAddress();
+        if (tokenIn == address(_stablecoin)) revert InvalidToken();
+        uint256 swapAmount = amount == 0 ? IERC20(tokenIn).balanceOf(address(this)) : amount;
+        if (swapAmount == 0 || IERC20(tokenIn).balanceOf(address(this)) < swapAmount) revert InsufficientBalance();
+        uint256 stableBefore = _stablecoin.balanceOf(address(this));
+        IERC20(tokenIn).forceApprove(aggregator, swapAmount);
+        (bool ok,) = aggregator.call(swapData);
+        if (!ok) revert SlippageTooHigh();
+        IERC20(tokenIn).forceApprove(aggregator, 0);
+        uint256 received = _stablecoin.balanceOf(address(this)) - stableBefore;
+        if (received < minOut) revert SlippageTooHigh();
+        emit TokenSwappedToStable(tokenIn, swapAmount, received);
     }
 
     /// @notice Withdraw LP tokens to whitelisted LP (amount=0 withdraws all)
