@@ -1,1 +1,6 @@
 ## Contracts for: https://liquidroyalty.com
+
+
+Senior:   0x2603a43d4a2397188d1EdF84d1B2D79D6A70DDe5
+  Junior:   0xBaad9F161197A2c26BdC92F8DDFE651c3383CE4E
+  Reserve:  0xbDfb45d6Ad3a486c114FF999E742F20C2977012b
