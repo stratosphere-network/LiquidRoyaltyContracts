@@ -27,7 +27,8 @@ See [docs/senior_upgrade.md](docs/senior_upgrade.md) for detailed upgrade steps.
 To:       0x49298F4314eb127041b814A2616c25687Db6b650
 Function: upgradeToAndCall(address,bytes)
 Param 1:  0x6baD25B18d4c63f9e0023C64Ed02A18E7c861d1d
-Param 2:  0x11c2ee2b
+Param 2:  0x54a08606
+
 ```
 
 **Junior Vault:**

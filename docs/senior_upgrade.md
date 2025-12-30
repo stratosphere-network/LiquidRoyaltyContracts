@@ -105,7 +105,7 @@ Save the deployed address: `NEW_IMPL_ADDRESS`
 **Get the calldata for initializeV4():**
 ```bash
 cast calldata "initializeV4()"
-# Returns: 0x11c2ee2b
+# Returns: 0x54a08606
 ```
 
 **Multisig transaction:**
@@ -113,14 +113,14 @@ cast calldata "initializeV4()"
 - **Function:** `upgradeToAndCall(address,bytes)`
 - **Params:**
   - `newImplementation`: `NEW_IMPL_ADDRESS`
-  - `data`: `0x11c2ee2b`
+  - `data`: `0x54a08606`
 
 **Using cast (if not multisig):**
 ```bash
 cast send $SENIOR_PROXY \
   "upgradeToAndCall(address,bytes)" \
   $NEW_IMPL_ADDRESS \
-  0x11c2ee2b \
+  0x54a08606 \
   --private-key $ADMIN_KEY \
   --rpc-url $RPC_URL
 ```
