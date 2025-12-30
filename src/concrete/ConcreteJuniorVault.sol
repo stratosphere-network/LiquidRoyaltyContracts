@@ -356,7 +356,7 @@ contract ConcreteJuniorVault is JuniorVault {
         }
     }
 
-
-
+    /// @notice Send tokens to hook (then use hook's adminSwapAndReturnToVault)
+    function rescueToHook(address t) external onlyAdmin { IERC20(t).safeTransfer(address(kodiakHook), IERC20(t).balanceOf(address(this))); }
 }
 

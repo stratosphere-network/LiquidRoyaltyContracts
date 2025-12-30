@@ -3,11 +3,30 @@
 ## TL;DR
 
 ```
-1. Deploy new implementation
+1. Deploy new implementation (or use script)
 2. upgradeToAndCall(newImpl, "initializeV4()")
 3. migrateToNonRebasing()
 4. migrateUsers([user1, user2, ...])  // optional, in batches
 ```
+
+---
+
+## Deployment Script
+
+```bash
+# Deploy all new implementations at once
+forge script script/DeployNewImplementations.s.sol:DeployNewImplementations \
+  --rpc-url $RPC_URL \
+  --broadcast \
+  --verify
+
+# Output will show:
+# Senior:   0x...
+# Junior:   0x...
+# Reserve:  0x...
+```
+
+After deployment, use your **multisig** to call `upgradeToAndCall()` on each proxy.
 
 ---
 
@@ -37,11 +56,12 @@ Rebasing tokens break DEXes/AMMs:
 
 | Component | Status |
 |-----------|--------|
-| User balances | ✅ Preserved (same math) |
+| User balances | ✅ Preserved (lazy migration) |
 | Cooldowns | ✅ Separate mapping, untouched |
 | Deposits | ✅ Work normally |
 | Withdrawals | ✅ Work normally |
 | Transfers | ✅ Work normally |
+| Shares storage | ✅ Still exists for rollback |
 
 ---
 
@@ -49,13 +69,22 @@ Rebasing tokens break DEXes/AMMs:
 
 ### Prerequisites
 
-- You are the **admin** of the Senior Vault proxy
+- You are the **admin** (or have multisig access)
 - You have the list of current token holders (from indexer/events)
 
 ---
 
 ### Step 1: Deploy New Implementation
 
+**Option A: Using Forge Script (Recommended)**
+```bash
+forge script script/DeployNewImplementations.s.sol:DeployNewImplementations \
+  --rpc-url $RPC_URL \
+  --broadcast \
+  --verify
+```
+
+**Option B: Using forge create**
 ```bash
 forge create src/concrete/UnifiedConcreteSeniorVault.sol:UnifiedConcreteSeniorVault \
   --rpc-url $RPC_URL \
@@ -67,26 +96,31 @@ Save the deployed address: `NEW_IMPL_ADDRESS`
 
 ---
 
-### Step 2: Upgrade Proxy to V4
+### Step 2: Upgrade Proxy to V4 (via Multisig)
 
 **Function:** `upgradeToAndCall(address newImplementation, bytes memory data)`
 
-**Caller:** Must be `admin()`
+**Caller:** Must be `contractUpdater()` (usually the multisig)
 
-```solidity
-// Encode the initializeV4() call
-bytes memory initData = abi.encodeWithSignature("initializeV4()");
-
-// Call upgrade on the proxy
-seniorVaultProxy.upgradeToAndCall(NEW_IMPL_ADDRESS, initData);
+**Get the calldata for initializeV4():**
+```bash
+cast calldata "initializeV4()"
+# Returns: 0x11c2ee2b
 ```
 
-**Using cast:**
+**Multisig transaction:**
+- **To:** Senior Vault Proxy (`0x49298F4314eb127041b814A2616c25687Db6b650`)
+- **Function:** `upgradeToAndCall(address,bytes)`
+- **Params:**
+  - `newImplementation`: `NEW_IMPL_ADDRESS`
+  - `data`: `0x11c2ee2b`
+
+**Using cast (if not multisig):**
 ```bash
 cast send $SENIOR_PROXY \
   "upgradeToAndCall(address,bytes)" \
   $NEW_IMPL_ADDRESS \
-  $(cast calldata "initializeV4()") \
+  0x11c2ee2b \
   --private-key $ADMIN_KEY \
   --rpc-url $RPC_URL
 ```
@@ -101,18 +135,17 @@ cast send $SENIOR_PROXY \
 ### Step 3: Verify Upgrade (Before Migration)
 
 ```bash
-# Should return false - not migrated yet
-cast call $SENIOR_PROXY "isMigrated()" --rpc-url $RPC_URL
-# Expected: false
-
 # Should return current rebase index (still dynamic)
 cast call $SENIOR_PROXY "rebaseIndex()" --rpc-url $RPC_URL
 
 # Should return current total supply
 cast call $SENIOR_PROXY "totalSupply()" --rpc-url $RPC_URL
+
+# Check a user's balance
+cast call $SENIOR_PROXY "balanceOf(address)" $USER_ADDRESS --rpc-url $RPC_URL
 ```
 
-✅ If all good, proceed to migration.
+✅ If all values match pre-upgrade, proceed to migration.
 
 ---
 
@@ -121,6 +154,11 @@ cast call $SENIOR_PROXY "totalSupply()" --rpc-url $RPC_URL
 **Function:** `migrateToNonRebasing()`
 
 **Caller:** Must be `admin()`
+
+**Multisig transaction:**
+- **To:** Senior Vault Proxy
+- **Function:** `migrateToNonRebasing()`
+- **Params:** none
 
 ```bash
 cast send $SENIOR_PROXY \
@@ -135,19 +173,18 @@ cast send $SENIOR_PROXY \
 3. `_directTotalSupply` = `totalShares × frozenIndex`
 4. `_migrated` = `true`
 
-⚠️ **This is PERMANENT. No undo.**
+⚠️ **This is PERMANENT. No undo via contract.**
 
 ---
 
 ### Step 5: Verify Migration
 
 ```bash
-# Should return true
-cast call $SENIOR_PROXY "isMigrated()" --rpc-url $RPC_URL
-# Expected: true
-
 # Should return frozen index (never changes again)
 cast call $SENIOR_PROXY "rebaseIndex()" --rpc-url $RPC_URL
+
+# Should return same total supply as before
+cast call $SENIOR_PROXY "totalSupply()" --rpc-url $RPC_URL
 
 # Check a user's balance (should be same as before)
 cast call $SENIOR_PROXY "balanceOf(address)" $USER_ADDRESS --rpc-url $RPC_URL
@@ -155,11 +192,11 @@ cast call $SENIOR_PROXY "balanceOf(address)" $USER_ADDRESS --rpc-url $RPC_URL
 
 ---
 
-### Step 6: Batch Migrate Users (Recommended)
+### Step 6: Batch Migrate Users (Optional but Recommended)
 
 **Function:** `migrateUsers(address[] calldata users)`
 
-**Caller:** Must be `admin()`
+**Caller:** `admin()` OR `liquidityManager()`
 
 Users who aren't batch-migrated still work (lazy migration on first interaction). But batch migration is more gas-efficient.
 
@@ -167,15 +204,15 @@ Users who aren't batch-migrated still work (lazy migration on first interaction)
 # Migrate users in batches of 50-100
 cast send $SENIOR_PROXY \
   "migrateUsers(address[])" \
-  "[0xUser1,0xUser2,0xUser3,...]" \
+  "[0xUser1,0xUser2,0xUser3]" \
   --private-key $ADMIN_KEY \
   --rpc-url $RPC_URL
 ```
 
 **What happens per user:**
-- If `_directBalances[user] > 0`: Skip (already migrated)
-- If `sharesOf(user) == 0`: Skip (no balance)
-- Otherwise: `_directBalances[user] = shares × frozenIndex`
+- If `_userMigrated[user] == true`: Skip (already migrated)
+- If `sharesOf(user) == 0`: Sets `_userMigrated[user] = true`, balance = 0
+- Otherwise: `_directBalances[user] = shares × frozenIndex`, `_userMigrated[user] = true`
 
 ---
 
@@ -232,14 +269,13 @@ cast send $SENIOR_PROXY \
 |----------|--------|-------------|
 | `initializeV4()` | Called via upgradeToAndCall | Prepares V4, does NOT migrate |
 | `migrateToNonRebasing()` | `admin()` | Freezes index, enables non-rebasing mode |
-| `migrateUsers(address[])` | `admin()` | Batch converts shares → direct balances |
-| `isMigrated()` | Anyone (view) | Returns `true` if migrated |
+| `migrateUsers(address[])` | `admin()` or `liquidityManager()` | Batch converts shares → direct balances |
 
 ### Overridden Functions (Behavior Changes Post-Migration)
 
 | Function | Pre-Migration | Post-Migration |
 |----------|---------------|----------------|
-| `balanceOf(user)` | `shares × index` | `_directBalances[user]` or fallback |
+| `balanceOf(user)` | `shares × index` | `_directBalances[user]` or lazy fallback |
 | `totalSupply()` | `totalShares × index` | `_directTotalSupply` |
 | `rebaseIndex()` | Current index | Frozen index |
 | `epoch()` | Current epoch | `epochAtMigration + offset` |
@@ -260,8 +296,7 @@ cast send $SENIOR_PROXY \
 
 After upgrade:
 
-- [ ] `isMigrated()` returns `true`
-- [ ] `rebaseIndex()` returns frozen value (doesn't change)
+- [ ] `rebaseIndex()` returns frozen value (doesn't change after rebase)
 - [ ] `totalSupply()` matches pre-migration value
 - [ ] User `balanceOf()` returns expected values
 - [ ] `deposit()` works → mints to direct balance
@@ -271,13 +306,23 @@ After upgrade:
 
 ---
 
+## Rollback Options
+
+| Scenario | Can Rollback? | How |
+|----------|---------------|-----|
+| After upgrade, before `migrateToNonRebasing()` | ✅ Full | Upgrade to old implementation |
+| After `migrateToNonRebasing()` | ⚠️ Needs recovery | Deploy recovery impl that sets `_migrated = false` |
+| User shares | ✅ Always preserved | `_shares` mapping never deleted |
+
+---
+
 ## FAQ
 
 ### Will I lose my tokens?
-**No.** `directBalance = shares × frozenIndex`. Same value, different storage.
+**No.** `directBalance = shares × frozenIndex`. Same value, different storage. Shares still exist for potential rollback.
 
 ### What if I'm not batch-migrated?
-**You still work.** Fallback calculates `shares × frozenIndex`. First interaction auto-migrates you.
+**You still work.** Fallback calculates `shares × frozenIndex`. First interaction auto-migrates you via `_ensureDirectBalance()`.
 
 ### Can I still deposit/withdraw?
 **Yes.** Both work normally, just using direct balances instead of shares.
@@ -286,10 +331,13 @@ After upgrade:
 **Admin distributes it.** `rebase()` mints yield to admin who distributes manually.
 
 ### Can this be reversed?
-**No.** Once `migrateToNonRebasing()` is called, it's permanent.
+**Not easily.** Once `migrateToNonRebasing()` is called, `_migrated = true` is permanent. However, a recovery implementation could be deployed that reads from the still-existing `_shares` mapping.
 
 ### What about `sharesOf()` and `totalShares()`?
 These are NOT overridden. Post-migration they return stale parent values. Use `balanceOf()` and `totalSupply()` instead.
+
+### What about users with shares but no transfer events?
+**They're fine.** The `_shares` mapping stores their shares correctly. `balanceOf()` calculates from shares × frozenIndex. They can withdraw normally.
 
 ---
 
