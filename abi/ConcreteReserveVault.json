@@ -987,6 +987,13 @@
   },
   {
     "type": "function",
+    "name": "resetLastMintTime",
+    "inputs": [],
+    "outputs": [],
+    "stateMutability": "nonpayable"
+  },
+  {
+    "type": "function",
     "name": "revokeSeeder",
     "inputs": [
       {
@@ -1847,6 +1854,25 @@
       },
       {
         "name": "amount",
+        "type": "uint256",
+        "indexed": false,
+        "internalType": "uint256"
+      }
+    ],
+    "anonymous": false
+  },
+  {
+    "type": "event",
+    "name": "LastMintTimeReset",
+    "inputs": [
+      {
+        "name": "oldTime",
+        "type": "uint256",
+        "indexed": false,
+        "internalType": "uint256"
+      },
+      {
+        "name": "newTime",
         "type": "uint256",
         "indexed": false,
         "internalType": "uint256"
