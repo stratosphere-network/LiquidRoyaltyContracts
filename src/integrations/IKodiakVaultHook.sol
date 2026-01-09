@@ -72,12 +72,11 @@ interface IKodiakVaultHook {
     ) external;
     
     /**
-     * @notice Admin function to rescue tokens from hook to specified address
-     * @dev Used for recovering WBTC or other tokens
+     * @notice Admin function to rescue tokens from hook to vault
+     * @dev Used for recovering WBTC or other tokens. Always sends to vault.
      */
     function adminRescueTokens(
         address token,
-        address to,
         uint256 amount
     ) external;
     

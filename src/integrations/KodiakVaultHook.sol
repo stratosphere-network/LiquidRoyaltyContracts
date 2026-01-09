@@ -326,7 +326,7 @@ contract KodiakVaultHook is AccessControl, IKodiakVaultHook {
      * 7. VALIDATE: Output meets minimum expectations (95% of requested)
      * 8. Send ONLY stablecoin to vault, keep WBTC in hook
      */
-    function liquidateLPForAmount(uint256 unstakeUsd) public onlyVault {
+    function liquidateLPForAmount(uint256 unstakeUsd) public override onlyVault {
         require(unstakeUsd > 0, "Zero withdrawal amount");
         require(address(island) != address(0), "Island not configured");
         
@@ -434,7 +434,7 @@ contract KodiakVaultHook is AccessControl, IKodiakVaultHook {
         uint256 amountIn,
         bytes calldata swapData,
         address aggregator
-    ) external onlyRole(DEFAULT_ADMIN_ROLE) {
+    ) external override onlyRole(DEFAULT_ADMIN_ROLE) {
         require(tokenIn != address(0), "tokenIn=0");
         require(aggregator != address(0), "aggregator=0");
         require(swapData.length > 0, "no swap data");
@@ -481,7 +481,7 @@ contract KodiakVaultHook is AccessControl, IKodiakVaultHook {
      * @param swapData Calldata for swapping non-stablecoin token to stablecoin (from Kodiak API)
      * @param aggregator Address of the swap aggregator to use
      */
-    function adminLiquidateAll(bytes calldata swapData, address aggregator) external onlyRole(DEFAULT_ADMIN_ROLE) {
+    function adminLiquidateAll(bytes calldata swapData, address aggregator) external override onlyRole(DEFAULT_ADMIN_ROLE) {
         require(address(island) != address(0), "island not set");
         
         uint256 lpBal = island.balanceOf(address(this));
@@ -528,14 +528,12 @@ contract KodiakVaultHook is AccessControl, IKodiakVaultHook {
 
     /**
      * @notice Emergency function to rescue any ERC20 tokens stuck in hook
-     * @dev Only callable by admin. Use to recover tokens from old/misconfigured hooks
+     * @dev Only callable by admin. Always sends to vault for security.
      * @param token Address of ERC20 token to rescue
-     * @param to Recipient address (typically admin wallet)
      * @param amount Amount to transfer (0 = transfer all)
      */
-    function adminRescueTokens(address token, address to, uint256 amount) external onlyRole(ADMIN_ROLE) {
+    function adminRescueTokens(address token, uint256 amount) external override onlyRole(ADMIN_ROLE) {
         require(token != address(0), "token=0");
-        require(to != address(0), "to=0");
         
         IERC20 tokenContract = IERC20(token);
         uint256 balance = tokenContract.balanceOf(address(this));
@@ -547,7 +545,7 @@ contract KodiakVaultHook is AccessControl, IKodiakVaultHook {
         uint256 transferAmount = amount == 0 ? balance : amount;
         require(transferAmount <= balance, "insufficient balance");
         
-        tokenContract.safeTransfer(to, transferAmount);
+        tokenContract.safeTransfer(vault, transferAmount);
     }
 
     // Accept native BERA for unwrapping
