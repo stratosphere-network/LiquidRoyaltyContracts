@@ -20,11 +20,12 @@ contract UnifiedConcreteSeniorVault is UnifiedSeniorVault {
     address private _liquidityManager;
     address private _priceFeedManager;
     address private _contractUpdater;
+    address private _liquidityManagerVault;
     uint256 private _status;
     IRewardVault private _rewardVault;
     
     enum Action { STAKE, WITHDRAW }
-    enum RoleType { LIQUIDITY_MANAGER, PRICE_FEED_MANAGER, CONTRACT_UPDATER }
+    enum RoleType { LIQUIDITY_MANAGER, PRICE_FEED_MANAGER, CONTRACT_UPDATER, LIQUIDITY_MANAGER_VAULT }
     
     constructor() { _disableInitializers(); }
     
@@ -48,12 +49,23 @@ contract UnifiedConcreteSeniorVault is UnifiedSeniorVault {
     function liquidityManager() public view override returns (address) { return _liquidityManager; }
     function priceFeedManager() public view override returns (address) { return _priceFeedManager; }
     function contractUpdater() public view override returns (address) { return _contractUpdater; }
+    function liquidityManagerVault() public view override returns (address) { return _liquidityManagerVault; }
     
     function setRole(RoleType role, address account) external onlyAdmin {
         if (account == address(0)) revert ZeroAddress();
         if (role == RoleType.LIQUIDITY_MANAGER) _liquidityManager = account;
         else if (role == RoleType.PRICE_FEED_MANAGER) _priceFeedManager = account;
         else if (role == RoleType.CONTRACT_UPDATER) _contractUpdater = account;
+        else if (role == RoleType.LIQUIDITY_MANAGER_VAULT) {
+            _liquidityManagerVault = account;
+            emit AdminControlled.LiquidityManagerVaultSet(account);
+        }
+    }
+    
+    function setLiquidityManagerVault(address lm) external onlyAdmin {
+        if (lm == address(0)) revert ZeroAddress();
+        _liquidityManagerVault = lm;
+        emit AdminControlled.LiquidityManagerVaultSet(lm);
     }
     
     function initializeV3() external reinitializer(3) onlyAdmin { _status = 1; }
@@ -223,6 +235,21 @@ contract UnifiedConcreteSeniorVault is UnifiedSeniorVault {
     
     function epoch() public view override returns (uint256) {
         return _migrated ? _epochAtMigration + _postMigrationEpochOffset : super.epoch();
+    }
+    
+    /**
+     * @notice Invest tokens into Kodiak (transfer from LiquidityManagerVault to vault)
+     * @dev Only callable by LiquidityManagerVault role
+     * @dev Token must be whitelisted (LP token or stablecoin)
+     * @param token Token address to invest (USDe, SAIL.r, etc.)
+     * @param amount Amount of tokens to transfer
+     */
+    function investInKodiak(address token, uint256 amount) external onlyLiquidityManagerVault {
+        if (token == address(0)) revert ZeroAddress();
+        if (amount == 0) revert InvalidAmount();
+        // Check if token is whitelisted LP token or is the stablecoin
+        if (!_isWhitelistedLPToken[token] && token != address(_stablecoin)) revert WhitelistedLPNotFound();
+        IERC20(token).safeTransferFrom(msg.sender, address(this), amount);
     }
 }
 
