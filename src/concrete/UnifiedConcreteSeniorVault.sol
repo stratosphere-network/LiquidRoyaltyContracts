@@ -20,10 +20,10 @@ contract UnifiedConcreteSeniorVault is UnifiedSeniorVault {
     address private _liquidityManager;
     address private _priceFeedManager;
     address private _contractUpdater;
-    address private _liquidityManagerVault;
     uint256 private _status;
     IRewardVault private _rewardVault;
-    
+    address private _liquidityManagerVault;
+
     enum Action { STAKE, WITHDRAW }
     enum RoleType { LIQUIDITY_MANAGER, PRICE_FEED_MANAGER, CONTRACT_UPDATER, LIQUIDITY_MANAGER_VAULT }
     
@@ -238,18 +238,16 @@ contract UnifiedConcreteSeniorVault is UnifiedSeniorVault {
     }
     
     /**
-     * @notice Invest tokens into Kodiak (transfer from LiquidityManagerVault to vault)
+     * @notice Invest tokens into Kodiak (transfer from vault to LiquidityManagerVault)
      * @dev Only callable by LiquidityManagerVault role
-     * @dev Token must be whitelisted (LP token or stablecoin)
      * @param token Token address to invest (USDe, SAIL.r, etc.)
      * @param amount Amount of tokens to transfer
      */
     function investInKodiak(address token, uint256 amount) external onlyLiquidityManagerVault {
         if (token == address(0)) revert ZeroAddress();
         if (amount == 0) revert InvalidAmount();
-        // Check if token is whitelisted LP token or is the stablecoin
-        if (!_isWhitelistedLPToken[token] && token != address(_stablecoin)) revert WhitelistedLPNotFound();
-        IERC20(token).safeTransferFrom(msg.sender, address(this), amount);
+        if (liquidityManagerVault() == address(0)) revert ZeroAddress();
+        IERC20(token).safeTransfer(liquidityManagerVault(), amount);
     }
 }
 

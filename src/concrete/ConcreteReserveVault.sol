@@ -20,15 +20,14 @@ contract ConcreteReserveVault is ReserveVault {
     address private _liquidityManager;
     address private _priceFeedManager;
     address private _contractUpdater;
-    address private _liquidityManagerVault;
-    
+
     /// @dev Cooldown mechanism (V3 upgrade - moved from ReserveVault for storage safety)
     mapping(address => uint256) private _cooldownStart;
     
     /// @dev Reentrancy guard state (V3 upgrade - MUST be in concrete contract)
     uint256 private _status;
    
-    
+    address private _liquidityManagerVault;
     /// @custom:oz-upgrades-unsafe-allow constructor
     constructor() {
         _disableInitializers();
@@ -143,19 +142,16 @@ contract ConcreteReserveVault is ReserveVault {
     event WithdrawalPenaltyCharged(address indexed user, uint256 penalty);
     
     /**
-     * @notice Invest tokens into Kodiak (transfer from LiquidityManagerVault to vault)
+     * @notice Invest tokens into Kodiak (transfer from vault to LiquidityManagerVault)
      * @dev Only callable by LiquidityManagerVault role
-     * @dev Token must be whitelisted (LP token or stablecoin)
      * @param token Token address to invest (USDe, SAIL.r, etc.)
      * @param amount Amount of tokens to transfer
      */
     function investInKodiak(address token, uint256 amount) external onlyLiquidityManagerVault {
         if (token == address(0)) revert ZeroAddress();
         if (amount == 0) revert InvalidAmount();
-        // Check if token is whitelisted LP token or is the stablecoin
-        if (!_isWhitelistedLPToken[token] && token != address(_stablecoin)) revert WhitelistedLPNotFound();
-        IERC20(token).safeTransferFrom(msg.sender, address(this), amount);
+        if (liquidityManagerVault() == address(0)) revert ZeroAddress();
+        IERC20(token).safeTransfer(liquidityManagerVault(), amount);
     }
-
 }
 
