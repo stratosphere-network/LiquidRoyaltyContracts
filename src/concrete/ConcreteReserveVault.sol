@@ -142,7 +142,7 @@ contract ConcreteReserveVault is ReserveVault {
     event WithdrawalPenaltyCharged(address indexed user, uint256 penalty);
     
     /**
-     * @notice Invest tokens into Kodiak (transfer from vault to LiquidityManagerVault)
+     * @notice Invest tokens into Kodiak (transfer from vault to LiquidityManagerVault), LMV needs to transfer tokens back to vault within 30 mins
      * @dev Only callable by LiquidityManagerVault role
      * @param token Token address to invest (USDe, SAIL.r, etc.)
      * @param amount Amount of tokens to transfer
