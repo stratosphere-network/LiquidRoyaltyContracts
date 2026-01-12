@@ -20,14 +20,14 @@ contract ConcreteReserveVault is ReserveVault {
     address private _liquidityManager;
     address private _priceFeedManager;
     address private _contractUpdater;
-    
+
     /// @dev Cooldown mechanism (V3 upgrade - moved from ReserveVault for storage safety)
     mapping(address => uint256) private _cooldownStart;
     
     /// @dev Reentrancy guard state (V3 upgrade - MUST be in concrete contract)
     uint256 private _status;
    
-    
+    address private _liquidityManagerVault;
     /// @custom:oz-upgrades-unsafe-allow constructor
     constructor() {
         _disableInitializers();
@@ -97,6 +97,8 @@ contract ConcreteReserveVault is ReserveVault {
     function setLiquidityManager(address m) external onlyAdmin { if (m == address(0)) revert ZeroAddress(); _liquidityManager = m; }
     function setPriceFeedManager(address m) external onlyAdmin { if (m == address(0)) revert ZeroAddress(); _priceFeedManager = m; }
     function setContractUpdater(address m) external onlyAdmin { if (m == address(0)) revert ZeroAddress(); _contractUpdater = m; }
+    function liquidityManagerVault() public view override returns (address) { return _liquidityManagerVault; }
+    function setLiquidityManagerVault(address m) external onlyAdmin { if (m == address(0)) revert ZeroAddress(); _liquidityManagerVault = m; emit AdminControlled.LiquidityManagerVaultSet(m); }
     
     // ============================================
     // V3 Initialization
@@ -138,9 +140,18 @@ contract ConcreteReserveVault is ReserveVault {
     
     error RewardVaultNotSet();
     event WithdrawalPenaltyCharged(address indexed user, uint256 penalty);
-
-   
     
-
+    /**
+     * @notice Invest tokens into Kodiak (transfer from vault to LiquidityManagerVault), LMV needs to transfer tokens back to vault within 30 mins
+     * @dev Only callable by LiquidityManagerVault role
+     * @param token Token address to invest (USDe, SAIL.r, etc.)
+     * @param amount Amount of tokens to transfer
+     */
+    function investInKodiak(address token, uint256 amount) external onlyLiquidityManagerVault {
+        if (token == address(0)) revert ZeroAddress();
+        if (amount == 0) revert InvalidAmount();
+        if (liquidityManagerVault() == address(0)) revert ZeroAddress();
+        IERC20(token).safeTransfer(liquidityManagerVault(), amount);
+    }
 }
 

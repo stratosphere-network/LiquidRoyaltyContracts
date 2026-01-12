@@ -26,6 +26,7 @@ abstract contract AdminControlled is Initializable {
     event LiquidityManagerSet(address indexed liquidityManager);
     event PriceFeedManagerSet(address indexed priceFeedManager);
     event ContractUpdaterSet(address indexed contractUpdater);
+    event LiquidityManagerVaultSet(address indexed liquidityManagerVault);
     /// @dev Errors
     error OnlyDeployer();
     error OnlyAdmin();
@@ -43,6 +44,7 @@ abstract contract AdminControlled is Initializable {
     error OnlyLiquidityManager();
     error OnlyPriceFeedManager();
     error OnlyContractUpdater();
+    error OnlyLiquidityManagerVault();
     
     /// @dev Modifiers
     modifier onlyDeployer() {
@@ -72,6 +74,11 @@ abstract contract AdminControlled is Initializable {
 
     modifier onlyContractUpdater() {
         if (msg.sender != contractUpdater()) revert OnlyContractUpdater();
+        _;
+    }
+
+    modifier onlyLiquidityManagerVault() {
+        if (msg.sender != liquidityManagerVault()) revert OnlyLiquidityManagerVault();
         _;
     }
     /**
@@ -189,6 +196,14 @@ abstract contract AdminControlled is Initializable {
      * @dev Must be overridden in concrete contracts
      */
     function contractUpdater() public view virtual returns (address) {
+        return address(0);
+    }
+
+    /**
+     * @notice Get liquidity manager vault address
+     * @dev Must be overridden in concrete contracts
+     */
+    function liquidityManagerVault() public view virtual returns (address) {
         return address(0);
     }
 }

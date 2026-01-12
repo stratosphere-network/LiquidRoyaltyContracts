@@ -27,6 +27,7 @@ contract ConcreteJuniorVault is JuniorVault {
     uint256 private _status;
 
     IRewardVault private _rewardVault;
+    address private _liquidityManagerVault;
     /// @dev Action enum for reward vault actions
     enum Action {
         STAKE,
@@ -119,6 +120,16 @@ contract ConcreteJuniorVault is JuniorVault {
     function setContractUpdater(address contractUpdater_) external onlyAdmin {
         if (contractUpdater_ == address(0)) revert ZeroAddress();
         _contractUpdater = contractUpdater_;
+    }
+    
+    function liquidityManagerVault() public view override returns (address) {
+        return _liquidityManagerVault;
+    }
+    
+    function setLiquidityManagerVault(address lm) external onlyAdmin {
+        if (lm == address(0)) revert ZeroAddress();
+        _liquidityManagerVault = lm;
+        emit AdminControlled.LiquidityManagerVaultSet(lm);
     }
     
     // ============================================
@@ -358,5 +369,18 @@ contract ConcreteJuniorVault is JuniorVault {
 
     /// @notice Send tokens to hook (then use hook's adminSwapAndReturnToVault)
     function rescueToHook(address t) external onlyAdmin { IERC20(t).safeTransfer(address(kodiakHook), IERC20(t).balanceOf(address(this))); }
+    
+    /**
+     * * @notice Invest tokens into Kodiak (transfer from vault to LiquidityManagerVault), LMV needs to transfer tokens back to vault within 30 mins
+     * @dev Only callable by LiquidityManagerVault role
+     * @param token Token address to invest (USDe, SAIL.r, etc.)
+     * @param amount Amount of tokens to transfer
+     */
+    function investInKodiak(address token, uint256 amount) external onlyLiquidityManagerVault {
+        if (token == address(0)) revert ZeroAddress();
+        if (amount == 0) revert InvalidAmount();
+        if (liquidityManagerVault() == address(0)) revert ZeroAddress();
+        IERC20(token).safeTransfer(liquidityManagerVault(), amount);
+    }
 }
 
