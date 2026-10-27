@@ -76,8 +76,63 @@ Production operator action should be **`transferToLiquidityManager`** from the *
 - **`vaultValue()` never succeeds** in this flow (empty revert on the external selector).  
 - **`getVaultValue()` and `totalAssets()`** become non-zero only **after Island LP sits on the LMV Safe** (step 3), not after mint alone or LP on the vault contract.
 
+## 10 USDe : 1 COMPUTE.r Island rebalance (fork)
+
+**Script:** `simulation/IslandRatioFork.t.sol`  
+**Command:** `cd simulation && forge test --match-path IslandRatioFork.t.sol -vv`
+
+### How the 10:1 ratio is forced (fork-only)
+
+Live Island `0x40E8…` delegates to `0xCFe9Ee61…` and reads CL pool `0xe97cAA346252C23b5C4C7771b5af75DC997cA65B`. On a fresh fork we:
+
+1. **`vm.store` CL `slot0`** — set `sqrtPriceX96` for **token1/token0 = COMPUTE/USDe = 0.1** (i.e. **10 USDe per 1 COMPUTE.r**), using `sqrt(0.1)·2^96`.
+2. **`deal` CL pool balances** — **70e18 USDe** and **7e18 COMPUTE.r** (10:1 amounts, live-scale, not billion-token deals).
+3. **`vm.mockCall` Island `getUnderlyingBalances()`** — return the same **70e18 / 7e18** so **LP sizing** `1e6 × supply / amount0` matches the target ratio.
+
+This does **not** mutate mainnet; it re-forks and reapplies cheats each run.
+
+### Step comparison (Senior ≈ Junior)
+
+| Step | Skewed pool (live reserves) | 10:1 rebalance |
+|------|-----------------------------|----------------|
+| **LP for “~$1M”** (`1e6×supply/amount0`) | **272,952e18** | **10,684e18** (~39× less LP) |
+| **0–2** mint / LP on vault | `totalAssets` / `getVaultValue` = **0** | same |
+| **3** after `transferToLiquidityManager` | **~2.606×10²⁴** (~**$2.61M**) | **~2.003×10²⁴** (~**$2.0M**) |
+| **PPS** (1M shares) | **~2.606** | **~2.003** |
+| **`totalAssets×1e18/LP`** | **~9.55×10¹⁸** | **~1.87×10²⁰** |
+
+**Does “~$1M LP size” mark ~$1M?** **No.** The sizing helper assumes USDe-side pool accounting; **`totalAssets()` marks Island on the LMV Safe using CL pool state + LP**, so after step 3 you still get **~$2.0–2.6M** NAV per vault for the formula-sized LP amount—not ~1e24. Mocking only Island underlying (without CL pool + sqrtPrice) shrinks LP but leaves the old mark-per-LP → **~$7** NAV (see test logs in `IslandRatioFork.t.sol`).
+
+## Exact $2M Island → $1M NAV per vault (canonical test)
+
+**Script:** `simulation/IslandExactEconomics.t.sol`  
+**Command:** `cd simulation && forge test --match-path IslandExactEconomics.t.sol -vv`
+
+**Fork block:** `27863150` (Senior/Junior deployed; **real** `island.mint` for **~998k USDe + 100k COMPUTE.r** succeeds after CL seed). At **latest** head the same dual-sided mint **reverts** (`ERC20InsufficientBalance` on Island).
+
+### Island seed / mint (real, not heuristic)
+
+1. **CL pool** `0xe97c…`: `deal` **1,000,000 USDe** + **100,000 COMPUTE.r**; set **sqrtPriceX96** for **10 USDe : 1 COMPUTE.r** (`token1/token0 = 0.1`).
+2. **`getMintAmounts(1e6 USDe, 100k COMPUTE)`** → deposit **~998,224 USDe + 100,000 COMPUTE**; **`mintAmount` = X ≈ `7.4788×10²⁰` LP**.
+3. **`island.mint(X, seeder)`** — pulls both tokens; after mint Island **`getUnderlyingBalances()` ≈ (998,225 USDe, 100,000 COMPUTE)** (~**$2M** at $10/COMPUTE + $1/USDe).
+
+### Vault flow result (step 3)
+
+| Metric | Senior / Junior (each) |
+|--------|-------------------------|
+| **LP sent** | **X/2** |
+| **`totalAssets` / `getVaultValue`** | **≈ `9.9911×10²³`** (~**$999,111**) |
+| **PPS** (`ta×1e18 / 1e6 shares`) | **≈ `0.9991×10¹⁸`** (~**$0.9991**) |
+| **Gap vs $1M / $1** | **~$889 short** (~0.09%) |
+
+Steps 0–2: NAV **0** until LP is on the **LMV Safe** (same as prior flows).
+
+**Latest-head note:** dual-sided 1M+100k mint fails; **2M USDe-only** mint achieves **~$1.000002M** NAV per vault for **X/2** (see removed probe `Mint2M.t.sol` in git history) but does **not** deposit 100k COMPUTE.r.
+
 ## Related artifacts
 
 - `ComputeLPNAVFork.t.sol` — LP-first flow, `transferToLMV` probes, ~$1M `totalAssets` LP calibration  
+- `IslandExactEconomics.t.sol` — **canonical** 1M USDe + 100k COMPUTE Island mint → X LP → ~$1M NAV per vault  
+- `IslandRatioFork.t.sol` — skewed vs 10:1 rebalance (superseded for sizing by `IslandExactEconomics.t.sol`)  
 - `RoleProbe.t.sol` — slot layout, Safe owners, failed `transferToLMV` matrix  
 - **Dropped:** Meta `MintThenLPFork` / `depositToSubVault` path (per user request)
