@@ -1,15 +1,14 @@
-# COMPUTE.r Senior/Junior — Berachain mainnet fork simulation
+# COMPUTE.r Senior/Junior — corrected Kodi transferrer fork simulation
 
-**RPC:** `https://rpc.berachain.com`  
-**Fork block (run):** ~`28038558` (latest at execution time)  
-**Script:** `simulation/ComputeLPNAVFork.t.sol`  
+**RPC:** `https://rpc.berachain.com` (latest block at run time)  
+**Primary script:** `simulation/FullScenario.t.sol`  
 **Command:**
 
 ```bash
-cd simulation && forge test --match-test testComputeLPSeedAndLMVFlow -vv
+cd simulation && forge test --match-path FullScenario.t.sol -vv
 ```
 
-## Live addresses (verified on fork)
+## Live addresses
 
 | Role | Address |
 |------|---------|
@@ -18,96 +17,67 @@ cd simulation && forge test --match-test testComputeLPSeedAndLMVFlow -vv
 | Island LP (KODI-COMPUTE.r-USDe) | `0x40E8Fa74792274d9d9A328D41324E9d5199C0A16` |
 | USDe (token0) | `0x5d3a1Ff2b6BAb83b63cd9AD0787074081a52ef34` |
 | COMPUTE.r (token1) | `0xB8CD0b8E056A91c00FD388EdDb37E6E445844B21` |
-| Senior impl (EIP-1967) | `0x0e4e9eb172a6cd8b457fe2387f9c2355bed0e1e0` |
-| Junior impl | `0x02d744d1f458a4cd6a1a9cc48225490d1811245a` |
-| Senior operator/LMV wallet (storage **slot 2**) | `0x246f89F3b451133bB9a84c3f0871C9198b90AA04` (minimal proxy) |
-| Junior operator/LMV wallet (storage **slot 2**) | `0xacf0B6eFd883b3cE5A7cC9177005f12f049C9C2e` |
+| Operator EOA (`OPERATOR_ROLE`) | `0xE90986e67A9cbEbcF67084cbBF8E24FAa0a43Bcb` |
+| Admin multisig (`hasRole(0x00…00, admin)` = true on both vaults) | `0xd60c3A29Fbe444cF9d3AA240F4a9263BC83bde61` |
+| Senior `liquidityManagerVault()` (Gnosis Safe, 2/4) | `0x246f89F3b451133bB9a84c3f0871C9198b90AA04` |
+| Junior `liquidityManagerVault()` (Gnosis Safe, 2/4) | `0xacf0B6eFd883b3cE5A7cC9177005f12f049C9C2e` |
 
-**Important:** These mainnet proxies are **not** the same bytecode/layout as this repo’s `BaseVault` / `UnifiedConcreteSeniorVault` (no `kodiakHook()` on storage; `vaultValue()` / `liquidityManager()` / `admin()` **revert** on live impl). They expose **`transferToLMV(address,uint256)`** (`0x3194517d`) and **`withdrawLPTokens(address,address,uint256)`** (`0x98c1b700`) selectors, plus a custom **`totalAssets()`** that marks an **operator wallet** (slot 2), not ERC20 balances on the vault body.
+There is **no separate LMV contract** — `liquidityManagerVault()` **is** the operator multisig Safe that holds Island LP after routing.
 
----
+## Kodi token transferrer (on-chain discovery)
 
-## LP amount for ~$1M (Island mark at fork)
+| Finding | Detail |
+|---------|--------|
+| **Configured mint recipient today** | **None.** `whitelistedMintAddresses(any)` is `false` for all probed EOAs/contracts. **Zero** `WhitelistedMintAddress` events on Senior or Junior since deploy. |
+| **Operational address used in fork** | `0xE532DFede91f04B12a73d3d2Acd361424F41f76B` — EOA embedded in the vault **implementation bytecode** (same family as strategy-manager constants). Must be set via `setWhitelistedMintAddress(transferrer, true)` before minting. |
+| **Not the transferrer** | `0xE76953834b165209a5FFE36fe3A833b52DD946d9` (empty EOA, never whitelisted). Meta Senior `0xC38421E5577250EBa177Bc5bC832E747bea13Ee0` is `UserWhitelisted` / `StrategyManagerSet` only (Meta path — out of scope). |
+| **Admin mint function** | Use **`adminMintShares(address,uint256,string)`** (`0x2f8d85b2`) from **`DEFAULT_ADMIN`**. The selector `adminMint(address,uint256)` reverts with no data even when `OPERATOR_ROLE` + mint whitelist are satisfied. |
+| **Pre-mint config (mainnet)** | Admin Safe must call `setWhitelistedMintAddress(kodiTransferrer, true)` then `adminMintShares(kodiTransferrer, 1_000_000e18, reason)`. |
 
-Island `token0` = USDe, `token1` = COMPUTE.r.
+Fork note: the test uses `vm.prank(ADMIN_SAFE)` to simulate the admin Safe executing those calls (no `execTransaction` signature assembly).
 
-| Quantity | Value |
-|----------|--------|
-| LP `totalSupply` | `747_879_875_461_301_733` (≈ **0.748e18** LP units) |
-| USDe in pool (`getUnderlyingBalances().amount0`) | `2_739_965_456_203_749_875` (≈ **2.74 USDe** reported in pool accounting) |
-| Simple USDe share mark: `usdPerLp = amount0 * 1e18 / totalSupply` | **3.663643783052331296e18** (~**$3.66**/LP) |
-| LP raw amount for **$1M** at that mark: `1e24 * totalSupply / amount0` | **`272_952_300_828_455_311_673_549`** (~**272,952.3** LP) |
+## Step table (corrected order)
 
-**Funding:** On fork, Island LP was **`deal`’d** to a test whale (`0x…bEEF`) because on-chain supply is far below 272k LP; the whale then `transfer`’d to each vault. Real mainnet would require minting/add-liquidity or sourcing from a large holder.
+| Step | Action | Senior (representative) | Junior | `vaultValue()` | `getVaultValue()` / `totalAssets()` | Share price (`convertToAssets(1e18)`) |
+|------|--------|-------------------------|--------|----------------|--------------------------------------|----------------------------------------|
+| 0 | Baseline | `totalSupply=0`, no Island | same | **reverts** | 0 / 0 | n/a (ts=0) |
+| 1 | Admin: whitelist + **`adminMintShares` 1M** to Kodi transferrer | `totalSupply=1e6e18`, transferrer balance 1M | same | **reverts** | 0 / 0 | **0** (assets still 0) |
+| 2 | Transferrer sends **~$1M Island LP** to vault (`272,952e18` LP at USDe/reserve ratio) | Island on **vault body** | same | **reverts** | 0 / 0 | **0** (LP on vault **not** counted) |
+| 3 | **Operator EOA** calls **`transferToLiquidityManager(lp, island)`** (not `transferToLMV`) | Island on **LMV Safe** `0x246f…` | Island on `0xacf0…` | **still reverts** | **`~2.606e24` (~$2.61M mark)** | **`~2.606e18` per share** (~$2.61 PPS) |
+| 4 | `transferToLMV(address,uint256)` from operator after step 3 | No-op / empty revert in practice | same | — | unchanged | unchanged |
 
----
+### LP sizing (~$1M intent)
 
-## Step-by-step results (Senior / Junior)
+- **USDe/reserve ratio:** `272,952,300,828,455,311,673,549` LP (~$1M if priced as USDe × supply / pool USDe).
+- **`totalAssets()` mark at that size:** **~$2.61M** per vault (implementation marks Island on the LMV Safe with a richer formula than USDe-side share only). For **~$1M on `totalAssets()`**, prior calibration was **~`104,700e18` LP** (see `ComputeLPNAVFork.t.sol`).
 
-| Step | Senior `totalAssets()` | Junior `totalAssets()` | Slot-3 internal (~`_vaultValue`) | Island on **vault** | Island on **operator (slot 2)** | Island on **hook** | Notes |
-|------|------------------------|------------------------|----------------------------------|---------------------|----------------------------------|--------------------|-------|
-| **0 – baseline** | 0 | 0 | ~**10.03e18** each | 0 | 0 | 0 | `vaultValue()` reverts; slot 3 ≈ initial ~$10 seed |
-| **1 – after ~$1M LP ERC20 transfer to vault** | **0** | **0** | ~**10.03e18** (unchanged) | **272,952e18** each | 0 | 0 | **Loose Island on vault body is ignored by `totalAssets()`** |
-| **2 – `transferToLMV(island, amount)` as operator** | 0 | 0 | unchanged | unchanged | 0 | 0 | **Reverted** for operator, treasury, and bytecode-embedded EOAs (no strategy-manager key on fork) |
-| **2b – simulated LMV effect** (vault → operator transfer) | **~2.606e24** | **~2.606e24** | ~**10.03e18** (unchanged) | **0** | **272,952e18** each | 0 | Matches intended **post-LMV** location; NAV appears here |
+### Who can move LP to the LMV Safe?
 
-### When does each vault show ~$1M?
+| Caller | `transferToLMV` | `transferToLiquidityManager` |
+|--------|-----------------|------------------------------|
+| `liquidityManagerVault()` Safe as `msg.sender` | Fails (Safe lacks `OPERATOR_ROLE`) | Fails (needs operator) |
+| Operator EOA `0xE909…` | Empty revert / ineffective after LP moved | **Works** |
+| Strategy manager role holder `0xFFF775…` | Fails | Not required (operator path works) |
 
-| Metric | Reaches ~$1M? | When |
-|--------|----------------|------|
-| **`totalAssets()` (live impl)** | **Not at the simple-pool $1M LP size** | Only after LP sits on the **operator/LMV wallet (slot 2)**. With **272,952 LP** the on-chain mark reads **~$2.61M** per vault (see below), not $1M. |
-| **Slot-3 internal value** | **No** | Stays ~**$10** through all steps (no auto-update from LP). |
-| **`vaultValue()` getter** | N/A | **Always reverts** on live proxies. |
+Production operator action should be **`transferToLiquidityManager`** from the **operator EOA** (or the same call batched via the operator Safe’s `execTransaction` with an owner signature — not exercised in this script).
 
-**~$1M `totalAssets()` (live mark):** From calibration (`100e18` LP on operator → `totalAssets ≈ 954.73e18`), use **~104,700 LP** (1e18 units), not 272,952 LP, to land near **$1M** on this implementation.
+## Arithmetic after step 3 (fork run)
 
----
+| Metric | Senior | Junior |
+|--------|--------|--------|
+| `totalSupply` | 1,000,000e18 | 1,000,000e18 |
+| `totalAssets` | ~2,605,969,262,374,723,904,203,778 (~2.606×10²⁴) | same order |
+| `getVaultValue()` | matches `totalAssets` | matches |
+| `vaultValue()` | **reverts** (always in this scenario) | **reverts** |
+| Implied PPS (`totalAssets/totalSupply`) | ~**2.606** (18-dec USD per share) | ~**2.606** |
+| Island LP location | LMV Safe | LMV Safe |
 
-## Is NAV “correct” vs independent Island mark?
+**When does NAV “record” without revert?**  
+- **`vaultValue()` never succeeds** in this flow (empty revert on the external selector).  
+- **`getVaultValue()` and `totalAssets()`** become non-zero only **after Island LP sits on the LMV Safe** (step 3), not after mint alone or LP on the vault contract.
 
-### Live COMPUTE.r proxies (this fork)
+## Related artifacts
 
-1. **`totalAssets()`** – On-chain view **does not** sum vault ERC20 balances. It **only** marks Island (and pool-related assets) held by the **operator wallet in storage slot 2** (plus embedded pool/oracle logic). Evidence: vault-only `deal` → `totalAssets` stays **0**; operator-only `deal` → `totalAssets` jumps (`testTotalAssetsMarksOperatorWallet`).
-2. **Mark level** – Simple `USDe_in_pool / LP_supply` implies **~$3.66/LP** and **~$1M** for 272,952 LP, but **`totalAssets()` reports ~$2.61M** for that amount → the implementation uses a **richer mark** (includes CL pool / COMPUTE leg / `getUnderlyingBalances` math), not naive stable-side share only.
-3. **Slot 3 (~$10)** – Behaves like a separate **`_vaultValue` / admin ledger** that **does not** move when LP is deposited or routed.
-4. **`vaultValue()`** – Unusable via RPC (reverts); use **`totalAssets()`** for ERC4626-style external NAV on this deployment, or **slot 3** for internal ledger.
-
-### This repo’s vault code (for comparison — **not** deployed at the addresses above)
-
-| Path | NAV update |
-|------|------------|
-| **`seedVault(lp, amount, lpPrice)`** (seeder) | LP sent **directly to `kodiakHook`**; **`_vaultValue += amount * lpPrice`** immediately. |
-| **`withdrawLPTokens(lpToken, lp, amount)`** (liquidity manager) | Moves LP from vault to whitelisted **`lp`** (hook); **does not** auto-increase `_vaultValue` — expects **`executeVaultValueAction`** / operator price. |
-| **`_getLpConversionData`** | Uses **`getUnderlyingBalances()` second return as “stable”** — for this Island, **token0 = USDe, token1 = COMPUTE**, so the repo helper treats **COMPUTE (often 0)** as stable side → **on-chain helper undervalues LP** unless token ordering matches their assumption. |
-
-**Hypothesis confirmed (live):** NAV **ignores** Island sitting on the **vault contract** until LP is in the **LMV/operator path** used by `totalAssets()`. **Operator price update** still required for slot-3 / `vaultValue` style ledger on live impl.
-
----
-
-## LMV / ACL (fork)
-
-| Function | Selector | Role (live) | Fork outcome |
-|----------|----------|-------------|--------------|
-| **`transferToLMV(address token, uint256 amount)`** | `0x3194517d` | **Strategy manager** (error string in impl bytecode); not slot-2 operator | **Revert** — impersonation failed for tested EOAs |
-| **`withdrawLPTokens(address,address,uint256)`** | `0x98c1b700` | Liquidity manager (repo pattern) | Not usable — **`kodiakHook()` unset** / reverts |
-| **Bypass on fork** | — | — | **`deal` LP**; **simulated** `vault.transfer(operator, amount)` after failed `transferToLMV` |
-
-Embedded bytecode addresses (not all valid callers): `0xC465a6368D3708f6B738Cc46b9A1Ac650e1dE010`, `0xE532DFede91f04B12a73d3d2Acd361424F41f76B`.
-
----
-
-## Related tests in the same file
-
-```bash
-cd simulation && forge test --match-test testTotalAssetsMarksOperatorWallet -vv
-cd simulation && forge test --match-test testDiscoverTransferToLMVCaller -vv
-```
-
----
-
-## Summary answers
-
-1. **When ~$1M Senior / Junior?** – **`totalAssets()`:** only after LP is on the **operator (slot 2)** wallet, **not** after vault ERC20 receipt. At the **USDe-share $1M LP size** (272,952 LP), the live mark shows **~$2.61M**, not $1M; use **~104,700 LP** for ~$1M on `totalAssets()`. **Slot-3 ledger** stays ~$10.
-2. **Correct valuation?** – **Externally reported `totalAssets()`** tracks **operator-wallet LP** with a **pool-based mark**; **vault-body LP is ignored**. **Internal slot-3** does not track LP in this flow. Repo **`seedVault`** would update `_vaultValue`; repo **`withdrawLPTokens`** alone would not.
-3. **LP for ~$1M (simple USDe pool mark):** **272,952.300828455311673549** LP (18 decimals); math above.
-4. **ACL:** **`transferToLMV`** gated (strategy manager); **`withdrawLPTokens`** / hook path not configured on these proxies. Fork used **`deal` + simulated routing** to operator wallet.
+- `ComputeLPNAVFork.t.sol` — LP-first flow, `transferToLMV` probes, ~$1M `totalAssets` LP calibration  
+- `RoleProbe.t.sol` — slot layout, Safe owners, failed `transferToLMV` matrix  
+- **Dropped:** Meta `MintThenLPFork` / `depositToSubVault` path (per user request)
