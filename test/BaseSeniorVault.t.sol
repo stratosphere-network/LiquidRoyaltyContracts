@@ -117,7 +117,7 @@ contract BaseSeniorVaultTest is Test {
         _deposit(USER, 1000e18);
 
         vm.prank(USER);
-        vault.initiateCooldown();
+        vault.initiateCooldown(1000e18);
 
         vm.expectRevert(bytes("Cooldown not ended"));
         vm.prank(USER);
@@ -143,7 +143,7 @@ contract BaseSeniorVaultTest is Test {
     function test_operator_clearCooldown_forcesReinitiate() public {
         _deposit(USER, 50e18);
         vm.prank(USER);
-        vault.initiateCooldown();
+        vault.initiateCooldown(50e18);
 
         vm.prank(OPERATOR);
         vault.clearCooldown(USER);
@@ -155,7 +155,7 @@ contract BaseSeniorVaultTest is Test {
         vault.redeem(50e18, USER, USER);
 
         vm.prank(USER);
-        vault.initiateCooldown();
+        vault.initiateCooldown(50e18);
 
         uint256 ends = vault.getCooldown(USER).cooldownEnd;
         vm.warp(ends + 1);
@@ -318,6 +318,44 @@ contract BaseSeniorVaultTest is Test {
         vm.prank(TOKEN_POOL);
         vault.burn(USER, 400e18);
         assertEq(vault.totalAssets(), assetsBefore);
+    }
+
+    function test_tokenPool_burnFrom_spendsAllowance() public {
+        vm.startPrank(ADMIN);
+        vault.grantRole(vault.BURNER_ROLE(), TOKEN_POOL);
+        vm.stopPrank();
+
+        _deposit(USER, 200e18);
+
+        vm.startPrank(USER);
+        vault.approve(TOKEN_POOL, 75e18);
+        vm.stopPrank();
+
+        vm.prank(TOKEN_POOL);
+        vault.burnFrom(USER, 75e18);
+
+        assertEq(vault.balanceOf(USER), 125e18);
+        assertEq(vault.allowance(USER, TOKEN_POOL), 0);
+    }
+
+    function test_initiateCooldown_partialShares() public {
+        _deposit(USER, 1000e18);
+        vm.prank(USER);
+        vault.initiateCooldown(250e18);
+
+        BaseSeniorVault.CooldownInfo memory cd = vault.getCooldown(USER);
+        assertEq(cd.sharesToBurn, 250e18);
+        assertTrue(cd.active);
+    }
+
+    function test_initialize_reverts_zeroOperator() public {
+        BaseSeniorVault impl = new BaseSeniorVault(ADMIN);
+        bytes memory init = abi.encodeCall(
+            BaseSeniorVault.initialize,
+            (address(usde), address(0), FEE, address(0))
+        );
+        vm.expectRevert(bytes("Invalid operator"));
+        new ERC1967Proxy(address(impl), init);
     }
 
     function test_tokenPool_distinctFromErc4626Mint() public pure {

@@ -7,6 +7,7 @@ import {BaseSeniorVault} from "../src/concrete/BaseSeniorVault.sol";
 
 /// @notice Base mainnet (chain 8453) snrUSD deploy script — dry-run unless `BASE_SNRUSD_BROADCAST=true`.
 /// @dev Does not broadcast in CI; no private keys required for simulation.
+/// @dev Live deployment (Base 8453): proxy `0xdB3A54CBC468e8D99d7522579174E0733D548507`, implementation `0x920B83197484Ea410a9c9F28d9C39D5183eAD311`.
 contract DeployBaseSeniorVault is Script {
   /// @dev Base USDe — verify on-chain before deployment (must have contract code).
   address internal constant BASE_USDE = 0x5d3a1Ff2b6BAb83b63cd9AD0787074081a52ef34;

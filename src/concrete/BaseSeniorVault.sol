@@ -92,6 +92,7 @@ contract BaseSeniorVault is
         address _liquidityManagerVault
     ) external initializer {
         require(_usde != address(0), "Invalid USDe address");
+        require(_operator != address(0), "Invalid operator");
         require(_feeAddress != address(0), "Invalid fee address");
 
         __ERC20_init("Senior Vault", "snrUSD");
@@ -312,16 +313,21 @@ contract BaseSeniorVault is
         revert("Direct withdrawals disabled. Use initiateCooldown() then redeem()");
     }
 
-    function initiateCooldown() external whenNotPaused nonReentrant {
-        uint256 shares = balanceOf(msg.sender);
-        require(shares > 0, "No shares");
-        CooldownInfo storage cd = cooldowns[msg.sender];
-        require(!cd.active || block.timestamp >= cd.cooldownEnd, "Cooldown already active");
+    function initiateCooldown(uint256 shares) external whenNotPaused nonReentrant {
+        require(shares > 0, "Shares must be > 0");
+        require(balanceOf(msg.sender) >= shares, "Insufficient shares");
+        require(
+            !cooldowns[msg.sender].active || block.timestamp >= cooldowns[msg.sender].cooldownEnd,
+            "Cooldown already active"
+        );
 
-        cd.sharesToBurn = shares;
-        cd.cooldownEnd = block.timestamp + COOLDOWN_PERIOD;
-        cd.active = true;
-        emit CooldownInitiated(msg.sender, shares, cd.cooldownEnd);
+        cooldowns[msg.sender] = CooldownInfo({
+            sharesToBurn: shares,
+            cooldownEnd: block.timestamp + COOLDOWN_PERIOD,
+            active: true
+        });
+
+        emit CooldownInitiated(msg.sender, shares, cooldowns[msg.sender].cooldownEnd);
     }
 
     function redeem(uint256 shares, address receiver, address owner)
@@ -371,6 +377,13 @@ contract BaseSeniorVault is
     function burn(address from, uint256 amount) external onlyRole(BURNER_ROLE) {
         _burn(from, amount);
         emit TokenPoolBurn(from, amount);
+    }
+
+  /// @inheritdoc IBurnMintERC20
+    function burnFrom(address account, uint256 amount) external onlyRole(BURNER_ROLE) {
+        _spendAllowance(account, msg.sender, amount);
+        _burn(account, amount);
+        emit TokenPoolBurn(account, amount);
     }
 
     // ─── Views ───────────────────────────────────────────────────────────────
