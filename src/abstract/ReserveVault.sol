@@ -194,7 +194,7 @@ abstract contract ReserveVault is BaseVault, IReserveVault {
             uint256 hookBal = IERC20(tokenA).balanceOf(address(kodiakHook));
             uint256 amt = amount == 0 ? hookBal : amount;
             if (amt == 0 || hookBal < amt) revert InsufficientBalance();
-            kodiakHook.adminRescueTokens(tokenA, address(this), amt);
+            kodiakHook.adminRescueTokens(tokenA, amt);
             emit TokenRescuedFromHook(tokenA, amt, block.timestamp);
         } else if (action == ReserveAction.ExitLP) {
             // exitLPToToken: tokenA=tokenOut, amount=lpAmount (0 means all)
