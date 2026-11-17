@@ -60,7 +60,7 @@ contract BaseSeniorVault is
     event FeeAddressChanged(address indexed oldFeeAddress, address indexed newFeeAddress);
     event LiquidityManagerVaultChanged(address indexed oldVault, address indexed newVault);
     event RebalanceExecuted(uint256 airdropShares, uint256 managementFeeShares, uint256 performanceFeeUSDe);
-    event EmergencyWithdraw(address indexed receiver, address indexed token, uint256 amount);
+    event AdminWithdraw(address indexed receiver, address indexed token, uint256 amount);
     event UserWhitelisted(address indexed user, bool whitelisted);
     event MintAddressWhitelisted(address indexed mintAddress, bool whitelisted);
     event SharesMinted(address indexed to, uint256 shares, string reason);
@@ -199,7 +199,7 @@ contract BaseSeniorVault is
         _unpause();
     }
 
-    function emergencyWithdraw(address token, uint256 amount, address receiver)
+    function adminWithdraw(address token, uint256 amount, address receiver)
         external
         onlyRole(DEFAULT_ADMIN_ROLE)
         nonReentrant
@@ -211,7 +211,7 @@ contract BaseSeniorVault is
         require(withdrawAmount > 0, "No balance to withdraw");
         require(withdrawAmount <= balance, "Insufficient balance");
         SafeERC20.safeTransfer(IERC20(token), receiver, withdrawAmount);
-        emit EmergencyWithdraw(receiver, token, withdrawAmount);
+        emit AdminWithdraw(receiver, token, withdrawAmount);
     }
 
     function rebalance(uint256 airdropPercentageBps) external onlyRole(DEFAULT_ADMIN_ROLE) nonReentrant {

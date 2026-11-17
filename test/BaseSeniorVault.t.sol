@@ -416,14 +416,59 @@ contract BaseSeniorVaultTest is Test {
         assertGt(upgraded.versionMarker(), 0);
     }
 
-    // ─── emergencyWithdraw ──────────────────────────────────────────────────────
+    // ─── adminWithdraw ──────────────────────────────────────────────────────────
 
-    function test_emergencyWithdraw() public {
+    function test_adminWithdraw_amountZeroWithdrawsFullBalance() public {
+        _deposit(USER, 100e18);
+        uint256 before = usde.balanceOf(ADMIN);
+        vm.expectEmit(true, true, false, true);
+        emit BaseSeniorVault.AdminWithdraw(ADMIN, address(usde), 100e18);
+        vm.prank(ADMIN);
+        vault.adminWithdraw(address(usde), 0, ADMIN);
+        assertEq(usde.balanceOf(ADMIN), before + 100e18);
+        assertEq(usde.balanceOf(address(vault)), 0);
+    }
+
+    function test_adminWithdraw_partialAmount() public {
         _deposit(USER, 100e18);
         uint256 before = usde.balanceOf(ADMIN);
         vm.prank(ADMIN);
-        vault.emergencyWithdraw(address(usde), 0, ADMIN);
-        assertEq(usde.balanceOf(ADMIN), before + 100e18);
+        vault.adminWithdraw(address(usde), 40e18, ADMIN);
+        assertEq(usde.balanceOf(ADMIN), before + 40e18);
+        assertEq(usde.balanceOf(address(vault)), 60e18);
+    }
+
+    function test_adminWithdraw_revertsWhenNotAdmin() public {
+        _deposit(USER, 10e18);
+        vm.prank(USER);
+        vm.expectRevert();
+        vault.adminWithdraw(address(usde), 1e18, USER);
+    }
+
+    function test_adminWithdraw_revertsZeroToken() public {
+        vm.prank(ADMIN);
+        vm.expectRevert("Invalid token");
+        vault.adminWithdraw(address(0), 0, ADMIN);
+    }
+
+    function test_adminWithdraw_revertsZeroReceiver() public {
+        _deposit(USER, 1e18);
+        vm.prank(ADMIN);
+        vm.expectRevert("Invalid receiver");
+        vault.adminWithdraw(address(usde), 1e18, address(0));
+    }
+
+    function test_adminWithdraw_revertsInsufficientBalance() public {
+        _deposit(USER, 10e18);
+        vm.prank(ADMIN);
+        vm.expectRevert("Insufficient balance");
+        vault.adminWithdraw(address(usde), 11e18, ADMIN);
+    }
+
+    function test_adminWithdraw_revertsNoBalance() public {
+        vm.prank(ADMIN);
+        vm.expectRevert("No balance to withdraw");
+        vault.adminWithdraw(address(usde), 0, ADMIN);
     }
 
     // ─── deploy script role hygiene (simulated) ─────────────────────────────────
