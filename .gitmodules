@@ -10,3 +10,6 @@
 [submodule "dividends/lib/forge-std"]
 	path = dividends/lib/forge-std
 	url = https://github.com/foundry-rs/forge-std
+[submodule "lib/chainlink-ccip"]
+	path = lib/chainlink-ccip
+	url = https://github.com/smartcontractkit/chainlink-ccip

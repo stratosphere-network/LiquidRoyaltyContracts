@@ -45,7 +45,7 @@ contract CheckRoles is Script {
         console2.log("AUDIT COMPLETE");
         console2.log("=================================================");
         console2.log("");
-        console2.log("⚠️  ACTION REQUIRED:");
+        console2.log("WARNING: ACTION REQUIRED:");
         console2.log("1. Verify all addresses are secure");
         console2.log("2. If any role is compromised, change it immediately");
         console2.log("3. Check recent transactions from these addresses");
@@ -113,15 +113,15 @@ contract CheckRoles is Script {
         
         try UnifiedConcreteSeniorVault(payable(vaultAddress)).deployer() returns (address deployer) {
             console2.log("  Deployer:", deployer);
-            console2.log("    ⚠️  This is your compromised key (should be harmless after admin set)");
+            console2.log("    WARNING: compromised deployer key");
         } catch {
             try ConcreteJuniorVault(vaultAddress).deployer() returns (address deployer) {
                 console2.log("  Deployer:", deployer);
-                console2.log("    ⚠️  This is your compromised key (should be harmless after admin set)");
+                console2.log("    WARNING: compromised deployer key");
             } catch {
                 try ConcreteReserveVault(vaultAddress).deployer() returns (address deployer) {
                     console2.log("  Deployer:", deployer);
-                    console2.log("    ⚠️  This is your compromised key (should be harmless after admin set)");
+                    console2.log("    WARNING: compromised deployer key");
                 } catch {
                     console2.log("  Deployer: [ERROR]");
                 }
@@ -131,34 +131,18 @@ contract CheckRoles is Script {
         // Check pause status
         try UnifiedConcreteSeniorVault(payable(vaultAddress)).paused() returns (bool paused) {
             if (paused) {
-                console2.log("  Status: ⏸️  PAUSED");
+                console2.log("  Status: PAUSED");
             } else {
-                console2.log("  Status: ▶️  ACTIVE");
+                console2.log("  Status: ACTIVE");
             }
         } catch {
-            try ConcreteJuniorVault(vaultAddress).paused() returns (bool paused) {
-                if (paused) {
-                    console2.log("  Status: ⏸️  PAUSED");
-                } else {
-                    console2.log("  Status: ▶️  ACTIVE");
-                }
-            } catch {
-                try ConcreteReserveVault(vaultAddress).paused() returns (bool paused) {
-                    if (paused) {
-                        console2.log("  Status: ⏸️  PAUSED");
-                    } else {
-                        console2.log("  Status: ▶️  ACTIVE");
-                    }
-                } catch {
-                    console2.log("  Status: [ERROR]");
-                }
-            }
+            console2.log("  Status: unknown (not a Pausable senior proxy)");
         }
     }
     
     function _checkIfZero(address addr, string memory warning) internal pure {
         if (addr == address(0)) {
-            console2.log("    ⚠️  WARNING:", warning);
+            console2.log("    WARNING:", warning);
         }
     }
 }
