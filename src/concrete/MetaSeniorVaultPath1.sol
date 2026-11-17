@@ -28,10 +28,15 @@ contract MetaSeniorVaultPath1 is MetaSeniorVault, IBurnMintERC20 {
         _disableInitializers();
     }
 
-    /// @notice Path1 reinitializer — does not replay `initialize`. Safe with empty `upgradeToAndCall` data.
+    /// @notice Path1 reinitializer — required on upgrade (do not use empty upgradeToAndCall).
+    /// @dev Opens vault to match live behavior before public-gate getters existed on 0xa4e99….
     function initializePath1(uint16 maxDeltaBps, uint32 maxStaleness) external reinitializer(2) onlyRole(DEFAULT_ADMIN_ROLE) {
+        vaultOpenToPublic = true;
+        depositCap = 0;
         maxBaseSleeveDeltaBps = maxDeltaBps;
         baseSleeveMaxStaleness = maxStaleness;
+        emit VaultOpenToPublicSet(true);
+        emit DepositCapSet(0, 0);
         emit Path1Initialized(maxDeltaBps, maxStaleness);
     }
 

@@ -4,6 +4,11 @@ pragma solidity ^0.8.30;
 import {Script, console2} from "forge-std/Script.sol";
 
 /// @notice Writes Safe Transaction Builder JSON batches for post-deploy CCIP wiring (no on-chain execution).
+/// @dev Execution order (see docs/meta_senior_path1_upgrade.md):
+///      1) Moss: Path1 impl + both pools.
+///      2) Bera Safe: upgradeToAndCall(impl, initializePath1) BEFORE grantRole on Meta Senior.
+///      3) Both Safes: these batches (registerAccessControlDefaultAdmin; pool acceptOwnership; grantRole to pool; TAR acceptAdminRole + setPool).
+///      Optional: owner setRateLimitConfig later; no applyChainUpdates when factory wired remotes at deploy.
 contract GenerateSnrUsdCcipSafeBatches is Script {
     address internal constant BERA_TAR = 0x0944C3Fb1dB7D165336569221995B31cBE6c8A55;
     address internal constant BERA_REGISTRY_MODULE = 0x160603D7C0Ac00409276bf6707430712Caf5b555;

@@ -25,11 +25,12 @@ contract MetaSeniorVaultPath1Test is Test {
         vm.prank(ADMIN);
         ERC1967Proxy proxy = new ERC1967Proxy(address(baseImpl), init);
         MetaSeniorVaultPath1 path1Impl = new MetaSeniorVaultPath1();
+        bytes memory path1Init =
+            abi.encodeWithSelector(MetaSeniorVaultPath1.initializePath1.selector, uint16(500), uint32(36 hours));
         vm.prank(ADMIN);
-        MetaSeniorVault(address(proxy)).upgradeToAndCall(address(path1Impl), "");
+        MetaSeniorVault(address(proxy)).upgradeToAndCall(address(path1Impl), path1Init);
         vault = MetaSeniorVaultPath1(address(proxy));
-        vm.prank(ADMIN);
-        vault.setVaultOpenToPublic(true);
+        assertTrue(vault.vaultOpenToPublic());
         usde.mint(USER, 1_000_000e18);
     }
 
