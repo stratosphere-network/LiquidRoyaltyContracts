@@ -30,9 +30,8 @@ contract DeployMetaSeniorPath1Impl is Script {
         console2.log("implementation", impl);
         console2.log("");
         console2.log("REQUIRED upgrade calldata (Bera admin Safe) - do NOT use empty bytes:");
-        console2.log("upgradeToAndCall(impl, initializePath1(500, 36 hours))");
-        bytes memory initData =
-            abi.encodeWithSelector(MetaSeniorVaultPath1.initializePath1.selector, uint16(500), uint32(36 hours));
+        console2.log("upgradeToAndCall(impl, initializePath1())");
+        bytes memory initData = abi.encodeWithSelector(MetaSeniorVaultPath1.initializePath1.selector);
         console2.logBytes(
             abi.encodeWithSelector(bytes4(keccak256("upgradeToAndCall(address,bytes)")), impl, initData)
         );

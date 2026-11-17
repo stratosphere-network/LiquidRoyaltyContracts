@@ -36,15 +36,16 @@ Do **not** call `upgradeToAndCall(impl, "")`. That leaves `vaultOpenToPublic == 
 Required Safe call:
 
 ```text
-upgradeToAndCall(
-  <Path1 impl>,
-  initializePath1(maxBaseSleeveDeltaBps=500, baseSleeveMaxStaleness=36 hours)
-)
+upgradeToAndCall(<new Path1 impl>, initializePath1())
 ```
 
-`initializePath1` sets `vaultOpenToPublic = true`, `depositCap = 0`, sleeve guards, and emits `VaultOpenToPublicSet(true)` / `DepositCapSet(0,0)`.
+Path1 scope: CCT `mint` / `burn` / `burnFrom` (no USDe movement), `grantMintAndBurnRoles`, and opening the vault. No Base sleeve / keeper NAV reporting in this implementation (a cross-chain subvault may land later).
 
-Run `forge script script/DeployMetaSeniorPath1Impl.s.sol` on Berachain RPC to print the combined Safe calldata for a freshly simulated impl address.
+`initializePath1()` sets `vaultOpenToPublic = true`, `depositCap = 0`, and emits `VaultOpenToPublicSet(true)` / `DepositCapSet(0,0)`.
+
+Deploy a **new** implementation after this PR is merged; do not upgrade to an older Path1 build (e.g. abandoned `0xE226…`). Proxy remains on live impl `0xa4e99…` until the Safe runs the call above.
+
+Run `forge script script/DeployMetaSeniorPath1Impl.s.sol` on Berachain RPC to print combined Safe calldata with the freshly simulated impl address.
 
 ## Official CCIP (TokenPoolFactory 2.0.0)
 
@@ -82,7 +83,7 @@ Dry-run by default; set `SNRUSD_POOL_BROADCAST=true` and `DEPLOYER_PRIVATE_KEY` 
 ## Alan / Moss execution order
 
 1. Moss deploys Path1 impl (Berachain) and both TokenPools (CREATE2; remotes wired at factory deploy — no default `applyChainUpdates` in Safe batches).
-2. **Berachain admin Safe:** `upgradeToAndCall(Path1 impl, initializePath1(500, 36 hours))` **before** any `grantRole(MINTER/BURNER)` on Meta Senior — live impl has no `MINTER_ROLE` / `BURNER_ROLE`.
+2. **Berachain admin Safe:** `upgradeToAndCall(new Path1 impl, initializePath1())` **before** any `grantRole(MINTER/BURNER)` on Meta Senior — live impl has no `MINTER_ROLE` / `BURNER_ROLE`.
 3. Both Safes run CCIP batches (`script/ccip/GenerateSnrUsdCcipSafeBatches.s.sol` output):
    - Pool `acceptOwnership`
    - Token `grantRole(MINTER)` + `grantRole(BURNER)` to pool only (not Safe)
@@ -121,4 +122,4 @@ forge inspect MetaSeniorVault storage-layout --json > /tmp/meta-senior-base.json
 forge inspect MetaSeniorVaultPath1 storage-layout --json > /tmp/meta-senior-path1.json
 ```
 
-All slots from `MetaSeniorVault` must match; Path1 adds tail slots only.
+All slots from `MetaSeniorVault` must match. Path1 adds no new layout variables (only `MINTER_ROLE` / `BURNER_ROLE` via AccessControl after grant).

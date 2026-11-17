@@ -11,7 +11,6 @@ contract MetaSeniorVaultPath1Test is Test {
     MockERC20 internal usde;
     MetaSeniorVaultPath1 internal vault;
     address internal constant ADMIN = address(0xA11CE);
-    address internal constant OPERATOR = address(0xB0B);
     address internal constant POOL = address(0xC0CC);
     address internal constant USER = address(0x1001);
 
@@ -20,13 +19,12 @@ contract MetaSeniorVaultPath1Test is Test {
         MetaSeniorVault baseImpl = new MetaSeniorVault();
         bytes memory init = abi.encodeCall(
             MetaSeniorVault.initialize,
-            (address(usde), OPERATOR, ADMIN, "Senior Vault Master", "snrUSD", 30)
+            (address(usde), address(0xB0B), ADMIN, "Senior Vault Master", "snrUSD", 30)
         );
         vm.prank(ADMIN);
         ERC1967Proxy proxy = new ERC1967Proxy(address(baseImpl), init);
         MetaSeniorVaultPath1 path1Impl = new MetaSeniorVaultPath1();
-        bytes memory path1Init =
-            abi.encodeWithSelector(MetaSeniorVaultPath1.initializePath1.selector, uint16(500), uint32(36 hours));
+        bytes memory path1Init = abi.encodeWithSelector(MetaSeniorVaultPath1.initializePath1.selector);
         vm.prank(ADMIN);
         MetaSeniorVault(address(proxy)).upgradeToAndCall(address(path1Impl), path1Init);
         vault = MetaSeniorVaultPath1(address(proxy));
@@ -46,31 +44,22 @@ contract MetaSeniorVaultPath1Test is Test {
         assertTrue(vault.hasRole(vault.BURNER_ROLE(), POOL));
     }
 
-    function test_tokenPoolMintBurn_doesNotChangeLocalVaultValue() public {
+    function test_tokenPoolMintBurn_doesNotChangeVaultValue() public {
         vm.prank(ADMIN);
         vault.grantMintAndBurnRoles(POOL);
 
         usde.mint(address(vault), 1000e18);
-        uint256 localBefore = vault.localVaultValue();
+        uint256 valueBefore = vault.getVaultValue();
 
         vm.prank(POOL);
         vault.mint(USER, 500e18);
-        assertEq(vault.localVaultValue(), localBefore);
+        assertEq(vault.getVaultValue(), valueBefore);
 
         vm.prank(USER);
         vault.approve(POOL, 200e18);
         vm.prank(POOL);
         vault.burnFrom(USER, 200e18);
-        assertEq(vault.localVaultValue(), localBefore);
-    }
-
-    function test_setBaseSleeveAssets_composesNav() public {
-        usde.mint(address(vault), 100e18);
-        vm.prank(OPERATOR);
-        vault.setBaseSleeveAssets(50e18);
-        assertEq(vault.reportedBaseSleeveAssets(), 50e18);
-        assertEq(vault.getVaultValue(), vault.localVaultValue() + 50e18);
-        assertEq(vault.totalAssets(), vault.getVaultValue());
+        assertEq(vault.getVaultValue(), valueBefore);
     }
 
     function test_depositStillWorksAfterUpgrade() public {

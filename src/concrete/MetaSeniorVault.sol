@@ -297,7 +297,7 @@ contract MetaSeniorVault is
         return assetsAfterFee;
     }
 
-    /// @notice On-chain Berachain sleeve NAV (USDe + sub-vaults). Path1 adds reported Base sleeve in the child.
+    /// @notice On-chain Berachain hub NAV (USDe + sub-vaults).
     function getVaultValue() public view virtual returns (uint256) {
         uint256 usdeBalance = IERC20(asset()).balanceOf(address(this));
         for (uint256 i = 0; i < subVaultList.length; i++) {

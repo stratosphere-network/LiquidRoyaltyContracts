@@ -14,8 +14,6 @@ interface IUUPSUpgradeable {
 contract MetaSeniorPath1ForkTest is Test {
     address internal constant PROXY = 0xC38421E5577250EBa177Bc5bC832E747bea13Ee0;
     address internal constant ADMIN = 0xd60c3A29Fbe444cF9d3AA240F4a9263BC83bde61;
-    uint16 internal constant MAX_DELTA_BPS = 500;
-    uint32 internal constant MAX_STALENESS = 36 hours;
 
     function setUp() public {
         vm.createSelectFork("https://berachain.drpc.org");
@@ -34,8 +32,7 @@ contract MetaSeniorPath1ForkTest is Test {
         address underlying = before.asset();
 
         address impl = address(new MetaSeniorVaultPath1());
-        bytes memory initData =
-            abi.encodeWithSelector(MetaSeniorVaultPath1.initializePath1.selector, MAX_DELTA_BPS, MAX_STALENESS);
+        bytes memory initData = abi.encodeWithSelector(MetaSeniorVaultPath1.initializePath1.selector);
 
         vm.prank(ADMIN);
         IUUPSUpgradeable(PROXY).upgradeToAndCall(impl, initData);
@@ -47,8 +44,6 @@ contract MetaSeniorPath1ForkTest is Test {
         assertEq(afterUpgrade.totalAssets(), assets);
         assertTrue(afterUpgrade.vaultOpenToPublic());
         assertEq(afterUpgrade.depositCap(), 0);
-        assertEq(afterUpgrade.maxBaseSleeveDeltaBps(), MAX_DELTA_BPS);
-        assertEq(afterUpgrade.baseSleeveMaxStaleness(), MAX_STALENESS);
 
         assertEq(vm.load(PROXY, bytes32(uint256(0))), slot0Before);
         assertEq(vm.load(PROXY, bytes32(uint256(3))), slot3Before);
