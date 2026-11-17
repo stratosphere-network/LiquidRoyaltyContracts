@@ -14,6 +14,8 @@ remappings = [
 ]
 fs_permissions = [
     { access = "read-write", path = "./simulation_output" },
+    { access = "read-write", path = "./script/output" },
+    { access = "read", path = "./script/bytecode" },
 ]
 
 # Etherscan verification config
